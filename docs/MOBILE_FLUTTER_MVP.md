@@ -17,12 +17,13 @@ mobile_app/
 - уведомления/активность;
 - проверка AI status.
 
-## Почему так
+## Платформенные папки
 
-На текущей машине Flutter SDK не установлен. Поэтому:
-- платформенные папки `ios/` и `android/` пока не генерировались;
-- архитектурный и прикладной код уже подготовлен;
-- когда SDK будет установлен, нужно дозалить платформенную обвязку командой `flutter create .`.
+Платформенные папки уже сгенерированы:
+- `mobile_app/ios/` — нативный Runner для iOS, конфигурации сборки см. в `docs/IOS_CLOUD_BUILD_TESTFLIGHT.md`;
+- `mobile_app/android/` — Gradle-проект для Android.
+
+CI/сборка iOS-релизов выполняется через Codemagic (`codemagic.yaml` в корне). Локально для разработки достаточно установить Flutter SDK + Xcode (iOS) / Android Studio (Android) и запустить `flutter run` из `mobile_app/`.
 
 ## Backend-опора
 

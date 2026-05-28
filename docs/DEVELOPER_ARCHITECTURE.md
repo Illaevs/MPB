@@ -165,13 +165,12 @@ flowchart LR
 
 - `Treasury` — импорт банковских выписок, правила авторазбора, аллокации;
 - `Income/Expense` — записи ДДС;
-- `Finance` — агрегированные финансовые показатели;
-- `Economy` — экономические параметры и аналитика.
+- `Finance` — агрегированные финансовые показатели.
 
 Связка выглядит так:
 
 ```text
-Bank statement -> Treasury transaction -> Auto rule / manual allocation -> DDS -> Finance / Economy
+Bank statement -> Treasury transaction -> Auto rule / manual allocation -> DDS -> Finance
 ```
 
 ### 4.7 Внешние интерфейсы
@@ -182,6 +181,25 @@ Bank statement -> Treasury transaction -> Auto rule / manual allocation -> DDS -
 - `Customer Panel` — для заказчика.
 
 Оба интерфейса работают не как отдельные независимые системы, а как ограниченные срезы основной проектной модели.
+
+### 4.8 Корпоративная коммуникация и HR
+
+Помимо проектного контура в системе есть отдельные блоки для внутренней работы команды:
+
+- **Feed** (корпоративная лента) — посты/опросы/реакции/комментарии/@mentions, inline-редактор поста, attachments (картинки и файлы хранятся в разных каталогах: `static/feed/` для image-галереи, `static/feed-files/` для скачиваемых файлов). Гейтится секцией прав `feed`.
+- **HR-блок** (`profiles`, `workday`, `absences`) — расширенный профиль сотрудника, рабочее время с накопительным счётчиком за день (МСК-таймзона), единая таблица отсутствий с таймлайном.
+- **Reglaments** — нормативная база (СП / ГОСТ / СНиП) с изолированным гибридным поиском (отдельные `reglament_fts` и `reglament_embeddings`, не пересекаются с основным поисковым индексом).
+
+### 4.9 Платформенный контур
+
+- **Search** — глобальный гибридный поиск (`/api/v1/search`): FTS5 BM25 + bge-m3 cosine, объединение через RRF (`K=60`), per-row ACL для child-entity (см. `INTERNAL.md` §9.1). Активируется через `ENABLE_HYBRID_SEARCH=1` + `embedding_worker.py`.
+- **Event Bus v2** — `event_outbox` (transactional outbox) + `event_subscription` (URL, headers, retry-policy, JSON-Logic condition_json) + dispatcher с `@on('event_type')` декораторами и `before_*`/`after_*` хуками. Worker (`event_outbox_worker.py`) — отдельный процесс, batch-обработка с per-entity ordering, HMAC-подпись, dedup на стороне consumer.
+- **AI** (`routers/ai.py`) — точечные AI-функции для определённых интерфейсов.
+- **Customer Portal** — кабинет заказчика как отдельный router и поверхность.
+
+### 4.10 Мобильный клиент
+
+`mobile_app/` — Flutter-проект для iOS и Android (см. `docs/MOBILE_FLUTTER_MVP.md` и `docs/IOS_CLOUD_BUILD_TESTFLIGHT.md`). CI через Codemagic (`codemagic.yaml` в корне репозитория).
 
 ## 5. Архитектура Процессов
 
@@ -234,7 +252,6 @@ flowchart LR
     Treasury --> Rules["Автоправила / ручное распределение"]
     Rules --> DDS["Income / Expense"]
     DDS --> Finance["Finance"]
-    DDS --> Economy["Economy"]
     DDS --> Projects["Сделки / договоры"]
 ```
 
@@ -351,7 +368,6 @@ flowchart LR
 - `backend/app/routers/finance.py`
 - `backend/app/routers/income_expense.py`
 - `backend/app/services/finance_service.py`
-- `backend/app/services/economy_service.py`
 
 ### 7.5 Если меняются права доступа
 
@@ -363,6 +379,58 @@ flowchart LR
 - `backend/app/core/auth_middleware.py`
 - `backend/app/routers/roles.py`
 - `backend/app/routers/users.py`
+
+### 7.6 Если меняется корпоративная лента (Feed)
+
+Смотри:
+
+- `frontend/src/views/Home.vue` (страница с лентой + дашборд)
+- `frontend/src/components/ui/MentionInput.vue` (auto-grow textarea + @mentions)
+- `frontend/src/services/api/feed.js`
+- `backend/app/routers/feed.py`
+- `backend/app/models/feed.py`, `backend/app/schemas/feed.py`
+
+### 7.7 Если меняется поиск
+
+Смотри:
+
+- `frontend/src/views/Search.vue` + `frontend/src/services/api/search.js`
+- `frontend/src/components/CommandPalette.vue` (Ctrl+K)
+- `backend/app/routers/search.py` (per-row ACL gate — см. `INTERNAL.md` §9.1)
+- `backend/app/services/search_indexer.py` (FTS5 extractors per entity type)
+- `backend/app/services/search_semantic.py` (bge-m3 + RRF)
+- `backend/embedding_worker.py`
+
+### 7.8 Если меняется Event Bus / интеграции
+
+Смотри:
+
+- `backend/app/routers/event_bus.py` (outbox / subscriptions / simulate)
+- `backend/app/services/event_outbox.py` (`emit_event_safe`)
+- `backend/app/services/event_dispatcher.py` (`@on` декораторы)
+- `backend/app/event_handlers/*` (подписчики per entity-type)
+- `backend/event_outbox_worker.py`
+- `docs/EVENTS_API.md` + `docs/events.json` (каталог)
+- `docs/INTEGRATIONS_ONBOARDING.md` (подключение нового consumer'а)
+
+### 7.9 Если меняется HR-блок
+
+Смотри:
+
+- `frontend/src/views/Workday.vue`, `Absences.vue`, `MyProfile.vue`
+- `frontend/src/components/ui/WorkdayStartModal.vue`, `WorkdayTopbarChip.vue`, `ProfileDrawer.vue`
+- `frontend/src/stores/workday.js`
+- `backend/app/routers/workday.py`, `absences.py`, `profiles.py`
+
+### 7.10 Если меняется нормативная база
+
+Смотри:
+
+- `frontend/src/views/Reglaments.vue` + `frontend/src/services/api/reglaments.js`
+- `backend/app/routers/reglaments.py`
+- `backend/app/services/reglament_parser.py` (PyMuPDF приоритетный)
+- `backend/app/services/reglament_indexer.py`
+- `backend/scripts/reglaments_data/*.yaml` (curated YAML для batch-загрузки)
 
 ## 8. Важные Сквозные Принципы
 
