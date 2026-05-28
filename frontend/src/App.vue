@@ -56,6 +56,7 @@
       v-model="notificationCenterOpen"
       @unread-count-changed="onUnreadCountChanged"
     />
+    <WorkdayStartModal v-if="!isAuthPage && activeUser" />
     </div>
   </div>
 </template>
@@ -64,6 +65,9 @@
 import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useNotificationsStore } from './stores/notifications'
+import { useWorkdayStore } from './stores/workday'
+import { useIdleTracker } from './composables/useIdleTracker'
+import WorkdayStartModal from './components/ui/WorkdayStartModal.vue'
 import ToastContainer from './components/ui/ToastContainer.vue'
 import ConfirmDialog from './components/ui/ConfirmDialog.vue'
 import CommandPalette from './components/ui/CommandPalette.vue'
@@ -84,6 +88,7 @@ import { useSidebar } from './composables/useSidebar'
 import { useUiPreferences } from './composables/useUiPreferences'
 import { getWallpaperPreset } from './config/wallpaperPresets'
 import { formatTime } from './utils/format'
+import { serverDate, formatMsk } from './composables/useServerClock'
 import { appBrandPrimary, appBrandSecondary, appSystemName } from './config/appVariant'
 import bgImage from './assets/app-bg.jpg'
 
@@ -101,10 +106,16 @@ export default {
     AppSidebar,
     AppHeader,
     VatCalculatorModal,
-    GlobalAiAssistant
+    GlobalAiAssistant,
+    WorkdayStartModal
   },
   setup() {
     const authStore = useAuthStore()
+    const workdayStore = useWorkdayStore()
+    // Глобальный idle-трекер: каждое движение/клик/keydown обновляет
+    // lastActivityAt у workday-стора. Композабл сам цепляется к window
+    // и снимется на unmount компонента App.
+    useIdleTracker(() => workdayStore.markActivity())
     const route = useRoute()
     // Тему и состояние сайдбара ведут singleton-композаблы; AppSidebar читает их сам.
     useTheme()
@@ -131,7 +142,10 @@ export default {
     const seenNotifications = new Set()
 
     const updateCurrentTime = () => {
-      currentTimeLabel.value = formatTime(new Date())
+      // Часы в топбаре: серверное время, отображаем по МСК (UTC+3) —
+      // независимо от часов и таймзоны устройства. Если у юзера ноут
+      // отстаёт на 24 мин, часы всё равно покажут реальное московское.
+      currentTimeLabel.value = formatMsk(serverDate())
     }
 
     // Фон-обои: отдельный фиксированный слой (.app-wallpaper) с независимым
@@ -259,6 +273,17 @@ export default {
       notificationsStore.startPolling(uiPrefs.notifications?.pollSeconds)
     }
 
+    // Workday: после логина подтягиваем активную сессию + запускаем
+    // heartbeat/idle-таймеры в сторе. На logout — reset.
+    const startWorkday = async () => {
+      await workdayStore.fetchActive({ silent: true })
+      workdayStore.startTimers()
+    }
+    const stopWorkday = () => {
+      workdayStore.stopTimers()
+      workdayStore.reset()
+    }
+
     // Смена частоты опроса в настройках применяется на лету.
     watch(
       () => uiPrefs.notifications?.pollSeconds,
@@ -283,10 +308,14 @@ export default {
       updateCurrentTime()
       window.addEventListener('permissions-updated', handlePermissionsUpdate)
       window.addEventListener('storage', handlePermissionsUpdate)
-      clockTimer = setInterval(updateCurrentTime, 30000)
+      // Раз в секунду — чтобы при выпадении minutes между 30-сек тиками
+      // часы не «прыгали». Серверный offset обновляется через HTTP-
+      // interceptor, по тикам уже считываем актуальный.
+      clockTimer = setInterval(updateCurrentTime, 1000)
 
       if (!isAuthPage.value && activeUser.value) {
         startNotificationPolling()
+        startWorkday()
       }
     })
 
@@ -306,10 +335,12 @@ export default {
       if (value) {
         stopNotificationPolling()
         notificationsStore.reset()
+        stopWorkday()
         return
       }
       if (activeUser.value) {
         startNotificationPolling()
+        startWorkday()
       }
     })
 
@@ -317,9 +348,11 @@ export default {
       if (!value || isAuthPage.value) {
         stopNotificationPolling()
         notificationsStore.reset()
+        stopWorkday()
         return
       }
       startNotificationPolling()
+      startWorkday()
     })
 
     watch(() => route.fullPath, () => {
@@ -394,15 +427,16 @@ export default {
 .auth-shell {
   position: relative;
   min-height: 100vh;
+  max-height: 100vh;
   display: flex;
-  align-items: center;
+  align-items: safe center;
   justify-content: center;
   padding: 20px 40px;
   background:
     radial-gradient(circle at top left, rgba(255, 255, 255, 0.35), transparent 26%),
     radial-gradient(circle at bottom right, rgba(255, 255, 255, 0.3), transparent 24%),
     linear-gradient(180deg, rgba(244, 249, 253, 0.92), rgba(244, 249, 253, 0.84));
-  overflow: hidden;
+  overflow-y: auto;
 }
 .auth-overlay {
   position: absolute;

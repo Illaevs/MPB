@@ -1,11 +1,14 @@
 """
 Contracts API Router - Contract Registry
 """
+import logging
 from typing import List, Optional, Dict
 import uuid
 import json
 from datetime import date, timedelta
 from calendar import monthrange
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form, Response, Request
 from sqlalchemy import select, or_, cast, String, delete
@@ -567,10 +570,63 @@ async def update_contract(
         next_sub_id,
         exclude_contract_id=contract_id,
     )
+
+    # ── Event Bus v2: before_status_change ──────────────────────────
+    # Если в обновлении меняется статус — даём in-process обработчикам
+    # шанс отменить или модифицировать payload. Cancel → 400 в ответ
+    # пользователю; Mutate → правки уже применены к ctx.payload, тут
+    # их синхронизируем обратно в update_payload (для статус-перехода
+    # на практике редко, но контракт держим).
+    from app.services.event_dispatcher import (
+        Cancel as _EBCancel,
+        EventContext as _EBCtx,
+        Mutate as _EBMutate,
+        dispatch_before,
+        dispatch_after,
+    )
+    status_after = update_payload.get("status")
+    status_before = existing.status
+    status_change_ctx = None
+    if status_after and status_after != status_before:
+        status_change_ctx = _EBCtx(
+            event_key="contract.before_status_change",
+            entity_type="contract",
+            entity_id=str(contract_id),
+            payload={
+                "status_before": status_before,
+                "status_after": status_after,
+                "amount": float(existing.amount or 0),
+                "paid_amount": float(existing.paid_amount or 0),
+                "contract_type": existing.contract_type,
+                "deal_id": str(existing.deal_id) if existing.deal_id else None,
+            },
+            user_id=str(getattr(user, "id", "")) or None,
+        )
+        result = await dispatch_before("contract.before_status_change", status_change_ctx)
+        if isinstance(result, _EBCancel):
+            raise HTTPException(status_code=400, detail=result.reason)
+        if isinstance(result, _EBMutate):
+            # Применяем только те поля, которые реально входят в update-схему.
+            for key in ("status",):
+                if key in result.payload_patch:
+                    update_payload[key] = result.payload_patch[key]
+
     contract = await Contract.update(db, contract_id, **update_payload)
     if not contract:
         raise HTTPException(status_code=404, detail="Contract not found")
     await _apply_service_paid_amounts(db, [contract])
+
+    # ── Event Bus v2: after_status_change ───────────────────────────
+    # Outbox-запись + in-process after-хендлеры. Ошибка тут не валит
+    # запрос, бизнес-данные уже зафиксированы.
+    if status_change_ctx is not None:
+        status_change_ctx.event_key = "contract.after_status_change"
+        # обновим snapshot, статус мог быть мутирован
+        status_change_ctx.payload["status_after"] = contract.status
+        try:
+            await dispatch_after(db, "contract.after_status_change", status_change_ctx)
+        except Exception:
+            logger.exception("dispatch_after contract.after_status_change failed")
     if contract.deal_id:
         try:
             await log_event(
@@ -595,6 +651,26 @@ async def update_contract(
         await safe_refresh_deal_health_issues(db, before_snapshot.get("deal_id"))
     if not contract.deal_id:
         await safe_refresh_orphan_health_issues(db)
+
+    # Event Bus v2: общая after_update для внешних подписчиков.
+    # status_change emit-ится отдельно выше (если был); это — общее
+    # «контракт обновлён», часто подписываются для синхронизации в 1С.
+    from app.services.event_outbox import emit_event_safe
+    await emit_event_safe(
+        db,
+        event_type="contract.after_update",
+        entity_type="contract",
+        entity_id=str(contract.id),
+        payload={
+            "id": str(contract.id),
+            "deal_id": str(contract.deal_id) if contract.deal_id else None,
+            "status": contract.status,
+            "contract_type": contract.contract_type,
+            "amount": float(contract.amount or 0),
+            "paid_amount": float(contract.paid_amount or 0),
+            "changes": _contract_changes(before_snapshot, _contract_snapshot(contract)),
+        },
+    )
     return contract
 
 
@@ -707,6 +783,23 @@ async def delete_contract(
     await safe_refresh_deal_health_issues(db, contract.deal_id)
     if not contract.deal_id:
         await safe_refresh_orphan_health_issues(db)
+
+    # Event Bus v2: после удаления — отправляем outbox-событие, чтобы
+    # внешний consumer (1С, Диадок и т.п.) мог зачистить связанные
+    # записи. id всё ещё знаем — модель уже подгружена выше.
+    from app.services.event_outbox import emit_event_safe
+    await emit_event_safe(
+        db,
+        event_type="contract.after_delete",
+        entity_type="contract",
+        entity_id=str(contract.id),
+        payload={
+            "id": str(contract.id),
+            "deal_id": str(contract.deal_id) if contract.deal_id else None,
+            "contract_number": contract.contract_number,
+            "status": contract.status,
+        },
+    )
     return {"message": "Contract deleted"}
 
 

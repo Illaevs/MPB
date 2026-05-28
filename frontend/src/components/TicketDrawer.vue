@@ -1,6 +1,6 @@
 <template>
   <transition name="tk-dr-slide">
-    <div v-if="modelValue" class="tk-dr-overlay" @click.self="close">
+    <div v-if="modelValue" class="tk-dr-overlay" v-modal-close="close">
       <aside
         class="tk-dr"
         role="dialog"
@@ -182,7 +182,7 @@
 
   <!-- Создать задачу из тикета -->
   <transition name="tk-dr-fade">
-    <div v-if="taskModal.open" class="tk-dr-overlay tk-dr-overlay--center" @click.self="taskModal.open = false">
+    <div v-if="taskModal.open" class="tk-dr-overlay tk-dr-overlay--center" v-modal-close="() => taskModal.open = false">
       <div class="tk-dr-modal">
         <header class="tk-dr-modal__head">
           <h3>Задача из тикета #{{ ticket && ticket.number }}</h3>

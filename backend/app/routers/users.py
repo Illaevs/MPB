@@ -18,6 +18,7 @@ from app.core.auth_middleware import CurrentUser
 from app.models import User, Role, Company, CompanyUserLink
 from app.schemas.user import CompanyLinkCreate, UserCreate, UserUpdate, UserResponse
 from app.services.auth_security_store import revoke_user_tokens
+from app.services.event_outbox import emit_event_safe
 from app.services.permissions import get_section_permissions, require_section_write
 from app.services.user_avatar_bootstrap import avatars_root, ensure_user_avatar_schema, wallpapers_root
 
@@ -611,6 +612,20 @@ async def create_user(
         is_active=user.is_active,
         password_hash=password_hash,
     )
+    await emit_event_safe(
+        db,
+        event_type="user.after_create",
+        entity_type="user",
+        entity_id=str(new_user.id),
+        payload={
+            "id": str(new_user.id),
+            "email": new_user.email,
+            "full_name": new_user.full_name,
+            "role_id": str(new_user.role_id) if new_user.role_id else None,
+            "is_active": bool(new_user.is_active),
+        },
+        payload_version=1,
+    )
     return new_user
 
 
@@ -637,11 +652,45 @@ async def update_user(
     if "password" in update_data and update_data["password"]:
         update_data["password_hash"] = await run_in_threadpool(hash_password, update_data["password"])
         update_data.pop("password", None)
+    prev_role_id = str(existing_user.role_id or "") or None
+    prev_active = bool(existing_user.is_active)
     user = await User.update(db, user_id, **update_data)
     role_changed = "role_id" in update_data and str(existing_user.role_id or "") != str(user.role_id or "")
     deactivated = ("is_active" in update_data) and (not bool(user.is_active))
     if role_changed or deactivated:
         await revoke_user_tokens(str(user.id))
+    # Emit user.after_update — общее событие об изменении.
+    await emit_event_safe(
+        db,
+        event_type="user.after_update",
+        entity_type="user",
+        entity_id=str(user.id),
+        payload={
+            "id": str(user.id),
+            "email": user.email,
+            "full_name": user.full_name,
+            "role_id": str(user.role_id) if user.role_id else None,
+            "is_active": bool(user.is_active),
+            "changed_fields": list(update_data.keys()),
+        },
+        payload_version=1,
+    )
+    # Дополнительно: специализированное событие смены роли — нужно для
+    # BI/Telegram/audit (без необходимости фильтровать payload).
+    if role_changed:
+        await emit_event_safe(
+            db,
+            event_type="user.after_role_change",
+            entity_type="user",
+            entity_id=str(user.id),
+            payload={
+                "id": str(user.id),
+                "email": user.email,
+                "role_id_before": prev_role_id,
+                "role_id_after": str(user.role_id) if user.role_id else None,
+            },
+            payload_version=1,
+        )
     return user
 
 
@@ -654,8 +703,22 @@ async def delete_user(
     user = await User.get_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    snapshot = {
+        "id": str(user.id),
+        "email": user.email,
+        "full_name": user.full_name,
+        "role_id": str(user.role_id) if user.role_id else None,
+    }
     success = await User.delete(db, user_id)
     if not success:
         raise HTTPException(status_code=404, detail="User not found")
     await revoke_user_tokens(str(user_id))
+    await emit_event_safe(
+        db,
+        event_type="user.after_delete",
+        entity_type="user",
+        entity_id=str(user_id),
+        payload=snapshot,
+        payload_version=1,
+    )
     return {"message": "User deleted"}

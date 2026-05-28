@@ -1,5 +1,5 @@
 <template>
-  <div v-if="show" class="modal-overlay" @click="$emit('close')">
+  <div v-if="show" class="modal-overlay" v-modal-close="() => $emit('close')">
     <div class="modal-content" style="max-width: 480px;" @click.stop>
       <div class="modal-header">
         <h3 class="m-0">{{ uploadForm.documentId ? 'Загрузить файл' : 'Новый документ' }}</h3>

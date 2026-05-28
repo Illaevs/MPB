@@ -1,1632 +1,1694 @@
 <template>
-  <div class="dash">
-    <header class="dash-topbar">
-      <div class="dash-topbar__meta">
-        <span class="dash-topbar__eyebrow">Главная</span>
-        <h1 class="dash-topbar__title">{{ headerTitle }}</h1>
-      </div>
-      <div class="dash-topbar__tools">
-        <div v-if="canUseManagerMode" class="dash-seg">
+  <div class="feed-page">
+    <!-- ЛЕНТА -->
+    <div class="feed-main">
+      <!-- Composer (только для тех, кто может публиковать) -->
+      <div v-if="canPost" class="composer">
+        <div class="composer__modes">
           <button
             type="button"
-            class="dash-seg__btn"
-            :class="{ 'dash-seg__btn--active': dashboardMode === 'manager' }"
-            @click="dashboardMode = 'manager'"
-          >
-            <i class="fas fa-binoculars"></i><span>Руководитель</span>
-          </button>
+            class="composer__mode"
+            :class="{ 'is-active': draft.mode === 'post' }"
+            @click="draft.mode = 'post'"
+          ><i class="fas fa-pen"></i> Запись</button>
           <button
             type="button"
-            class="dash-seg__btn"
-            :class="{ 'dash-seg__btn--active': dashboardMode === 'default' }"
-            @click="dashboardMode = 'default'"
+            class="composer__mode"
+            :class="{ 'is-active': draft.mode === 'poll' }"
+            @click="draft.mode = 'poll'"
+          ><i class="fas fa-square-poll-vertical"></i> Опрос</button>
+        </div>
+
+        <div class="composer__top">
+          <UiAvatar :src="me?.avatar_url" :name="me?.full_name" size="md" />
+          <MentionInput
+            v-model="draft.body"
+            :users="allUsers"
+            multiline
+            :rows="1"
+            auto-grow
+            :min-height="44"
+            :max-height="320"
+            class="composer__input"
+            :placeholder="draft.mode === 'poll'
+              ? 'Вопрос опроса…'
+              : `О чём вы хотите рассказать, ${firstName}?`"
+            @mention="onComposerMention"
+            @paste="onPaste"
+          />
+        </div>
+
+        <!-- Варианты опроса -->
+        <div v-if="draft.mode === 'poll'" class="composer__poll">
+          <div
+            v-for="(opt, i) in draft.pollOptions"
+            :key="i"
+            class="composer__poll-opt"
           >
-            <i class="fas fa-chart-line"></i><span>Операционный</span>
-          </button>
-        </div>
-        <div class="dash-cfg">
-          <button
-            type="button"
-            class="dash-refresh"
-            :class="{ 'dash-refresh--active': dashSettingsOpen }"
-            title="Настроить дашборд"
-            @click="dashSettingsOpen = !dashSettingsOpen"
-          >
-            <i class="fas fa-sliders"></i>
-          </button>
-          <transition name="dash-pop">
-            <div
-              v-if="dashSettingsOpen"
-              class="dash-cfg__pop"
-              v-click-outside="() => dashSettingsOpen = false"
-            >
-              <div class="dash-cfg__head">Блоки дашборда</div>
-              <label
-                v-for="block in dashboardBlocks"
-                :key="block.id"
-                class="dash-cfg__item"
-              >
-                <input
-                  type="checkbox"
-                  :checked="isDashboardBlockVisible(block.id)"
-                  @change="toggleDashboardBlock(block.id)"
-                />
-                <span>{{ block.label }}</span>
-              </label>
-              <div class="dash-cfg__hint">
-                <i class="fas fa-up-down-left-right"></i>
-                Боковые виджеты можно перетаскивать за заголовок
-              </div>
-            </div>
-          </transition>
-        </div>
-        <button type="button" class="dash-refresh" :disabled="loading" title="Обновить данные" @click="reload">
-          <i class="fas fa-rotate" :class="{ 'dash-refresh--spin': loading }"></i>
-        </button>
-      </div>
-    </header>
-
-    <section v-show="isDashboardBlockVisible('hero')" class="dash-hero">
-      <div class="dash-hero__primary">
-        <span class="dash-hero__label">Стоимость портфеля</span>
-        <span class="dash-hero__value">
-          <SkeletonLoader v-if="loading" style="width: 170px; height: 30px;" />
-          <template v-else>{{ formatMoneyCompact(dealStats.portfolio) }}</template>
-        </span>
-        <div class="dash-hero__sub">
-          <div class="dash-hero__stat">
-            <span class="dash-hero__stat-value">{{ loading ? '—' : dealStats.active }}</span>
-            <span class="dash-hero__stat-label">Активные сделки</span>
-          </div>
-          <div class="dash-hero__stat">
-            <span class="dash-hero__stat-value">{{ loading ? '—' : formatMoneyCompact(dealStats.avg) }}</span>
-            <span class="dash-hero__stat-label">Средний чек</span>
-          </div>
-          <div class="dash-hero__stat">
-            <span class="dash-hero__stat-value">{{ loading ? '—' : taskStats.rate + '%' }}</span>
-            <span class="dash-hero__stat-label">Выполнение задач</span>
-          </div>
-        </div>
-      </div>
-      <div class="dash-hero__chart">
-        <div class="dash-hero__chart-head">
-          <span class="dash-hero__label">Активность · 14 дней</span>
-          <span class="dash-hero__chart-total">{{ activitySeries.total }}</span>
-        </div>
-        <div class="dash-hero__spark">
-          <SkeletonLoader v-if="activityLoading" height="64px" />
-          <apexchart v-else type="area" height="64" :options="areaChartOptions" :series="areaChartSeries" />
-        </div>
-      </div>
-    </section>
-
-    <section v-show="isDashboardBlockVisible('kpis')" class="dash-kpis">
-      <article
-        v-for="stat in currentStatCards"
-        :key="stat.key"
-        class="dash-kpi"
-        :class="{ 'dash-kpi--alert': stat.alert }"
-      >
-        <span class="dash-kpi__icon" :style="{ color: stat.color, background: stat.iconBg }">
-          <i :class="stat.icon"></i>
-        </span>
-        <span class="dash-kpi__body">
-          <span class="dash-kpi__value">
-            <SkeletonLoader v-if="loading" style="width: 36px; height: 18px;" />
-            <template v-else>{{ stat.value }}</template>
-          </span>
-          <span class="dash-kpi__label">{{ stat.label }}</span>
-        </span>
-        <span v-if="stat.badge && !loading" class="dash-kpi__badge">{{ stat.badge }}</span>
-      </article>
-    </section>
-
-    <section class="dash-grid">
-      <div v-show="isDashboardBlockVisible('lists')" class="dash-col dash-col--main">
-        <article v-for="panel in listPanels" :key="panel.key" class="dash-panel">
-          <div class="dash-panel__head">
-            <h3 class="dash-panel__title">{{ panel.title }}</h3>
-            <router-link :to="panel.link" class="dash-panel__link">{{ panel.linkLabel }}</router-link>
-          </div>
-
-          <div v-if="loading" class="dash-panel__body dash-skel">
-            <SkeletonLoader v-for="i in 4" :key="`${panel.key}-s-${i}`" height="40px" />
-          </div>
-
-          <div v-else-if="!panel.items.length" class="dash-empty">
-            <span class="dash-empty__icon" :class="{ 'dash-empty__icon--ok': panel.emptyOk }">
-              <i :class="panel.emptyIcon"></i>
-            </span>
-            <span class="dash-empty__text">
-              <span class="dash-empty__title">{{ panel.emptyTitle }}</span>
-              <span class="dash-empty__hint">{{ panel.emptyHint }}</span>
-            </span>
-          </div>
-
-          <div v-else class="dash-list">
+            <i class="far fa-circle"></i>
+            <input
+              type="text"
+              v-model="draft.pollOptions[i]"
+              class="composer__poll-input"
+              :placeholder="`Вариант ${i + 1}`"
+              maxlength="300"
+            />
             <button
-              v-for="row in panel.items"
-              :key="panel.key + '-' + row.id"
+              v-if="draft.pollOptions.length > 2"
               type="button"
-              class="dash-row"
-              @click="panel.onClick(row)"
-            >
-              <span v-if="panel.marker" class="dash-row__dot" :class="panel.marker(row)"></span>
-              <span class="dash-row__main">
-                <span class="dash-row__title">{{ panel.titleOf(row) }}</span>
-                <span class="dash-row__meta">
-                  <span v-for="(m, mi) in panel.metaOf(row)" :key="mi"><i :class="m.icon"></i>{{ m.text }}</span>
-                </span>
-              </span>
-              <span class="dash-row__aside">
-                <span class="dash-chip" :class="panel.chipClass(row)">{{ panel.chipText(row) }}</span>
-                <span v-if="panel.valueOf(row)" class="dash-row__value">{{ panel.valueOf(row) }}</span>
-              </span>
+              class="composer__poll-x"
+              @click="draft.pollOptions.splice(i, 1)"
+            ><i class="fas fa-times"></i></button>
+          </div>
+          <button
+            v-if="draft.pollOptions.length < 10"
+            type="button"
+            class="composer__poll-add"
+            @click="draft.pollOptions.push('')"
+          ><i class="fas fa-plus"></i> Добавить вариант</button>
+          <div class="composer__poll-opts">
+            <label class="composer__opt">
+              <input type="checkbox" v-model="draft.pollMulti" />
+              <span>Несколько ответов</span>
+            </label>
+            <label class="composer__opt">
+              <input type="checkbox" v-model="draft.pollAnon" />
+              <span>Анонимно</span>
+            </label>
+          </div>
+        </div>
+
+        <div v-if="draft.images.length" class="composer__images">
+          <div v-for="(img, i) in draft.images" :key="img.url" class="composer__image">
+            <img :src="img.url" :alt="img.name" />
+            <button type="button" class="composer__image-x" @click="removeDraftImage(i)">
+              <i class="fas fa-times"></i>
             </button>
           </div>
-        </article>
+        </div>
+
+        <div v-if="draft.files.length" class="composer__files">
+          <div v-for="(f, i) in draft.files" :key="f.url" class="composer__file-chip">
+            <i :class="fileIcon(f.name)"></i>
+            <span class="composer__file-name" :title="f.name">{{ f.name }}</span>
+            <span v-if="f.size" class="composer__file-size">{{ formatBytes(f.size) }}</span>
+            <button type="button" class="composer__file-x" @click="removeDraftFile(i)">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+        </div>
+
+        <div v-if="composerExpanded || draft.body || draft.images.length || draft.files.length || draft.mode === 'poll'" class="composer__bar">
+          <div class="composer__actions">
+            <input
+              ref="imageInput"
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              multiple
+              class="composer__file"
+              @change="onImagesPicked"
+            />
+            <input
+              ref="fileInput"
+              type="file"
+              multiple
+              class="composer__file"
+              @change="onFilesPicked"
+            />
+            <button type="button" class="composer__act" :disabled="uploading" @click="imageInput?.click()">
+              <i class="fas" :class="uploading ? 'fa-spinner fa-spin' : 'fa-image'"></i>
+              Картинка
+            </button>
+            <button type="button" class="composer__act" :disabled="uploadingFile" @click="fileInput?.click()">
+              <i class="fas" :class="uploadingFile ? 'fa-spinner fa-spin' : 'fa-paperclip'"></i>
+              Файл
+            </button>
+            <label class="composer__opt">
+              <input type="checkbox" v-model="draft.is_news" />
+              <span>Официальная новость</span>
+            </label>
+            <label class="composer__opt">
+              <input type="checkbox" v-model="draft.is_pinned" />
+              <span>Закрепить</span>
+            </label>
+          </div>
+          <div class="composer__submit">
+            <UiButton variant="ghost" size="sm" :disabled="publishing" @click="resetComposer">
+              Отмена
+            </UiButton>
+            <UiButton
+              variant="primary"
+              size="sm"
+              icon-left="fas fa-paper-plane"
+              :loading="publishing"
+              :disabled="!canSubmit"
+              @click="publish"
+            >Опубликовать</UiButton>
+          </div>
+        </div>
       </div>
 
-      <draggable
-        tag="aside"
-        class="dash-col dash-col--side"
-        v-model="sideModel"
-        :item-key="(el) => el"
-        handle=".dash-drag"
-        :animation="150"
+      <!-- Скрытые file input'ы для edit-режима. Вынесены ИЗ v-for ленты:
+           внутри v-for Vue делает ref массивом (по элементу на итерацию),
+           и `editImageInput.click()` ломается. Тут они одиночные. -->
+      <input
+        ref="editImageInput"
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif"
+        multiple
+        class="composer__file"
+        @change="onEditImagesPicked"
+      />
+      <input
+        ref="editFileInput"
+        type="file"
+        multiple
+        class="composer__file"
+        @change="onEditFilesPicked"
+      />
+
+      <!-- Лента постов -->
+      <div v-if="loadingFeed" class="feed-state">Загрузка ленты…</div>
+      <div v-else-if="!posts.length" class="feed-state feed-state--empty">
+        <i class="fas fa-newspaper"></i>
+        <span>Пока новостей нет.</span>
+      </div>
+
+      <article
+        v-for="post in posts"
+        :key="post.id"
+        class="post"
+        :class="{ 'is-pinned': post.is_pinned }"
       >
-        <template #item="{ element }">
-          <div class="dash-side-slot">
-            <article v-if="element === 'portfolio'" class="dash-panel">
-              <div class="dash-panel__head">
-                <h3 class="dash-panel__title">
-                  <i class="fas fa-grip-vertical dash-drag" title="Перетащить"></i>
-                  Портфель проектов
-                </h3>
-                <router-link to="/projects" class="dash-panel__link">Проекты</router-link>
-              </div>
-              <div v-if="loading" class="dash-panel__body dash-skel">
-                <SkeletonLoader height="150px" />
-              </div>
-              <div v-else-if="!dealStats.total" class="dash-empty">
-                <span class="dash-empty__icon"><i class="fas fa-folder-open"></i></span>
-                <span class="dash-empty__text">
-                  <span class="dash-empty__title">Нет проектов</span>
-                  <span class="dash-empty__hint">Распределение появится после первой сделки</span>
-                </span>
-              </div>
-              <div v-else class="dash-portfolio">
-                <div class="dash-portfolio__chart">
-                  <apexchart type="donut" height="150" :options="donutChartOptions" :series="donutChartSeries" />
-                </div>
-                <ul class="dash-legend">
-                  <li v-for="seg in statusDistribution" :key="seg.key">
-                    <span class="dash-legend__dot" :style="{ background: seg.color }"></span>
-                    <span class="dash-legend__label">{{ seg.label }}</span>
-                    <span class="dash-legend__value">{{ seg.value }}</span>
-                    <span class="dash-legend__pct">{{ seg.pct }}%</span>
-                  </li>
-                </ul>
-              </div>
-            </article>
+        <header class="post__head">
+          <UiAvatar :src="post.author?.avatar_url" :name="post.author?.full_name" size="md" />
+          <div class="post__meta">
+            <div class="post__author">{{ post.author?.full_name || 'Сотрудник' }}</div>
+            <div class="post__sub">
+              <span v-if="post.author?.job_title">{{ post.author.job_title }}</span>
+              <span v-else-if="post.author?.department">{{ post.author.department }}</span>
+              <span v-else-if="post.author?.role_name">{{ post.author.role_name }}</span>
+              <span class="post__dot">·</span>
+              <span>{{ formatWhen(post.created_at) }}</span>
+              <span v-if="isEdited(post)" class="post__edited" :title="`Изменено ${formatWhen(post.updated_at)}`">
+                · изменено
+              </span>
+            </div>
+          </div>
+          <div class="post__badges">
+            <span v-if="post.is_pinned" class="post__badge is-pin" title="Закреплено">
+              <i class="fas fa-thumbtack"></i>
+            </span>
+            <span v-if="post.poll" class="post__badge is-poll">Опрос</span>
+            <span v-if="post.post_type === 'news'" class="post__badge is-news">Новость</span>
+          </div>
+          <div v-if="post.can_edit" class="post__menu">
+            <button type="button" class="post__menu-btn" @click="toggleMenu(post.id)">
+              <i class="fas fa-ellipsis-h"></i>
+            </button>
+            <div v-if="menuOpenId === post.id" class="post__menu-pop">
+              <button type="button" @click="startEditPost(post)">
+                <i class="fas fa-pen"></i> Изменить
+              </button>
+              <button type="button" @click="togglePin(post)">
+                <i class="fas fa-thumbtack"></i>
+                {{ post.is_pinned ? 'Открепить' : 'Закрепить' }}
+              </button>
+              <button type="button" class="is-danger" @click="onDeletePost(post)">
+                <i class="fas fa-trash"></i> Удалить
+              </button>
+            </div>
+          </div>
+        </header>
 
-            <article v-else-if="element === 'tasks'" class="dash-panel">
-              <div class="dash-panel__head">
-                <h3 class="dash-panel__title">
-                  <i class="fas fa-grip-vertical dash-drag" title="Перетащить"></i>
-                  Задачи
-                </h3>
-                <router-link to="/tasks" class="dash-panel__link">Все задачи</router-link>
-              </div>
-              <div class="dash-bars">
-                <div v-for="bar in taskBars" :key="bar.key" class="dash-bar">
-                  <div class="dash-bar__top">
-                    <span class="dash-bar__label">{{ bar.label }}</span>
-                    <span class="dash-bar__value">{{ loading ? '—' : bar.value }}</span>
-                  </div>
-                  <div class="dash-bar__track">
-                    <span class="dash-bar__fill" :class="bar.cls" :style="{ width: (loading ? 0 : bar.pct) + '%' }"></span>
-                  </div>
-                </div>
-              </div>
-            </article>
+        <!-- Inline-редактор поста: открывается из меню "Изменить".
+             Опрос правкой не меняем (бэкенд это запрещает, чтобы не сбить голоса). -->
+        <div v-if="editingPostId === post.id" class="post__edit">
+          <MentionInput
+            v-model="editDraft.body"
+            :users="allUsers"
+            multiline
+            :rows="1"
+            auto-grow
+            :min-height="44"
+            :max-height="320"
+            class="composer__input"
+            placeholder="Текст новости…"
+            @mention="onEditMention"
+          />
 
-            <article v-else-if="element === 'actions'" class="dash-panel dash-panel--actions">
-              <div class="dash-panel__head">
-                <h3 class="dash-panel__title dash-panel__title--accent">
-                  <i class="fas fa-grip-vertical dash-drag" title="Перетащить"></i>
-                  <i class="fas fa-bolt"></i> Быстрые действия
-                </h3>
-              </div>
-              <div class="dash-actions">
-                <button
-                  v-for="action in quickActions"
-                  :key="action.key"
-                  type="button"
-                  class="dash-action"
-                  :class="{ 'dash-action--primary': action.primary }"
-                  @click="action.onClick"
-                >
-                  <i :class="action.icon"></i><span>{{ action.label }}</span>
+          <!-- Текущие вложения: картинки thumbnail-сеткой, файлы — чипами,
+               у каждого крестик для удаления. -->
+          <div v-if="editDraft.attachments.filter((a) => (a.kind || 'image') !== 'file').length"
+               class="composer__images">
+            <template v-for="(att, i) in editDraft.attachments" :key="att.url">
+              <div v-if="(att.kind || 'image') !== 'file'" class="composer__image">
+                <img :src="att.url" :alt="att.name" />
+                <button type="button" class="composer__image-x" @click="removeEditAttachment(i)">
+                  <i class="fas fa-times"></i>
                 </button>
               </div>
-            </article>
+            </template>
           </div>
-        </template>
-      </draggable>
-    </section>
+          <div v-if="editDraft.attachments.filter((a) => a.kind === 'file').length"
+               class="composer__files">
+            <template v-for="(att, i) in editDraft.attachments" :key="att.url + '-f'">
+              <div v-if="att.kind === 'file'" class="composer__file-chip">
+                <i :class="fileIcon(att.name)"></i>
+                <span class="composer__file-name" :title="att.name">{{ att.name }}</span>
+                <span v-if="att.size" class="composer__file-size">{{ formatBytes(att.size) }}</span>
+                <button type="button" class="composer__file-x" @click="removeEditAttachment(i)">
+                  <i class="fas fa-times"></i>
+                </button>
+              </div>
+            </template>
+          </div>
+
+          <div class="post__edit-actions">
+            <div class="post__edit-add">
+              <!-- file input'ы у edit-формы вынесены наверх страницы
+                   (см. секцию feed-page), потому что внутри v-for
+                   Vue превращает ref в массив, у которого нет .click(). -->
+              <button type="button" class="composer__act" :disabled="uploading" @click="editImageInput?.click()">
+                <i class="fas" :class="uploading ? 'fa-spinner fa-spin' : 'fa-image'"></i>
+                Картинка
+              </button>
+              <button type="button" class="composer__act" :disabled="uploadingFile" @click="editFileInput?.click()">
+                <i class="fas" :class="uploadingFile ? 'fa-spinner fa-spin' : 'fa-paperclip'"></i>
+                Файл
+              </button>
+              <span v-if="post.poll" class="post__edit-hint">
+                <i class="fas fa-info-circle"></i> Опрос не меняется
+              </span>
+            </div>
+            <div class="post__edit-buttons">
+              <UiButton variant="ghost" size="sm" :disabled="savingEdit" @click="cancelEditPost">
+                Отмена
+              </UiButton>
+              <UiButton
+                variant="primary"
+                size="sm"
+                icon-left="fas fa-check"
+                :loading="savingEdit"
+                :disabled="!editDraft.body.trim() && !editDraft.attachments.length"
+                @click="saveEditPost(post)"
+              >Сохранить</UiButton>
+            </div>
+          </div>
+        </div>
+        <div v-else-if="post.body" class="post__body">
+          <template v-for="(seg, i) in parseSegments(post.body)" :key="i">
+            <span v-if="seg.type === 'mention'" class="post__mention">@{{ seg.name }}</span>
+            <template v-else>{{ seg.text }}</template>
+          </template>
+        </div>
+
+        <!-- Опрос -->
+        <div v-if="post.poll" class="poll">
+          <div
+            v-for="opt in post.poll.options"
+            :key="opt.id"
+            class="poll__opt"
+            :class="{ 'is-voted': opt.voted }"
+            @click="onVote(post, opt)"
+          >
+            <div class="poll__bar" :style="{ width: pollPct(opt, post.poll) + '%' }"></div>
+            <div class="poll__opt-row">
+              <span class="poll__check">
+                <i :class="opt.voted
+                  ? 'fas fa-check-circle'
+                  : (post.poll.multi ? 'far fa-square' : 'far fa-circle')"></i>
+              </span>
+              <span class="poll__text">{{ opt.text }}</span>
+              <span v-if="!post.poll.anonymous && opt.voters.length" class="poll__voters">
+                <UiAvatar
+                  v-for="v in opt.voters.slice(0, 3)"
+                  :key="v.id"
+                  :src="v.avatar_url"
+                  :name="v.full_name"
+                  size="xs"
+                />
+                <span v-if="opt.voters.length > 3" class="poll__voters-more">
+                  +{{ opt.voters.length - 3 }}
+                </span>
+              </span>
+              <span class="poll__pct">{{ pollPct(opt, post.poll) }}%</span>
+            </div>
+          </div>
+          <div class="poll__foot">
+            {{ post.poll.total_votes }} {{ pluralVotes(post.poll.total_votes) }}
+            <span v-if="post.poll.multi">· неск. ответов</span>
+            <span v-if="post.poll.anonymous">· анонимно</span>
+          </div>
+        </div>
+
+        <!-- Картинки поста (inline-галерея). У старых постов kind отсутствует
+             — считаем картинкой по дефолту (см. postImages в setup). -->
+        <div v-if="postImages(post).length" class="post__images" :class="`count-${Math.min(postImages(post).length, 4)}`">
+          <a
+            v-for="(img, i) in postImages(post)"
+            :key="img.url + i"
+            :href="img.url"
+            target="_blank"
+            rel="noopener"
+            class="post__image"
+          >
+            <img :src="img.url" :alt="img.name || 'Изображение'" loading="lazy" />
+          </a>
+        </div>
+
+        <!-- Файлы поста (документы, архивы и т.п.) — кликабельные чипы. -->
+        <div v-if="postFiles(post).length" class="post__files">
+          <a
+            v-for="(f, i) in postFiles(post)"
+            :key="f.url + i"
+            :href="f.url + (f.url.includes('?') ? '&' : '?') + 'name=' + encodeURIComponent(f.name || '')"
+            target="_blank"
+            rel="noopener"
+            class="post__file"
+            :title="`Скачать ${f.name}`"
+          >
+            <i :class="fileIcon(f.name)"></i>
+            <span class="post__file-name">{{ f.name }}</span>
+            <span v-if="f.size" class="post__file-size">{{ formatBytes(f.size) }}</span>
+            <i class="fas fa-arrow-down post__file-dl"></i>
+          </a>
+        </div>
+
+        <footer class="post__footer">
+          <!-- Реакции -->
+          <div class="post__reactions">
+            <button
+              v-for="r in post.reactions"
+              :key="r.emoji"
+              type="button"
+              class="post__reaction"
+              :class="{ 'is-mine': r.mine }"
+              @click="toggleReaction(post, r.emoji)"
+            >
+              <span class="post__reaction-emoji">{{ r.emoji }}</span>
+              <span>{{ r.count }}</span>
+            </button>
+            <div class="post__react-add-wrap">
+              <button
+                type="button"
+                class="post__react-add"
+                title="Добавить реакцию"
+                @click="toggleReactionPicker(post.id)"
+              ><i class="far fa-face-smile"></i></button>
+              <div v-if="reactionPickerId === post.id" class="post__react-picker">
+                <button
+                  v-for="e in EMOJI_SET"
+                  :key="e"
+                  type="button"
+                  @click="toggleReaction(post, e)"
+                >{{ e }}</button>
+              </div>
+            </div>
+          </div>
+          <button type="button" class="post__react" @click="toggleComments(post)">
+            <i class="far fa-comment"></i>
+            <span>{{ post.comments_count || 0 }}</span>
+          </button>
+          <span class="post__views" :title="`${post.views_count || 0} просмотров`">
+            <i class="far fa-eye"></i>
+            <span>{{ post.views_count || 0 }}</span>
+          </span>
+        </footer>
+
+        <!-- Комментарии -->
+        <div v-if="commentState[post.id]?.open" class="post__comments">
+          <div v-if="commentState[post.id].loading" class="post__comments-loading">Загрузка…</div>
+          <div
+            v-for="c in commentState[post.id].list"
+            :key="c.id"
+            class="comment"
+          >
+            <UiAvatar :src="c.author?.avatar_url" :name="c.author?.full_name" size="sm" />
+            <div class="comment__bubble">
+              <div class="comment__head">
+                <strong>{{ c.author?.full_name || 'Сотрудник' }}</strong>
+                <span class="comment__when">{{ formatWhen(c.created_at) }}</span>
+                <button
+                  v-if="c.can_delete"
+                  type="button"
+                  class="comment__del"
+                  title="Удалить"
+                  @click="onDeleteComment(post, c)"
+                ><i class="fas fa-times"></i></button>
+              </div>
+              <div class="comment__text">
+                <template v-for="(seg, i) in parseSegments(c.body)" :key="i">
+                  <span v-if="seg.type === 'mention'" class="post__mention">@{{ seg.name }}</span>
+                  <template v-else>{{ seg.text }}</template>
+                </template>
+              </div>
+            </div>
+          </div>
+          <div class="comment-form">
+            <UiAvatar :src="me?.avatar_url" :name="me?.full_name" size="sm" />
+            <MentionInput
+              v-model="commentState[post.id].draft"
+              :users="allUsers"
+              class="comment-form__input"
+              placeholder="Написать комментарий…  @ — упомянуть"
+              @mention="(m) => onCommentMention(post.id, m)"
+              @submit="submitComment(post)"
+            />
+            <button
+              type="button"
+              class="comment-form__send"
+              :disabled="!commentState[post.id].draft.trim()"
+              @click="submitComment(post)"
+            ><i class="fas fa-paper-plane"></i></button>
+          </div>
+        </div>
+      </article>
+    </div>
+
+    <!-- ПРАВЫЙ САЙДБАР -->
+    <aside class="feed-side">
+      <section class="widget">
+        <h3 class="widget__title">Мои задачи</h3>
+        <div class="widget__tasks">
+          <router-link to="/tasks" class="wtask">
+            <span class="wtask__label">Делаю</span>
+            <span class="wtask__count">{{ taskCounts.doing }}</span>
+          </router-link>
+          <router-link to="/tasks" class="wtask">
+            <span class="wtask__label">Помогаю</span>
+            <span class="wtask__count">{{ taskCounts.helping }}</span>
+          </router-link>
+          <router-link to="/tasks" class="wtask">
+            <span class="wtask__label">Поручил</span>
+            <span class="wtask__count">{{ taskCounts.assigned }}</span>
+          </router-link>
+          <router-link to="/tasks" class="wtask">
+            <span class="wtask__label">Наблюдаю</span>
+            <span class="wtask__count">{{ taskCounts.watching }}</span>
+          </router-link>
+        </div>
+      </section>
+
+      <section v-if="kpiVisible" class="widget">
+        <h3 class="widget__title">Сводка</h3>
+        <div class="widget__kpi">
+          <router-link to="/projects" class="wkpi">
+            <span class="wkpi__value">{{ summary.active_deals }}</span>
+            <span class="wkpi__label">Активных проектов</span>
+          </router-link>
+          <router-link to="/tasks" class="wkpi" :class="{ 'is-warn': summary.overdue_tasks > 0 }">
+            <span class="wkpi__value">{{ summary.overdue_tasks }}</span>
+            <span class="wkpi__label">Просроченных задач</span>
+          </router-link>
+          <div class="wkpi">
+            <span class="wkpi__value">{{ summary.new_documents_7d }}</span>
+            <span class="wkpi__label">Документов за неделю</span>
+          </div>
+        </div>
+      </section>
+
+      <section v-if="popular.length" class="widget">
+        <h3 class="widget__title">Популярное в ленте</h3>
+        <ul class="widget__popular">
+          <li v-for="p in popular" :key="p.id" @click="scrollToPost(p.id)">
+            <div class="wpop__text">{{ shortText(p.body) }}</div>
+            <div class="wpop__meta">
+              <span><i class="far fa-face-smile"></i> {{ reactionsTotal(p) }}</span>
+              <span><i class="far fa-comment"></i> {{ p.comments_count }}</span>
+            </div>
+          </li>
+        </ul>
+      </section>
+
+      <section v-if="birthdays.length" class="widget">
+        <h3 class="widget__title">Дни рождения</h3>
+        <ul class="widget__people">
+          <li v-for="b in birthdays" :key="b.user_id">
+            <UiAvatar :src="b.avatar_url" :name="b.full_name" size="sm" />
+            <div class="wperson__meta">
+              <div class="wperson__name">{{ b.full_name }}</div>
+              <div class="wperson__sub">
+                <template v-if="b.is_today">
+                  <span class="wperson__today">Сегодня празднует!</span>
+                </template>
+                <template v-else>
+                  {{ b.date_label }} · через {{ b.days_until }} {{ pluralDays(b.days_until) }}
+                </template>
+              </div>
+            </div>
+            <span v-if="b.is_today" class="wperson__gift"><i class="fas fa-gift"></i></span>
+          </li>
+        </ul>
+      </section>
+
+      <section v-if="absentToday.length" class="widget">
+        <h3 class="widget__title">Сегодня отсутствуют</h3>
+        <ul class="widget__people">
+          <li v-for="a in absentToday" :key="a.id">
+            <UiAvatar :name="a.user_full_name" size="sm" />
+            <div class="wperson__meta">
+              <div class="wperson__name">{{ a.user_full_name || '—' }}</div>
+              <div class="wperson__sub">
+                {{ absenceLabel(a.type) }} · до {{ formatShortDate(a.date_to) }}
+              </div>
+            </div>
+            <span class="wperson__abs" :class="`is-${a.type}`"></span>
+          </li>
+        </ul>
+        <router-link to="/absences" class="widget__more">Все отсутствия →</router-link>
+      </section>
+
+      <div class="feed-side__foot">
+        Корпоративный портал · {{ currentYear }}
+      </div>
+    </aside>
   </div>
 </template>
 
 <script>
-import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
-import { useRouter } from 'vue-router'
-import draggable from 'vuedraggable'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { api } from '../services/api'
-import SkeletonLoader from '../components/ui/SkeletonLoader.vue'
-import VueApexCharts from 'vue3-apexcharts'
+import { useToast } from '../composables/useToast'
 import { useAuthStore } from '../stores/auth'
-import { useUiPreferences } from '../composables/useUiPreferences'
+import { UiAvatar, UiButton } from '../components/ui'
+import MentionInput from '../components/ui/MentionInput.vue'
+import { formatDate as fmtDate, formatTime as fmtTime } from '../utils/format'
+import { parseServerDate } from '../composables/useServerClock'
 
-const clickOutside = {
-  beforeMount(el, binding) {
-    el._co = (e) => { if (!(el === e.target || el.contains(e.target))) binding.value(e) }
-    setTimeout(() => document.addEventListener('click', el._co), 0)
-  },
-  unmounted(el) { document.removeEventListener('click', el._co) },
+const ABSENCE_LABEL = {
+  vacation: 'Отпуск',
+  sick_leave: 'Больничный',
+  business_trip: 'Командировка',
+  other: 'Отсутствует',
 }
-
-const DASHBOARD_BLOCKS = [
-  { id: 'hero', label: 'Портфель и активность' },
-  { id: 'kpis', label: 'KPI-карточки' },
-  { id: 'lists', label: 'Списки (проекты/задачи)' },
-  { id: 'portfolio', label: 'Портфель проектов' },
-  { id: 'tasks', label: 'Задачи (диаграмма)' },
-  { id: 'actions', label: 'Быстрые действия' },
-]
+const EMOJI_SET = ['👍', '❤️', '🔥', '👏', '😄', '🎉', '😮']
+// Маркер упоминания в тексте: @[Имя](user_id).
+const MENTION_RE = /@\[([^\]]+)\]\(([0-9a-fA-F][0-9a-fA-F-]{7,})\)/g
 
 export default {
   name: 'Home',
-  components: { SkeletonLoader, apexchart: VueApexCharts, draggable },
-  directives: { 'click-outside': clickOutside },
+  components: { UiAvatar, UiButton, MentionInput },
   setup() {
-    const authStore = useAuthStore()
-    const {
-      isDashboardBlockVisible,
-      toggleDashboardBlock,
-      getDashboardSideOrder,
-      setDashboardSideOrder,
-    } = useUiPreferences()
-    const dashSettingsOpen = ref(false)
-    const dashboardBlocks = DASHBOARD_BLOCKS
-    const SIDE_IDS = ['portfolio', 'tasks', 'actions']
-    // Полный упорядоченный список боковых виджетов (все id гарантированно есть).
-    const sideOrderFull = computed(() => {
-      const saved = getDashboardSideOrder().filter((id) => SIDE_IDS.includes(id))
-      return [...saved, ...SIDE_IDS.filter((id) => !saved.includes(id))]
-    })
-    // Для draggable показываем только видимые; скрытые сохраняем в хвосте порядка.
-    const sideModel = computed({
-      get: () => sideOrderFull.value.filter((id) => isDashboardBlockVisible(id)),
-      set: (list) => {
-        const hidden = sideOrderFull.value.filter((id) => !list.includes(id))
-        setDashboardSideOrder([...list, ...hidden])
-      },
-    })
-    const loading = ref(true)
-    const activityLoading = ref(true)
-    const projects = ref([])
-    const tasks = ref([])
-    const activityData = ref([])
-    const dashboardMode = ref('default')
-    const themeTick = ref(0)
-    const managerSummary = ref({
-      enabled: false,
-      active_deals: 0,
-      risky_deals_count: 0,
-      overdue_tasks: 0,
-      unsigned_contracts_count: 0,
-      stalled_contracts_count: 0,
-      overloaded_users_count: 0,
-      risky_deals: [],
-      overloaded_users: [],
-      contracts_on_approval: []
-    })
-    const summary = ref({
-      active_deals: 0,
-      overdue_tasks: 0,
-      new_documents_7d: 0,
-      upload_errors_7d: 0,
-      unread_notifications: 0
-    })
-    const router = useRouter()
-    const canUseManagerMode = computed(() =>
-      Boolean(
-        authStore.isSuperuser ||
-        authStore.permissions?.projects?.read_all ||
-        authStore.permissions?.tasks?.read_all ||
-        authStore.permissions?.contracts?.read_all ||
-        authStore.permissions?.users?.read_all
-      )
-    )
+    const auth = useAuthStore()
+    const { success, error: toastError } = useToast()
 
-    const headerTitle = computed(() =>
-      dashboardMode.value === 'manager' ? 'Режим руководителя' : 'Операционный обзор'
-    )
+    const me = computed(() => auth.user || null)
+    const currentYear = new Date().getFullYear()
+    const firstName = computed(() => {
+      const n = (auth.user?.full_name || '').trim().split(/\s+/)
+      return n[1] || n[0] || 'коллега'
+    })
+    const canPost = computed(() => {
+      const f = auth.permissions?.feed || {}
+      return Boolean(auth.isSuperuser || f.edit_all)
+    })
 
-    /* ---- Theme-aware chart tokens ---- */
-    const readToken = (name, fallback) => {
-      if (typeof window === 'undefined') return fallback
-      const v = getComputedStyle(document.documentElement).getPropertyValue(name)
-      return (v && v.trim()) || fallback
-    }
-    const chartTokens = computed(() => {
-      void themeTick.value
-      return {
-        primary: readToken('--color-primary', '#2563eb'),
-        success: readToken('--color-success', '#16a34a'),
-        warning: readToken('--color-warning', '#d97706'),
-        danger: readToken('--color-danger', '#dc2626'),
-        subtle: readToken('--color-text-subtle', '#94a3b8'),
-        muted: readToken('--color-text-muted', '#64748b'),
-        strong: readToken('--color-text-strong', '#0f172a'),
-        border: readToken('--color-border', '#e2e8f0')
+    // ---- Composer ----
+    const composerExpanded = ref(false)
+    const publishing = ref(false)
+    const uploading = ref(false)
+    const uploadingFile = ref(false)
+    const imageInput = ref(null)
+    const fileInput = ref(null)
+    const composerMentions = ref([])  // [{name, id}]
+    const draft = reactive({
+      mode: 'post',          // 'post' | 'poll'
+      body: '',
+      // Картинки идут в inline-галерею; файлы — в отдельный список
+      // «скрепок» под телом поста. На сервер уходят склеенными
+      // в attachments с полем kind ("image" / "file").
+      images: [],
+      files: [],
+      is_news: true,
+      is_pinned: false,
+      pollOptions: ['', ''],
+      pollMulti: false,
+      pollAnon: false,
+    })
+
+    const canSubmit = computed(() => {
+      if (publishing.value) return false
+      if (draft.mode === 'poll') {
+        const filled = draft.pollOptions.filter((o) => o.trim()).length
+        return draft.body.trim().length > 0 && filled >= 2
       }
-    })
-    const isDark = computed(() => {
-      void themeTick.value
-      if (typeof document === 'undefined') return false
-      const attr = document.documentElement.getAttribute('data-theme')
-      if (attr === 'dark') return true
-      if (attr === 'light') return false
-      return typeof window !== 'undefined' &&
-        window.matchMedia('(prefers-color-scheme: dark)').matches
+      return Boolean(draft.body.trim() || draft.images.length || draft.files.length)
     })
 
-    /* ---- Derived statistics ---- */
-    const getProjectAmount = (project) =>
-      project?.total_contract_value ?? project?.budget ?? 0
-
-    const dealStats = computed(() => {
-      const list = projects.value || []
-      const counts = { active: 0, completed: 0, on_hold: 0, cancelled: 0 }
-      let portfolio = 0
-      list.forEach((p) => {
-        if (counts[p.status] !== undefined) counts[p.status] += 1
-        portfolio += Number(getProjectAmount(p)) || 0
-      })
-      const total = list.length
-      return { ...counts, total, portfolio, avg: total ? portfolio / total : 0 }
-    })
-
-    const isOverdue = (value) => {
-      if (!value) return false
-      const date = new Date(value)
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      date.setHours(0, 0, 0, 0)
-      return date < today
+    const resetComposer = () => {
+      draft.mode = 'post'
+      draft.body = ''
+      draft.images = []
+      draft.files = []
+      draft.is_news = true
+      draft.is_pinned = false
+      draft.pollOptions = ['', '']
+      draft.pollMulti = false
+      draft.pollAnon = false
+      composerMentions.value = []
+      composerExpanded.value = false
     }
 
-    const taskStats = computed(() => {
-      const list = tasks.value || []
-      let done = 0
-      let active = 0
-      let overdue = 0
-      list.forEach((t) => {
-        if (t.status === 'completed') done += 1
-        else if (t.status !== 'cancelled') {
-          active += 1
-          if (isOverdue(t.due_date)) overdue += 1
-        }
-      })
-      const total = list.length
-      return { total, done, active, overdue, rate: total ? Math.round((done / total) * 100) : 0 }
-    })
-
-    const taskBars = computed(() => {
-      const s = taskStats.value
-      const base = Math.max(s.total, 1)
-      return [
-        { key: 'done', label: 'Выполнено', value: s.done, pct: Math.round((s.done / base) * 100), cls: 'dash-bar__fill--ok' },
-        { key: 'active', label: 'В работе', value: s.active, pct: Math.round((s.active / base) * 100), cls: 'dash-bar__fill--primary' },
-        { key: 'overdue', label: 'Просрочено', value: s.overdue, pct: Math.round((s.overdue / base) * 100), cls: 'dash-bar__fill--danger' }
-      ]
-    })
-
-    const activeProjects = computed(() =>
-      projects.value.filter((project) => project.status === 'active').slice(0, 5)
-    )
-
-    const urgentTasks = computed(() =>
-      tasks.value
-        .filter((task) => task.status !== 'completed' && task.status !== 'cancelled')
-        .sort((a, b) => new Date(a.due_date || 0) - new Date(b.due_date || 0))
-        .slice(0, 5)
-    )
-
-    const riskyDeals = computed(() => managerSummary.value.risky_deals || [])
-    const overloadedUsers = computed(() => managerSummary.value.overloaded_users || [])
-    const contractsOnApproval = computed(() => managerSummary.value.contracts_on_approval || [])
-
-    const statCards = computed(() => [
-      { key: 'deals', icon: 'fas fa-share-alt', label: 'Активные сделки', value: summary.value.active_deals, color: '#2563eb', iconBg: 'rgba(37, 99, 235, 0.12)' },
-      { key: 'overdue', icon: 'fas fa-exclamation-triangle', label: 'Просрочено', value: summary.value.overdue_tasks, color: '#dc2626', iconBg: 'rgba(220, 38, 38, 0.12)', alert: summary.value.overdue_tasks > 0, badge: summary.value.overdue_tasks > 0 ? 'Внимание' : null },
-      { key: 'docs', icon: 'far fa-file-alt', label: 'Документы · 7д', value: summary.value.new_documents_7d, color: '#d97706', iconBg: 'rgba(217, 119, 6, 0.14)' },
-      { key: 'errors', icon: 'fas fa-cloud-upload-alt', label: 'Ошибки загрузок', value: summary.value.upload_errors_7d, color: summary.value.upload_errors_7d > 0 ? '#dc2626' : '#16a34a', iconBg: summary.value.upload_errors_7d > 0 ? 'rgba(220, 38, 38, 0.12)' : 'rgba(22, 163, 74, 0.14)' },
-      { key: 'unread', icon: 'far fa-bell', label: 'Непрочитано', value: summary.value.unread_notifications, color: '#64748b', iconBg: 'rgba(100, 116, 139, 0.12)' }
-    ])
-
-    const managerStatCards = computed(() => [
-      { key: 'active', icon: 'fas fa-folder-open', label: 'Активные сделки', value: managerSummary.value.active_deals, color: '#2563eb', iconBg: 'rgba(37, 99, 235, 0.12)' },
-      { key: 'risky', icon: 'fas fa-triangle-exclamation', label: 'Сделки с риском', value: managerSummary.value.risky_deals_count, color: '#dc2626', iconBg: 'rgba(220, 38, 38, 0.12)', alert: managerSummary.value.risky_deals_count > 0, badge: managerSummary.value.risky_deals_count > 0 ? 'Контроль' : null },
-      { key: 'overdue', icon: 'fas fa-list-check', label: 'Просроченные задачи', value: managerSummary.value.overdue_tasks, color: '#dc2626', iconBg: 'rgba(220, 38, 38, 0.12)', alert: managerSummary.value.overdue_tasks > 0 },
-      { key: 'unsigned', icon: 'fas fa-file-signature', label: 'Без подписи', value: managerSummary.value.unsigned_contracts_count, color: '#d97706', iconBg: 'rgba(217, 119, 6, 0.14)' },
-      { key: 'stalled', icon: 'fas fa-hourglass-half', label: 'Зависли', value: managerSummary.value.stalled_contracts_count, color: '#7c3aed', iconBg: 'rgba(124, 58, 237, 0.14)', alert: managerSummary.value.stalled_contracts_count > 0 }
-    ])
-
-    const currentStatCards = computed(() =>
-      dashboardMode.value === 'manager' ? managerStatCards.value : statCards.value
-    )
-
-    const formatCurrency = (value) =>
-      value !== null && value !== undefined && value !== '' && !Number.isNaN(Number(value))
-        ? new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }).format(Number(value))
-        : '—'
-
-    const formatMoneyCompact = (value) => {
-      const n = Number(value)
-      if (!Number.isFinite(n)) return '0 ₽'
-      return new Intl.NumberFormat('ru-RU', { notation: 'compact', maximumFractionDigits: 1 }).format(n) + ' ₽'
+    const onComposerMention = (m) => {
+      if (m && m.id) composerMentions.value.push(m)
     }
 
-    const formatDate = (value) => {
-      if (!value) return '—'
-      return new Date(value).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' })
-    }
-
-    const getStatusText = (status) =>
-      ({ active: 'Активен', completed: 'Завершён', on_hold: 'Пауза', cancelled: 'Отменён' })[status] || status
-
-    const getStatusClass = (status) =>
-      ({ active: 'dash-chip--ok', completed: 'dash-chip--info', on_hold: 'dash-chip--warn', cancelled: 'dash-chip--danger' })[status] || 'dash-chip--muted'
-
-    const getUrgencyDotClass = (task) => {
-      if (isOverdue(task.due_date)) return 'dash-row__dot--danger'
-      if (task.priority === 'urgent' || task.priority === 'high') return 'dash-row__dot--warn'
-      return 'dash-row__dot--muted'
-    }
-
-    const getProjectAddress = (project) =>
-      project?.address_short || project?.address || 'Нет адреса'
-
-    const getRiskText = (level) => {
-      if (level === 'high') return 'Критично'
-      if (level === 'medium') return 'Нагрузка'
-      return 'Норма'
-    }
-
-    const getRiskChipClass = (level) => {
-      if (level === 'high') return 'dash-chip--danger'
-      if (level === 'medium') return 'dash-chip--warn'
-      return 'dash-chip--info'
-    }
-
-    const goToProjects = () => router.push('/projects')
-    const goToTasks = () => router.push('/tasks')
-    const goToContracts = () => router.push('/contracts')
-    const goToCompanies = () => router.push('/companies')
-
-    /* ---- List panels (mode-aware) ---- */
-    const listPanels = computed(() => {
-      if (dashboardMode.value === 'manager') {
-        return [
-          {
-            key: 'risky',
-            title: 'Сделки с риском',
-            link: '/projects',
-            linkLabel: 'Все сделки',
-            items: riskyDeals.value,
-            emptyOk: true,
-            emptyIcon: 'fas fa-shield-halved',
-            emptyTitle: 'Критичных рисков нет',
-            emptyHint: 'Просроченные и срочные сделки появятся здесь',
-            onClick: (d) => router.push(`/projects/${d.id}`),
-            titleOf: (d) => d.title,
-            metaOf: (d) => [
-              { icon: 'fas fa-map-marker-alt', text: ' ' + (d.address || 'Без адреса') },
-              { icon: 'fas fa-list-check', text: ' ' + d.open_tasks + ' задач' },
-              { icon: 'fas fa-calendar-day', text: ' ' + formatDate(d.nearest_due_date) }
-            ],
-            chipClass: (d) => (d.risk_level === 'high' ? 'dash-chip--danger' : 'dash-chip--warn'),
-            chipText: (d) => (d.risk_level === 'high' ? 'Просрочка' : 'Скоро срок'),
-            valueOf: (d) => d.overdue_tasks + ' проср.'
-          },
-          {
-            key: 'overloaded',
-            title: 'Перегруженные исполнители',
-            link: '/tasks',
-            linkLabel: 'Все задачи',
-            items: overloadedUsers.value,
-            emptyOk: true,
-            emptyIcon: 'fas fa-user-check',
-            emptyTitle: 'Перегрузки не обнаружены',
-            emptyHint: 'Сюда попадут пользователи с очередью задач',
-            onClick: () => router.push('/tasks'),
-            titleOf: (u) => u.full_name,
-            metaOf: (u) => [
-              { icon: 'fas fa-briefcase', text: ' ' + u.open_tasks + ' активных' },
-              { icon: 'fas fa-triangle-exclamation', text: ' ' + u.overdue_tasks + ' просрочено' }
-            ],
-            chipClass: (u) => getRiskChipClass(u.risk_level),
-            chipText: (u) => getRiskText(u.risk_level),
-            valueOf: () => ''
-          },
-          {
-            key: 'contracts',
-            title: 'Договоры без подписи',
-            link: '/contracts',
-            linkLabel: 'Все договоры',
-            items: contractsOnApproval.value,
-            emptyOk: true,
-            emptyIcon: 'fas fa-file-signature',
-            emptyTitle: 'Подвисших договоров нет',
-            emptyHint: 'Договоры на согласовании появятся здесь',
-            onClick: (c) => router.push(`/contracts/${c.id}`),
-            titleOf: (c) => c.contract_number,
-            metaOf: (c) => [
-              { icon: 'far fa-calendar', text: ' ' + formatDate(c.contract_date) },
-              { icon: 'fas fa-folder-open', text: ' ' + (c.deal_title || 'Без сделки') }
-            ],
-            chipClass: (c) => (c.is_stalled ? 'dash-chip--danger' : 'dash-chip--warn'),
-            chipText: (c) => c.wait_days + ' дн.',
-            valueOf: (c) => formatCurrency(c.amount)
-          }
-        ]
+    // @Имя Фамилия  →  @[Имя Фамилия](id). Длинные имена — первыми,
+    // чтобы «@Иван» не перехватил «@Иван Петров».
+    const applyMentions = (text, mentions) => {
+      let out = text || ''
+      const sorted = [...(mentions || [])].sort((a, b) => b.name.length - a.name.length)
+      const seen = new Set()
+      for (const m of sorted) {
+        if (seen.has(m.name)) continue
+        seen.add(m.name)
+        const safe = m.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        out = out.replace(new RegExp(`@${safe}`, 'g'), `@[${m.name}](${m.id})`)
       }
-      return [
-        {
-          key: 'projects',
-          title: 'Активные проекты',
-          link: '/projects',
-          linkLabel: 'Все',
-          items: activeProjects.value,
-          emptyOk: false,
-          emptyIcon: 'fas fa-folder-open',
-          emptyTitle: 'Нет активных проектов',
-          emptyHint: 'Новые сделки появятся здесь автоматически',
-          onClick: (p) => router.push(`/projects/${p.id}`),
-          titleOf: (p) => p.title,
-          metaOf: (p) => [{ icon: 'fas fa-map-marker-alt', text: ' ' + getProjectAddress(p) }],
-          chipClass: (p) => getStatusClass(p.status),
-          chipText: (p) => getStatusText(p.status),
-          valueOf: (p) => formatCurrency(getProjectAmount(p))
-        },
-        {
-          key: 'tasks',
-          title: 'Срочные задачи',
-          link: '/tasks',
-          linkLabel: 'Все',
-          items: urgentTasks.value,
-          emptyOk: true,
-          emptyIcon: 'fas fa-check-circle',
-          emptyTitle: 'Нет срочных задач',
-          emptyHint: 'Срочные и просроченные задачи появятся здесь',
-          onClick: () => router.push('/tasks'),
-          marker: (t) => getUrgencyDotClass(t),
-          titleOf: (t) => t.title,
-          metaOf: (t) => [{ icon: 'fas fa-folder', text: ' ' + (t.project_name || 'Без проекта') }],
-          chipClass: (t) => (isOverdue(t.due_date) ? 'dash-chip--danger' : 'dash-chip--muted'),
-          chipText: (t) => formatDate(t.due_date),
-          valueOf: () => ''
-        }
-      ]
-    })
+      return out
+    }
 
-    const quickActions = computed(() => {
-      if (dashboardMode.value === 'manager') {
-        return [
-          { key: 'd', icon: 'fas fa-folder-open', label: 'Сделки', primary: true, onClick: goToProjects },
-          { key: 't', icon: 'fas fa-check-square', label: 'Задачи', onClick: goToTasks },
-          { key: 'c', icon: 'fas fa-file-signature', label: 'Договоры', onClick: goToContracts },
-          { key: 'co', icon: 'fas fa-user-plus', label: 'Контрагенты', onClick: goToCompanies }
-        ]
+    // Текст с маркерами  →  сегменты для рендера.
+    const parseSegments = (text) => {
+      const segs = []
+      let last = 0
+      const re = new RegExp(MENTION_RE)
+      let m
+      while ((m = re.exec(text || '')) !== null) {
+        if (m.index > last) segs.push({ type: 'text', text: text.slice(last, m.index) })
+        segs.push({ type: 'mention', name: m[1], id: m[2] })
+        last = m.index + m[0].length
       }
-      return [
-        { key: 'np', icon: 'fas fa-plus', label: 'Новый проект', primary: true, onClick: goToProjects },
-        { key: 'nt', icon: 'fas fa-check-square', label: 'Задача', onClick: goToTasks },
-        { key: 'nc', icon: 'fas fa-user-plus', label: 'Контрагент', onClick: goToCompanies },
-        { key: 'dc', icon: 'fas fa-file-signature', label: 'Договоры', onClick: goToContracts }
-      ]
-    })
+      if (last < (text || '').length) segs.push({ type: 'text', text: text.slice(last) })
+      return segs
+    }
 
-    /* ---- Charts ---- */
-    const activitySeries = computed(() => {
-      const today = new Date()
-      const labels = []
-      const values = []
-      for (let i = 13; i >= 0; i--) {
-        const date = new Date(today)
-        date.setDate(today.getDate() - i)
-        const key = date.toISOString().slice(0, 10)
-        const total = (activityData.value || [])
-          .filter((item) => (item.date || '').slice(0, 10) === key)
-          .reduce((sum, item) => sum + Number(item.count || 0), 0)
-        labels.push(String(date.getDate()))
-        values.push(total)
-      }
-      return { labels, values, total: values.reduce((a, b) => a + b, 0) }
-    })
-
-    const areaChartSeries = computed(() => [{ name: 'Активность', data: activitySeries.value.values }])
-
-    const areaChartOptions = computed(() => ({
-      chart: { type: 'area', toolbar: { show: false }, sparkline: { enabled: true }, fontFamily: 'inherit' },
-      colors: [chartTokens.value.primary],
-      stroke: { curve: 'smooth', width: 2 },
-      fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.35, opacityTo: 0.02, stops: [0, 100] } },
-      dataLabels: { enabled: false },
-      tooltip: {
-        theme: isDark.value ? 'dark' : 'light',
-        x: { show: false },
-        y: { formatter: (v) => `${v} событий` }
-      },
-      xaxis: { categories: activitySeries.value.labels }
-    }))
-
-    const donutChartSeries = computed(() => {
-      const s = dealStats.value
-      return [s.active, s.completed, s.on_hold, s.cancelled]
-    })
-
-    const statusDistribution = computed(() => {
-      const s = dealStats.value
-      const t = chartTokens.value
-      const items = [
-        { key: 'active', label: 'Активные', value: s.active, color: t.primary },
-        { key: 'completed', label: 'Завершённые', value: s.completed, color: t.success },
-        { key: 'on_hold', label: 'На паузе', value: s.on_hold, color: t.warning },
-        { key: 'cancelled', label: 'Отменённые', value: s.cancelled, color: t.subtle }
-      ]
-      const total = s.total || 0
-      return items.map((it) => ({ ...it, pct: total ? Math.round((it.value / total) * 100) : 0 }))
-    })
-
-    const donutChartOptions = computed(() => ({
-      chart: { type: 'donut', toolbar: { show: false }, fontFamily: 'inherit', background: 'transparent' },
-      labels: ['Активные', 'Завершённые', 'На паузе', 'Отменённые'],
-      colors: [chartTokens.value.primary, chartTokens.value.success, chartTokens.value.warning, chartTokens.value.subtle],
-      legend: { show: false },
-      dataLabels: { enabled: false },
-      stroke: { width: 0 },
-      tooltip: { theme: isDark.value ? 'dark' : 'light' },
-      plotOptions: {
-        pie: {
-          donut: {
-            size: '70%',
-            labels: {
-              show: true,
-              name: { show: true, offsetY: -8, color: chartTokens.value.muted, fontSize: '12px' },
-              value: { show: true, offsetY: 12, fontSize: '22px', fontWeight: 700, color: chartTokens.value.strong },
-              total: {
-                show: true,
-                showAlways: true,
-                label: 'Всего',
-                color: chartTokens.value.muted,
-                fontSize: '12px',
-                formatter: () => String(dealStats.value.total || 0)
-              }
-            }
-          }
-        }
-      }
-    }))
-
-    const loadData = async () => {
-      loading.value = true
-      activityLoading.value = true
+    const onImagesPicked = async (e) => {
+      const files = [...(e.target?.files || [])]
+      if (e.target) e.target.value = ''
+      await uploadFiles(files, draft.images)
+    }
+    // Универсальный uploader. Если в target передан массив draft'а
+    // (`draft.images` или `editDraft.attachments`), результат пушится туда.
+    const uploadFiles = async (files, target) => {
+      const list = [...(files || [])].filter((f) => f && f.type && f.type.startsWith('image/'))
+      if (!list.length) return
+      uploading.value = true
       try {
-        const requests = [
-          api.deals.list(),
-          api.tasks.list(),
-          api.home.summary(),
-          api.home.activity({ days: 30 })
-        ]
-        if (canUseManagerMode.value) {
-          requests.push(api.home.managerSummary())
+        for (const file of list) {
+          const fd = new FormData()
+          fd.append('file', file)
+          const res = await api.feed.uploadImage(fd)
+          if (res?.url) (target || draft.images).push({
+            url: res.url, name: res.name, kind: 'image',
+          })
         }
+      } catch (err) {
+        toastError(err?.response?.data?.detail || 'Не удалось загрузить картинку')
+      } finally {
+        uploading.value = false
+      }
+    }
 
-        const responses = await Promise.all(requests)
-        const [projectData, taskResponse, summaryData, activityData_, managerData] = responses
-
-        projects.value = projectData || []
-        tasks.value = taskResponse?.data || []
-        summary.value = summaryData || summary.value
-        activityData.value = activityData_ || []
-        managerSummary.value = canUseManagerMode.value
-          ? (managerData || managerSummary.value)
-          : managerSummary.value
-      } catch (error) {
-        console.error('Error loading dashboard data:', error)
-        projects.value = []
-        tasks.value = []
-        activityData.value = []
-        managerSummary.value = {
-          enabled: false,
-          active_deals: 0,
-          risky_deals_count: 0,
-          overdue_tasks: 0,
-          unsigned_contracts_count: 0,
-          stalled_contracts_count: 0,
-          overloaded_users_count: 0,
-          risky_deals: [],
-          overloaded_users: [],
-          contracts_on_approval: []
+    // Произвольные файлы (документы/архивы/CAD/медиа). target — тот же
+    // приёмник, что и у uploadFiles, чтобы переиспользовать из edit-формы.
+    const onFilesPicked = async (e) => {
+      const files = [...(e.target?.files || [])]
+      if (e.target) e.target.value = ''
+      await uploadAnyFiles(files, draft.files)
+    }
+    const uploadAnyFiles = async (files, target) => {
+      const list = [...(files || [])].filter(Boolean)
+      if (!list.length) return
+      uploadingFile.value = true
+      try {
+        for (const file of list) {
+          const fd = new FormData()
+          fd.append('file', file)
+          try {
+            const res = await api.feed.uploadFile(fd)
+            if (res?.url) (target || draft.files).push({
+              url: res.url, name: res.name, kind: 'file', size: res.size,
+            })
+          } catch (err) {
+            toastError(err?.response?.data?.detail || `Не удалось загрузить ${file.name}`)
+          }
         }
       } finally {
-        loading.value = false
-        activityLoading.value = false
+        uploadingFile.value = false
+      }
+    }
+    const onPaste = async (e) => {
+      const items = e.clipboardData?.items
+      if (!items) return
+      const images = []
+      for (const it of items) {
+        if (it.kind === 'file' && it.type && it.type.startsWith('image/')) {
+          const f = it.getAsFile()
+          if (f) images.push(f)
+        }
+      }
+      if (!images.length) return
+      e.preventDefault()
+      composerExpanded.value = true
+      await uploadFiles(images, draft.images)
+    }
+    const removeDraftImage = (i) => draft.images.splice(i, 1)
+    const removeDraftFile = (i) => draft.files.splice(i, 1)
+
+    // ---- Лента ----
+    const posts = ref([])
+    const loadingFeed = ref(false)
+    const menuOpenId = ref(null)
+    const reactionPickerId = ref(null)
+    const commentState = reactive({})
+
+    const resortPosts = () => {
+      posts.value.sort((a, b) => {
+        if (!!b.is_pinned !== !!a.is_pinned) return (b.is_pinned ? 1 : 0) - (a.is_pinned ? 1 : 0)
+        return String(b.created_at || '').localeCompare(String(a.created_at || ''))
+      })
+    }
+
+    const publish = async () => {
+      if (!canSubmit.value) return
+      publishing.value = true
+      try {
+        const body = applyMentions(draft.body.trim(), composerMentions.value)
+        // Картинки и файлы хранятся раздельно в драфте, но на бэк
+        // уходят склеенным массивом attachments; рендер на стороне
+        // фронта решает по att.kind, что показывать (галерея / чип).
+        const payload = {
+          body,
+          post_type: draft.is_news ? 'news' : 'post',
+          is_pinned: draft.is_pinned,
+          attachments: [...draft.images, ...draft.files],
+        }
+        if (draft.mode === 'poll') {
+          payload.poll = {
+            multi: draft.pollMulti,
+            anonymous: draft.pollAnon,
+            options: draft.pollOptions.map((o) => o.trim()).filter(Boolean),
+          }
+        }
+        const created = await api.feed.create(payload)
+        posts.value.unshift(created)
+        resortPosts()
+        resetComposer()
+        success('Опубликовано')
+      } catch (err) {
+        toastError(err?.response?.data?.detail || 'Не удалось опубликовать')
+      } finally {
+        publishing.value = false
       }
     }
 
-    let themeObserver = null
-    let media = null
-    const bumpTheme = () => { themeTick.value += 1 }
+    const loadFeed = async () => {
+      loadingFeed.value = true
+      try {
+        const data = await api.feed.list({ limit: 30 })
+        posts.value = Array.isArray(data) ? data : []
+        for (const p of posts.value) api.feed.markView(p.id).catch(() => {})
+      } catch (e) {
+        posts.value = []
+        toastError('Не удалось загрузить ленту')
+      } finally {
+        loadingFeed.value = false
+      }
+    }
+
+    const toggleMenu = (id) => {
+      menuOpenId.value = menuOpenId.value === id ? null : id
+    }
+    const closeMenu = () => { menuOpenId.value = null }
+
+    const toggleReactionPicker = (id) => {
+      reactionPickerId.value = reactionPickerId.value === id ? null : id
+    }
+
+    const toggleReaction = async (post, emoji) => {
+      reactionPickerId.value = null
+      try {
+        const res = await api.feed.react(post.id, emoji)
+        if (res?.reactions) post.reactions = res.reactions
+      } catch (e) {
+        toastError('Не удалось поставить реакцию')
+      }
+    }
+    const reactionsTotal = (post) =>
+      (post.reactions || []).reduce((s, r) => s + (r.count || 0), 0)
+
+    // ---- Опрос ----
+    const pollPct = (opt, poll) => {
+      const total = poll?.total_votes || 0
+      if (!total) return 0
+      return Math.round(((opt.votes || 0) / total) * 100)
+    }
+    const onVote = async (post, opt) => {
+      if (!post.poll) return
+      let selected
+      if (post.poll.multi) {
+        const cur = post.poll.options.filter((o) => o.voted).map((o) => o.id)
+        selected = cur.includes(opt.id)
+          ? cur.filter((x) => x !== opt.id)
+          : [...cur, opt.id]
+      } else {
+        selected = [opt.id]
+      }
+      try {
+        const res = await api.feed.vote(post.id, selected)
+        if (res) post.poll = res
+      } catch (e) {
+        toastError('Не удалось проголосовать')
+      }
+    }
+
+    // ---- Комментарии ----
+    const toggleComments = async (post) => {
+      const st = commentState[post.id]
+      if (st?.open) { st.open = false; return }
+      commentState[post.id] = { open: true, list: [], loading: true, draft: '', mentions: [] }
+      try {
+        const list = await api.feed.comments(post.id)
+        commentState[post.id].list = Array.isArray(list) ? list : []
+      } catch (e) {
+        commentState[post.id].list = []
+      } finally {
+        commentState[post.id].loading = false
+      }
+    }
+    const onCommentMention = (postId, m) => {
+      const st = commentState[postId]
+      if (st && m && m.id) (st.mentions = st.mentions || []).push(m)
+    }
+    const submitComment = async (post) => {
+      const st = commentState[post.id]
+      if (!st || !st.draft.trim()) return
+      const body = applyMentions(st.draft.trim(), st.mentions || [])
+      const rawDraft = st.draft
+      st.draft = ''
+      st.mentions = []
+      try {
+        const c = await api.feed.addComment(post.id, { body })
+        st.list.push(c)
+        post.comments_count = (post.comments_count || 0) + 1
+      } catch (e) {
+        toastError('Не удалось отправить комментарий')
+        st.draft = rawDraft
+      }
+    }
+    const onDeleteComment = async (post, comment) => {
+      if (!confirm('Удалить комментарий?')) return
+      try {
+        await api.feed.removeComment(comment.id)
+        const st = commentState[post.id]
+        if (st) st.list = st.list.filter((x) => x.id !== comment.id)
+        post.comments_count = Math.max(0, (post.comments_count || 0) - 1)
+      } catch (e) {
+        toastError('Не удалось удалить комментарий')
+      }
+    }
+
+    const togglePin = async (post) => {
+      closeMenu()
+      try {
+        const updated = await api.feed.patchPost(post.id, { is_pinned: !post.is_pinned })
+        Object.assign(post, updated)
+        resortPosts()
+      } catch (e) {
+        toastError('Не удалось изменить закрепление')
+      }
+    }
+
+    // ---- Inline edit поста ----------------------------------------
+    // Правится текст, упоминания и attachments (картинки + файлы).
+    // Опрос правкой по-прежнему не трогаем — бэкенд это явно
+    // запрещает (см. patch_post), чтобы не сбить уже отданные голоса.
+    const editingPostId = ref(null)
+    const savingEdit = ref(false)
+    const editImageInput = ref(null)
+    const editFileInput = ref(null)
+    const editDraft = reactive({ body: '', attachments: [] })
+    const editMentions = ref([])  // [{name, id}]
+
+    // Текст с маркерами `@[Имя](id)`  →  плоский текст с `@Имя`
+    // плюс список мемнтионов (для дальнейшего applyMentions при save).
+    const bodyToPlain = (text) => {
+      const mentions = []
+      const plain = String(text || '').replace(MENTION_RE, (_m, name, id) => {
+        mentions.push({ name, id })
+        return `@${name}`
+      })
+      return { plain, mentions }
+    }
+
+    const startEditPost = (post) => {
+      closeMenu()
+      const { plain, mentions } = bodyToPlain(post.body || '')
+      editDraft.body = plain
+      editMentions.value = mentions
+      // Копия attachments — чтобы можно было удалить/добавить, не
+      // ломая исходный пост до явного «Сохранить». У старых постов
+      // (до появления kind) считаем элемент картинкой.
+      editDraft.attachments = (post.attachments || []).map((a) => ({
+        url: a.url,
+        name: a.name,
+        kind: a.kind || 'image',
+        size: a.size,
+      }))
+      editingPostId.value = post.id
+    }
+
+    const cancelEditPost = () => {
+      editingPostId.value = null
+      editDraft.body = ''
+      editDraft.attachments = []
+      editMentions.value = []
+      savingEdit.value = false
+    }
+
+    const onEditMention = (m) => {
+      if (m && m.id) editMentions.value.push(m)
+    }
+
+    // Хендлеры для добавления вложений в режиме правки.
+    const onEditImagesPicked = async (e) => {
+      const files = [...(e.target?.files || [])]
+      if (e.target) e.target.value = ''
+      await uploadFiles(files, editDraft.attachments)
+    }
+    const onEditFilesPicked = async (e) => {
+      const files = [...(e.target?.files || [])]
+      if (e.target) e.target.value = ''
+      await uploadAnyFiles(files, editDraft.attachments)
+    }
+    const removeEditAttachment = (i) => editDraft.attachments.splice(i, 1)
+
+    const saveEditPost = async (post) => {
+      const trimmed = (editDraft.body || '').trim()
+      // Разрешаем пустой текст только если есть хотя бы одно вложение —
+      // как и при публикации.
+      if (!trimmed && !editDraft.attachments.length) {
+        toastError('Текст или вложения должны быть')
+        return
+      }
+      savingEdit.value = true
+      try {
+        const body = applyMentions(trimmed, editMentions.value)
+        const updated = await api.feed.patchPost(post.id, {
+          body,
+          attachments: editDraft.attachments,
+        })
+        Object.assign(post, updated)
+        cancelEditPost()
+        success('Изменения сохранены')
+      } catch (err) {
+        toastError(err?.response?.data?.detail || 'Не удалось сохранить')
+      } finally {
+        savingEdit.value = false
+      }
+    }
+
+    // Был ли пост отредактирован: бэк отдаёт updated_at только после
+    // PATCH (server_onupdate). created_at заполнен всегда → updated_at,
+    // отличный от созданного, означает правку.
+    const isEdited = (post) => {
+      if (!post?.updated_at) return false
+      const a = String(post.created_at || '')
+      const b = String(post.updated_at || '')
+      return Boolean(a && b && a !== b)
+    }
+
+    const onDeletePost = async (post) => {
+      closeMenu()
+      if (!confirm('Удалить пост?')) return
+      try {
+        await api.feed.remove(post.id)
+        posts.value = posts.value.filter((p) => p.id !== post.id)
+        success('Пост удалён')
+      } catch (e) {
+        toastError('Не удалось удалить пост')
+      }
+    }
+    const scrollToPost = (id) => {
+      const el = document.querySelectorAll('.post')
+      const idx = posts.value.findIndex((p) => p.id === id)
+      if (idx >= 0 && el[idx]) el[idx].scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+
+    // ---- Виджеты ----
+    const taskCounts = reactive({ doing: 0, helping: 0, assigned: 0, watching: 0 })
+    const summary = reactive({ active_deals: 0, overdue_tasks: 0, new_documents_7d: 0 })
+    const kpiVisible = ref(false)
+    const popular = ref([])
+    const birthdays = ref([])
+    const absentToday = ref([])
+    const allUsers = ref([])
+
+    const loadWidgets = () => {
+      api.home.myTaskCounts().then((d) => { if (d) Object.assign(taskCounts, d) }).catch(() => {})
+      api.home.summary().then((d) => {
+        if (d) { Object.assign(summary, d); kpiVisible.value = true }
+      }).catch(() => {})
+      api.feed.popular({ days: 30, limit: 5 }).then((d) => {
+        popular.value = Array.isArray(d) ? d : []
+      }).catch(() => {})
+      api.profiles.birthdays(365).then((d) => {
+        birthdays.value = (Array.isArray(d) ? d : []).slice(0, 4)
+      }).catch(() => {})
+      api.absences.list({}).then((d) => {
+        const today = new Date(); today.setHours(0, 0, 0, 0)
+        const ms = today.getTime()
+        absentToday.value = (Array.isArray(d) ? d : []).filter((a) => {
+          const from = new Date(a.date_from); from.setHours(0, 0, 0, 0)
+          const to = new Date(a.date_to); to.setHours(23, 59, 59, 999)
+          return from.getTime() <= ms && ms <= to.getTime()
+        })
+      }).catch(() => {})
+      // Список сотрудников для @-упоминаний.
+      api.users.list({ limit: 500 }).then((d) => {
+        const list = d?.items || d || []
+        allUsers.value = list.filter(Boolean).map((u) => ({
+          id: u.id, full_name: u.full_name, email: u.email, avatar_url: u.avatar_url,
+        }))
+      }).catch(() => {})
+    }
+
+    // ---- Хелперы ----
+    // Бэкенд отдаёт created_at как naive ISO без таймзоны (сервер в МСК и
+    // пишет `datetime.now()`). parseServerDate из useServerClock трактует
+    // naive-строку как +03:00 — это синхронизирует отображение для всех
+    // браузеров вне МСК. Форматирование тоже принудительно через
+    // Europe/Moscow в utils/format.js.
+    const parseBackendDate = (value) => parseServerDate(value)
+    const formatWhen = (iso) => {
+      if (!iso) return ''
+      const d = parseBackendDate(iso)
+      if (!d || !Number.isFinite(d.getTime())) return ''
+      const now = new Date()
+      const sameDay = d.toDateString() === now.toDateString()
+      const yest = new Date(now); yest.setDate(yest.getDate() - 1)
+      const isYest = d.toDateString() === yest.toDateString()
+      const time = fmtTime(d)
+      if (sameDay) return `сегодня в ${time}`
+      if (isYest) return `вчера в ${time}`
+      return fmtDate(d, { day: '2-digit', month: 'long' }) + ` в ${time}`
+    }
+    const formatShortDate = (iso) => {
+      if (!iso) return ''
+      const d = parseBackendDate(iso)
+      return d && Number.isFinite(d.getTime())
+        ? fmtDate(d, { day: '2-digit', month: '2-digit' })
+        : ''
+    }
+    const shortText = (t) => {
+      const s = String(t || '').trim().replace(MENTION_RE, '@$1').replace(/\s+/g, ' ')
+      return s.length > 80 ? s.slice(0, 80) + '…' : (s || '(опрос)')
+    }
+    const pluralDays = (n) => {
+      const lastTwo = n % 100, last = n % 10
+      if (lastTwo >= 11 && lastTwo <= 14) return 'дней'
+      if (last === 1) return 'день'
+      if (last >= 2 && last <= 4) return 'дня'
+      return 'дней'
+    }
+    const pluralVotes = (n) => {
+      const lastTwo = n % 100, last = n % 10
+      if (lastTwo >= 11 && lastTwo <= 14) return 'голосов'
+      if (last === 1) return 'голос'
+      if (last >= 2 && last <= 4) return 'голоса'
+      return 'голосов'
+    }
+    const absenceLabel = (t) => ABSENCE_LABEL[t] || ABSENCE_LABEL.other
+
+    // Иконка по расширению файла — для рендера чипов-вложений в посте.
+    const fileIcon = (name) => {
+      const ext = String(name || '').toLowerCase().split('.').pop()
+      if (['pdf'].includes(ext)) return 'fas fa-file-pdf'
+      if (['doc', 'docx', 'rtf', 'odt'].includes(ext)) return 'fas fa-file-word'
+      if (['xls', 'xlsx', 'csv', 'ods', 'tsv'].includes(ext)) return 'fas fa-file-excel'
+      if (['ppt', 'pptx', 'odp', 'key'].includes(ext)) return 'fas fa-file-powerpoint'
+      if (['zip', 'rar', '7z', 'tar', 'gz', 'tgz'].includes(ext)) return 'fas fa-file-archive'
+      if (['mp3', 'wav', 'ogg', 'm4a'].includes(ext)) return 'fas fa-file-audio'
+      if (['mp4', 'webm', 'mov', 'avi', 'mkv'].includes(ext)) return 'fas fa-file-video'
+      if (['dwg', 'dxf', 'step', 'stp', 'iges', 'igs'].includes(ext)) return 'fas fa-drafting-compass'
+      if (['txt', 'md'].includes(ext)) return 'fas fa-file-alt'
+      return 'fas fa-file'
+    }
+    const formatBytes = (n) => {
+      const x = Number(n) || 0
+      if (x < 1024) return x + ' Б'
+      if (x < 1024 * 1024) return (x / 1024).toFixed(1) + ' КБ'
+      return (x / (1024 * 1024)).toFixed(1) + ' МБ'
+    }
+    // Хелперы для рендера сегрегации картинок и файлов внутри одного поста.
+    const postImages = (post) =>
+      (post.attachments || []).filter((a) => (a.kind || 'image') !== 'file')
+    const postFiles = (post) =>
+      (post.attachments || []).filter((a) => a.kind === 'file')
+
+    const onDocClick = (e) => {
+      if (!e.target.closest('.post__menu')) closeMenu()
+      if (!e.target.closest('.post__react-add-wrap')) reactionPickerId.value = null
+    }
 
     onMounted(() => {
-      if (canUseManagerMode.value) {
-        dashboardMode.value = 'manager'
-      }
-      loadData()
-      if (typeof window !== 'undefined') {
-        themeObserver = new MutationObserver(bumpTheme)
-        themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
-        media = window.matchMedia('(prefers-color-scheme: dark)')
-        media.addEventListener?.('change', bumpTheme)
-      }
+      loadFeed()
+      loadWidgets()
+      document.addEventListener('click', onDocClick)
     })
-
     onBeforeUnmount(() => {
-      themeObserver?.disconnect()
-      media?.removeEventListener?.('change', bumpTheme)
+      document.removeEventListener('click', onDocClick)
     })
 
     return {
-      loading,
-      activityLoading,
-      dashboardMode,
-      canUseManagerMode,
-      headerTitle,
-      currentStatCards,
-      dealStats,
-      taskStats,
-      taskBars,
-      statusDistribution,
-      activitySeries,
-      areaChartSeries,
-      areaChartOptions,
-      donutChartSeries,
-      donutChartOptions,
-      listPanels,
-      quickActions,
-      formatCurrency,
-      formatMoneyCompact,
-      formatDate,
-      reload: loadData,
-      // dashboard customization
-      dashSettingsOpen,
-      dashboardBlocks,
-      isDashboardBlockVisible,
-      toggleDashboardBlock,
-      sideModel,
+      me, firstName, currentYear, canPost, EMOJI_SET,
+      composerExpanded, publishing, uploading, uploadingFile, imageInput, fileInput,
+      draft, canSubmit,
+      resetComposer, onImagesPicked, onFilesPicked, onPaste,
+      removeDraftImage, removeDraftFile, publish,
+      onComposerMention, parseSegments,
+      posts, loadingFeed, menuOpenId, reactionPickerId, commentState,
+      toggleMenu, toggleReactionPicker, toggleReaction, reactionsTotal,
+      pollPct, onVote,
+      toggleComments, onCommentMention, submitComment, onDeleteComment,
+      togglePin, onDeletePost, scrollToPost,
+      editingPostId, savingEdit, editImageInput, editFileInput, editDraft, editMentions,
+      startEditPost, cancelEditPost, saveEditPost, onEditMention, isEdited,
+      onEditImagesPicked, onEditFilesPicked, removeEditAttachment,
+      fileIcon, formatBytes, postImages, postFiles,
+      taskCounts, summary, kpiVisible, popular, birthdays, absentToday, allUsers,
+      formatWhen, formatShortDate, shortText, pluralDays, pluralVotes, absenceLabel,
     }
-  }
+  },
 }
 </script>
 
 <style scoped>
-/* ============================================================
-   Dashboard — tuned to the Tasks module visual language:
-   flat surface sheets, hairline borders, tinted header bands,
-   compact controls. Direction: max info density, min chrome.
-   ============================================================ */
-.dash {
-  --apr-card-bg: rgba(255, 255, 255, 0.97);
-  --apr-card-border: rgba(216, 224, 240, 0.92);
-  --apr-card-shadow: 0 18px 42px rgba(15, 23, 42, 0.06);
-  --apr-radius: 20px;
-  --apr-ink: #0a1629;
-  --apr-muted: #7d8592;
-  --apr-soft: #f6f8fb;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  width: 100%;
-  padding: 12px;
-}
-
-/* ---- Topbar ---- */
-.dash-topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-}
-
-.dash-topbar__meta {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.dash-topbar__eyebrow {
-  font-size: 0.68rem;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--apr-muted);
-}
-
-.dash-topbar__title {
-  margin: 0;
-  font-size: 1.15rem;
-  font-weight: 800;
-  color: var(--apr-ink);
-}
-
-.dash-topbar__tools {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.dash-seg {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  height: 34px;
-  padding: 3px;
-  border: 1px solid rgba(228, 228, 228, 0.95);
-  border-radius: 12px;
-  background: #f3f5f8;
-}
-
-.dash-seg__btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  height: 100%;
-  padding: 0 14px;
-  border: 0;
-  border-radius: 9px;
-  background: transparent;
-  color: var(--apr-muted);
-  font: inherit;
-  font-size: var(--text-sm);
-  font-weight: 700;
-  cursor: pointer;
-  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
-}
-
-.dash-seg__btn:hover {
-  color: var(--apr-ink);
-}
-
-.dash-seg__btn--active {
-  background: #fff;
-  color: var(--apr-ink);
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
-}
-
-.dash-seg__btn:focus-visible {
-  outline: none;
-  box-shadow: var(--shadow-focus);
-}
-
-.dash-refresh {
+.feed-page {
   display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 12px;
-  border: 1px solid var(--apr-card-border);
-  background: var(--apr-card-bg);
-  color: var(--apr-muted);
-  cursor: pointer;
-  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
-}
-
-.dash-refresh:hover {
-  background: var(--apr-soft);
-  color: var(--apr-ink);
-}
-
-.dash-refresh:focus-visible {
-  outline: none;
-  box-shadow: var(--shadow-focus);
-}
-
-.dash-refresh--spin {
-  animation: dash-spin 0.9s linear infinite;
-}
-
-@keyframes dash-spin {
-  to { transform: rotate(360deg); }
-}
-
-/* ---- Dashboard customization ---- */
-.dash-cfg {
-  position: relative;
-  display: inline-flex;
-}
-
-.dash-refresh--active {
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  border-color: color-mix(in srgb, var(--color-primary) 32%, transparent);
-}
-
-.dash-cfg__pop {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 60;
-  width: 240px;
-  padding: 8px;
-  border-radius: 12px;
-  background: var(--apr-card-bg);
-  border: 1px solid var(--apr-card-border);
-  box-shadow: var(--shadow-lg);
-}
-
-.dash-cfg__head {
-  padding: 4px 8px 6px;
-  font-size: 0.72rem;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--apr-muted);
-}
-
-.dash-cfg__item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border-radius: 8px;
-  font-size: 0.82rem;
-  color: var(--apr-ink);
-  cursor: pointer;
-}
-
-.dash-cfg__item:hover {
-  background: var(--apr-soft);
-}
-
-.dash-cfg__item input {
-  cursor: pointer;
-}
-
-.dash-cfg__hint {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  margin-top: 4px;
-  padding: 8px;
-  border-top: 1px solid var(--apr-card-border);
-  font-size: 0.72rem;
-  color: var(--apr-muted);
-}
-
-.dash-side-slot {
-  display: flex;
-  flex-direction: column;
-}
-
-.dash-drag {
-  cursor: grab;
-  color: var(--apr-muted);
-  margin-right: 2px;
-}
-
-.dash-drag:active {
-  cursor: grabbing;
-}
-
-.dash-pop-enter-active,
-.dash-pop-leave-active {
-  transition: opacity 0.15s ease, transform 0.15s ease;
-}
-
-.dash-pop-enter-from,
-.dash-pop-leave-to {
-  opacity: 0;
-  transform: translateY(-6px);
-}
-
-.sortable-ghost {
-  opacity: 0.4;
-}
-
-/* ---- Flat panel ---- */
-.dash-panel {
-  display: flex;
-  flex-direction: column;
-  background: var(--apr-card-bg);
-  border: 1px solid var(--apr-card-border);
-  border-radius: var(--apr-radius);
-  box-shadow: var(--apr-card-shadow);
-  overflow: hidden;
-}
-
-.dash-panel__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: 9px 14px;
-  background: var(--apr-soft);
-  border-bottom: 1px solid var(--apr-card-border);
-}
-
-.dash-panel__title {
-  margin: 0;
-  font-size: 0.82rem;
-  font-weight: 800;
-  color: var(--apr-ink);
-}
-
-.dash-panel__title--accent {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.dash-panel__title--accent i {
-  color: var(--color-warning);
-  font-size: var(--text-base);
-}
-
-.dash-panel__link {
-  font-size: 0.68rem;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--apr-muted);
-  text-decoration: none;
-  border-radius: var(--radius-sm);
-  transition: color var(--dur-fast) var(--ease-out);
-}
-
-.dash-panel__link:hover {
-  color: var(--color-primary);
-}
-
-.dash-panel__link:focus-visible {
-  outline: none;
-  box-shadow: var(--shadow-focus);
-}
-
-.dash-skel {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-3) 14px;
-}
-
-/* ---- Hero ---- */
-.dash-hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: var(--space-4);
-  padding: 16px;
-  background: var(--apr-card-bg);
-  border: 1px solid var(--apr-card-border);
-  border-radius: var(--apr-radius);
-  box-shadow: var(--apr-card-shadow);
-}
-
-.dash-hero__primary {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.dash-hero__label {
-  font-size: 0.68rem;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--apr-muted);
-}
-
-.dash-hero__value {
-  font-size: clamp(1.5rem, 2.4vw, 1.95rem);
-  font-weight: 800;
-  line-height: 1.15;
-  color: var(--apr-ink);
-}
-
-.dash-hero__sub {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-5);
-  margin-top: var(--space-3);
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--apr-card-border);
-}
-
-.dash-hero__stat {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.dash-hero__stat-value {
-  font-size: var(--text-md);
-  font-weight: 800;
-  color: var(--apr-ink);
-}
-
-.dash-hero__stat-label {
-  font-size: var(--text-xs);
-  color: var(--apr-muted);
-}
-
-.dash-hero__chart {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  border-radius: 12px;
-  background: var(--apr-soft);
-  border: 1px solid var(--apr-card-border);
-}
-
-.dash-hero__chart-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-}
-
-.dash-hero__chart-total {
-  font-size: var(--text-lg);
-  font-weight: var(--fw-bold);
-  color: var(--color-primary);
-}
-
-.dash-hero__spark {
-  min-height: 64px;
-}
-
-/* ---- KPI strip ---- */
-.dash-kpis {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: var(--space-2);
-}
-
-.dash-kpi {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: 10px 12px;
-  background: var(--apr-card-bg);
-  border: 1px solid var(--apr-card-border);
-  border-radius: 14px;
-  box-shadow: var(--apr-card-shadow);
-  transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
-}
-
-.dash-kpi:hover {
-  background: var(--apr-soft);
-}
-
-.dash-kpi--alert {
-  border-color: color-mix(in srgb, var(--color-danger) 38%, var(--color-border));
-}
-
-.dash-kpi__icon {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: var(--radius-sm);
-  font-size: var(--text-base);
-  flex-shrink: 0;
-}
-
-.dash-kpi__body {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-}
-
-.dash-kpi__value {
-  font-size: var(--text-xl);
-  font-weight: 800;
-  line-height: 1.1;
-  color: var(--apr-ink);
-}
-
-.dash-kpi__label {
-  font-size: var(--text-xs);
-  color: var(--apr-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.dash-kpi__badge {
-  position: absolute;
-  top: 7px;
-  right: 8px;
-  padding: 1px 7px;
-  border-radius: var(--radius-pill);
-  font-size: var(--text-xs);
-  font-weight: var(--fw-bold);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--color-danger);
-  background: var(--color-danger-soft);
-}
-
-/* ---- Main grid ---- */
-.dash-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.7fr) minmax(300px, 1fr);
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 24px;
+  max-width: 1480px;
+  margin: 0 auto;
+  padding: 24px;
   align-items: start;
 }
-
-.dash-col {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-width: 0;
+@media (min-width: 2000px) {
+  .feed-page { max-width: 1680px; }
+}
+@media (max-width: 1024px) {
+  .feed-page { grid-template-columns: 1fr; gap: 16px; padding: 16px; }
+  .feed-side { order: -1; }
 }
 
-/* ---- List rows ---- */
-.dash-list {
-  display: flex;
-  flex-direction: column;
+/* ===== Лента ===== */
+.feed-main { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+.feed-state {
+  padding: 40px;
+  text-align: center;
+  color: var(--color-text-muted, #64748b);
+  background: var(--color-surface, #fff);
+  border-radius: 14px;
+  border: 1px solid var(--color-border, #e2e8f0);
+}
+.feed-state--empty { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.feed-state--empty i { font-size: 2rem; color: var(--color-text-subtle, #94a3b8); }
+
+/* ===== Composer ===== */
+.composer {
+  background: var(--color-surface, #fff);
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: 14px;
+  padding: 14px 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.composer__modes { display: flex; gap: 6px; margin-bottom: 12px; }
+.composer__mode {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border-radius: 8px;
+  border: 1px solid var(--color-border, #e2e8f0);
+  background: var(--color-surface-2, #f8fafc);
+  font-size: 0.84rem; font-weight: 600; font-family: inherit;
+  color: var(--color-text-muted, #64748b); cursor: pointer;
+}
+.composer__mode.is-active {
+  background: var(--color-primary-soft, rgba(99,102,241,0.12));
+  color: var(--color-primary, #4338ca);
+  border-color: var(--color-primary, #6366f1);
+}
+.composer__top { display: flex; gap: 12px; align-items: flex-start; }
+/* Рамка вокруг ввода — по аналогии с .task-chat__composer-bar:
+   мягкий бордер, при фокусе подсвечивается primary-цветом и тенью.
+   Textarea внутри растёт по содержимому до :max-height="320" (см.
+   проп auto-grow у MentionInput), после чего включается внутренний
+   скролл — текст больше не «обрезается полем». */
+.composer__input {
+  flex: 1;
+  min-width: 0; /* чтобы flex-child не выпинал контейнер шире родителя */
+  background: var(--color-surface-2, #f8fafc);
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: 10px;
+  padding: 8px 12px;
+  transition: border-color var(--dur-fast, 0.15s) ease,
+              box-shadow var(--dur-fast, 0.15s) ease;
+}
+.composer__input:focus-within {
+  border-color: var(--color-primary, #6366f1);
+  box-shadow: var(--shadow-focus, 0 0 0 3px rgba(99, 102, 241, 0.18));
+}
+.composer__input :deep(.mention-input__field) {
+  font-size: 0.96rem;
+  /* min-height и max-height приходят inline-стилем из MentionInput
+     при auto-grow=true; здесь оставляем только базовый padding-фолбэк. */
+  padding: 2px 0;
 }
 
-.dash-row {
-  width: 100%;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--space-3);
-  padding: 8px 14px;
-  background: transparent;
-  border: 0;
-  border-top: 1px solid var(--apr-card-border);
-  text-align: left;
-  cursor: pointer;
-  transition: background var(--dur-fast) var(--ease-out);
+.composer__poll { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.composer__poll-opt { display: flex; align-items: center; gap: 8px; }
+.composer__poll-opt > i { color: var(--color-text-subtle, #94a3b8); }
+.composer__poll-input {
+  flex: 1;
+  padding: 7px 10px;
+  border: 1px solid var(--color-border-strong, rgba(0,0,0,0.12));
+  border-radius: 8px;
+  font-size: 0.9rem; font-family: inherit;
+  background: var(--color-surface-2, #f8fafc);
+  color: var(--color-text, #0f172a);
 }
-
-.dash-row:first-child {
-  border-top: 0;
+.composer__poll-x {
+  background: transparent; border: none; cursor: pointer;
+  color: var(--color-text-subtle, #94a3b8); padding: 4px;
 }
-
-.dash-row:has(.dash-row__dot) {
-  grid-template-columns: 8px minmax(0, 1fr) auto;
+.composer__poll-x:hover { color: var(--color-danger, #dc2626); }
+.composer__poll-add {
+  align-self: flex-start;
+  display: inline-flex; align-items: center; gap: 6px;
+  background: transparent; border: none; cursor: pointer;
+  color: var(--color-primary, #4338ca);
+  font-size: 0.84rem; font-weight: 600; font-family: inherit;
+  padding: 2px 0;
 }
+.composer__poll-opts { display: flex; gap: 16px; margin-top: 2px; }
 
-.dash-row:hover {
-  background: var(--apr-soft);
+/* Список «скрепок»-файлов в композере (и в edit-форме). */
+.composer__files { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.composer__file-chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 10px; border-radius: 8px;
+  background: var(--color-surface-2, #f8fafc);
+  border: 1px solid var(--color-border, #e2e8f0);
+  font-size: 0.85rem; color: var(--color-text, #0f172a);
+  max-width: 100%;
 }
-
-.dash-row:focus-visible {
-  outline: none;
-  box-shadow: var(--shadow-focus);
+.composer__file-chip > i:first-child {
+  color: var(--color-primary, #4338ca); font-size: 0.95rem; flex-shrink: 0;
 }
-
-.dash-row__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: var(--radius-pill);
+.composer__file-name {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-
-.dash-row__dot--danger { background: var(--color-danger); }
-.dash-row__dot--warn { background: var(--color-warning); }
-.dash-row__dot--muted { background: var(--color-border-strong); }
-
-.dash-row__main {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
+.composer__file-size {
+  color: var(--color-text-subtle, #94a3b8); font-size: 0.78rem; flex-shrink: 0;
 }
-
-.dash-row__title {
-  font-size: 0.9rem;
-  font-weight: 700;
-  color: var(--apr-ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.dash-row__meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-  font-size: var(--text-xs);
-  color: var(--color-text-subtle);
-}
-
-.dash-row__meta i {
-  margin-right: 4px;
-}
-
-.dash-row__aside {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  white-space: nowrap;
-}
-
-.dash-row__value {
-  font-size: var(--text-sm);
-  font-weight: 700;
-  color: var(--apr-muted);
-}
-
-/* ---- Chips ---- */
-.dash-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 8px;
-  border-radius: var(--radius-pill);
-  font-size: var(--text-xs);
-  font-weight: var(--fw-semibold);
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-}
-
-.dash-chip--ok { color: var(--color-success); background: color-mix(in srgb, var(--color-success) 15%, transparent); }
-.dash-chip--info { color: var(--color-primary); background: var(--color-primary-soft); }
-.dash-chip--warn { color: var(--color-warning); background: color-mix(in srgb, var(--color-warning) 16%, transparent); }
-.dash-chip--danger { color: var(--color-danger); background: var(--color-danger-soft); }
-.dash-chip--muted { color: #5f6b7c; background: var(--apr-soft); }
-
-/* ---- Empty (compact) ---- */
-.dash-empty {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-4) 14px;
-}
-
-.dash-empty__icon {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: var(--radius-sm);
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  font-size: var(--text-base);
+.composer__file-x {
+  background: transparent; border: 0; cursor: pointer;
+  color: var(--color-text-subtle, #94a3b8); padding: 0 4px;
   flex-shrink: 0;
 }
+.composer__file-x:hover { color: var(--color-danger, #dc2626); }
 
-.dash-empty__icon--ok {
-  background: color-mix(in srgb, var(--color-success) 14%, transparent);
-  color: var(--color-success);
+.composer__images { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.composer__image {
+  position: relative; width: 96px; height: 96px;
+  border-radius: 8px; overflow: hidden;
+  border: 1px solid var(--color-border, #e2e8f0);
+}
+.composer__image img { width: 100%; height: 100%; object-fit: cover; }
+.composer__image-x {
+  position: absolute; top: 3px; right: 3px;
+  width: 20px; height: 20px; border: none; border-radius: 50%;
+  background: rgba(15,23,42,0.7); color: #fff;
+  cursor: pointer; font-size: 0.65rem;
+  display: flex; align-items: center; justify-content: center;
+}
+.composer__bar {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 10px; flex-wrap: wrap;
+  margin-top: 12px; padding-top: 12px;
+  border-top: 1px solid var(--color-border-subtle, rgba(0,0,0,0.06));
+}
+.composer__actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.composer__file { display: none; }
+.composer__act {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: transparent; border: none; cursor: pointer;
+  color: var(--color-text-muted, #64748b);
+  font-size: 0.86rem; font-weight: 600; font-family: inherit;
+}
+.composer__act:hover { color: var(--color-primary, #4338ca); }
+.composer__opt {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 0.82rem; color: var(--color-text-muted, #64748b); cursor: pointer;
+}
+.composer__submit { display: flex; gap: 8px; }
+
+/* ===== Пост ===== */
+.post {
+  background: var(--color-surface, #fff);
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: 14px;
+  padding: 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.post.is-pinned { border-color: rgba(99,102,241,0.4); }
+
+.post__head { display: flex; align-items: flex-start; gap: 12px; }
+.post__meta { flex: 1; min-width: 0; }
+.post__author { font-weight: 700; font-size: 0.95rem; color: var(--color-text, #0f172a); }
+.post__sub { font-size: 0.78rem; color: var(--color-text-muted, #64748b); display: flex; gap: 5px; flex-wrap: wrap; }
+.post__dot { opacity: 0.5; }
+.post__badges { display: flex; gap: 6px; align-items: center; }
+.post__badge {
+  font-size: 0.66rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.4px; padding: 3px 8px; border-radius: 999px;
+}
+.post__badge.is-news { background: var(--color-primary-soft, rgba(99,102,241,0.12)); color: var(--color-primary, #4338ca); }
+.post__badge.is-pin { background: rgba(234,179,8,0.18); color: #b45309; }
+.post__badge.is-poll { background: rgba(20,184,166,0.16); color: #0f766e; }
+
+.post__menu { position: relative; }
+.post__menu-btn {
+  background: transparent; border: none; cursor: pointer;
+  color: var(--color-text-muted, #64748b);
+  width: 28px; height: 28px; border-radius: 6px;
+}
+.post__menu-btn:hover { background: var(--color-surface-3, #f1f5f9); }
+.post__menu-pop {
+  position: absolute; right: 0; top: 32px;
+  background: var(--color-surface, #fff);
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(15,23,42,0.16);
+  z-index: 10; min-width: 160px; padding: 4px;
+}
+.post__menu-pop button {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 8px 10px; background: transparent; border: none;
+  cursor: pointer; font-size: 0.86rem; font-family: inherit;
+  color: var(--color-text, #0f172a); border-radius: 6px; text-align: left;
+}
+.post__menu-pop button:hover { background: var(--color-surface-2, #f8fafc); }
+.post__menu-pop button.is-danger { color: var(--color-danger, #dc2626); }
+
+.post__body {
+  margin: 12px 0;
+  font-size: 0.95rem; line-height: 1.55;
+  color: var(--color-text, #0f172a);
+  white-space: pre-wrap; overflow-wrap: anywhere;
+  max-width: 880px;
 }
 
-.dash-empty__text {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
+/* «изменено» — мягкая метка рядом с датой, как «edited» в чате задачи. */
+.post__edited {
+  color: var(--color-text-subtle, #94a3b8);
+  font-style: italic;
 }
 
-.dash-empty__title {
-  font-size: var(--text-sm);
-  font-weight: 700;
-  color: var(--apr-ink);
+/* Inline-редактор поста — стиль повторяет композер ленты. */
+.post__edit { margin: 12px 0; display: flex; flex-direction: column; gap: 10px; }
+.post__edit-actions {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+}
+.post__edit-add {
+  display: inline-flex; align-items: center; gap: 14px; flex-wrap: wrap;
+}
+.post__edit-hint {
+  font-size: 0.8rem;
+  color: var(--color-text-muted, #64748b);
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.post__edit-buttons { display: flex; gap: 8px; margin-left: auto; }
+
+/* Файлы поста (read-mode) — кликабельные строки-«скрепки». */
+.post__files {
+  display: flex; flex-direction: column; gap: 6px; margin-top: 10px;
+}
+.post__file {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 8px 12px; border-radius: 8px;
+  background: var(--color-surface-2, #f8fafc);
+  border: 1px solid var(--color-border, #e2e8f0);
+  text-decoration: none; color: var(--color-text, #0f172a);
+  font-size: 0.88rem;
+  transition: border-color var(--dur-fast, 0.15s) ease, background var(--dur-fast, 0.15s) ease;
+}
+.post__file:hover {
+  border-color: var(--color-primary, #6366f1);
+  background: var(--color-primary-soft, rgba(99,102,241,0.08));
+}
+.post__file > i:first-child {
+  color: var(--color-primary, #4338ca); font-size: 1.1rem; flex-shrink: 0;
+}
+.post__file-name {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.post__file-size {
+  color: var(--color-text-subtle, #94a3b8); font-size: 0.78rem; flex-shrink: 0;
+}
+.post__file-dl {
+  color: var(--color-text-subtle, #94a3b8); font-size: 0.82rem; flex-shrink: 0;
+}
+.post__mention {
+  color: var(--color-primary, #4338ca);
+  font-weight: 600;
+  background: var(--color-primary-soft, rgba(99,102,241,0.1));
+  border-radius: 4px;
+  padding: 0 3px;
 }
 
-.dash-empty__hint {
-  font-size: var(--text-xs);
-  color: var(--apr-muted);
-}
-
-/* ---- Portfolio donut ---- */
-.dash-portfolio {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-3) 14px;
-}
-
-.dash-portfolio__chart {
-  display: flex;
-  justify-content: center;
-}
-
-.dash-legend {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.dash-legend li {
-  display: grid;
-  grid-template-columns: 9px 1fr auto auto;
-  align-items: center;
-  gap: var(--space-3);
-  font-size: var(--text-sm);
-}
-
-.dash-legend__dot {
-  width: 9px;
-  height: 9px;
-  border-radius: var(--radius-pill);
-}
-
-.dash-legend__label { color: var(--apr-muted); font-weight: 600; }
-
-.dash-legend__value {
-  font-weight: 800;
-  color: var(--apr-ink);
-}
-
-.dash-legend__pct {
-  min-width: 36px;
-  text-align: right;
-  color: var(--apr-muted);
-}
-
-/* ---- Task bars ---- */
-.dash-bars {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-4) 14px;
-}
-
-.dash-bar__top {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 5px;
-  font-size: var(--text-xs);
-}
-
-.dash-bar__label { color: var(--apr-muted); font-weight: 600; }
-
-.dash-bar__value {
-  font-weight: 800;
-  color: var(--apr-ink);
-}
-
-.dash-bar__track {
-  height: 6px;
-  border-radius: var(--radius-pill);
-  background: var(--apr-soft);
+/* ===== Опрос в посте ===== */
+.poll { margin: 12px 0; display: flex; flex-direction: column; gap: 6px; max-width: 560px; }
+.poll__opt {
+  position: relative;
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: 10px;
   overflow: hidden;
-}
-
-.dash-bar__fill {
-  display: block;
-  height: 100%;
-  border-radius: var(--radius-pill);
-  transition: width var(--dur-slow) var(--ease-out);
-}
-
-.dash-bar__fill--ok { background: var(--color-success); }
-.dash-bar__fill--primary { background: var(--color-primary); }
-.dash-bar__fill--danger { background: var(--color-danger); }
-
-/* ---- Quick actions ---- */
-.dash-panel--actions { flex: 1; }
-
-.dash-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-2);
-  padding: var(--space-3) 14px;
-}
-
-.dash-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  height: 36px;
-  border-radius: 12px;
-  border: 1px solid var(--apr-card-border);
-  background: var(--apr-card-bg);
-  color: var(--apr-ink);
-  font: inherit;
-  font-size: var(--text-sm);
-  font-weight: 700;
   cursor: pointer;
-  transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  background: var(--color-surface-2, #f8fafc);
+  transition: border-color 0.1s;
+}
+.poll__opt:hover { border-color: var(--color-primary, #6366f1); }
+.poll__opt.is-voted { border-color: var(--color-primary, #6366f1); }
+.poll__bar {
+  position: absolute; inset: 0 auto 0 0;
+  background: var(--color-primary-soft, rgba(99,102,241,0.18));
+  transition: width 0.3s ease;
+}
+.poll__opt.is-voted .poll__bar { background: rgba(99,102,241,0.3); }
+.poll__opt-row {
+  position: relative;
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 12px;
+}
+.poll__check { color: var(--color-primary, #6366f1); }
+.poll__text { flex: 1; font-size: 0.9rem; color: var(--color-text, #0f172a); }
+.poll__voters { display: inline-flex; align-items: center; gap: 2px; }
+.poll__voters-more { font-size: 0.7rem; color: var(--color-text-muted, #64748b); margin-left: 2px; }
+.poll__pct {
+  font-size: 0.84rem; font-weight: 700;
+  color: var(--color-text, #0f172a);
+  font-variant-numeric: tabular-nums;
+  min-width: 38px; text-align: right;
+}
+.poll__foot { font-size: 0.76rem; color: var(--color-text-muted, #64748b); margin-top: 2px; }
+
+.post__images {
+  display: grid; gap: 6px; margin-bottom: 12px;
+  border-radius: 10px; overflow: hidden;
+}
+.post__images.count-1 { grid-template-columns: 1fr; }
+.post__images.count-2 { grid-template-columns: 1fr 1fr; }
+.post__images.count-3, .post__images.count-4 { grid-template-columns: 1fr 1fr; }
+.post__image { display: block; }
+.post__image img {
+  width: 100%; height: 100%; max-height: 420px;
+  object-fit: cover; display: block;
+}
+.post__images.count-1 .post__image img {
+  max-height: 520px; object-fit: contain;
+  background: var(--color-surface-2, #f8fafc);
 }
 
-.dash-action:hover {
-  background: var(--apr-soft);
+.post__footer {
+  display: flex; align-items: center; gap: 8px;
+  padding-top: 10px; flex-wrap: wrap;
+  border-top: 1px solid var(--color-border-subtle, rgba(0,0,0,0.06));
+}
+.post__reactions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.post__reaction {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: var(--color-surface-2, #f8fafc);
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 0.8rem; font-weight: 600; font-family: inherit;
+  color: var(--color-text, #0f172a); cursor: pointer;
+}
+.post__reaction.is-mine {
+  background: var(--color-primary-soft, rgba(99,102,241,0.14));
+  border-color: var(--color-primary, #6366f1);
+}
+.post__reaction-emoji { font-size: 0.95rem; }
+.post__react-add-wrap { position: relative; }
+.post__react-add {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 26px;
+  background: transparent;
+  border: 1px dashed var(--color-border-strong, rgba(0,0,0,0.18));
+  border-radius: 999px;
+  color: var(--color-text-muted, #64748b); cursor: pointer;
+}
+.post__react-add:hover { color: var(--color-primary, #4338ca); border-color: var(--color-primary, #6366f1); }
+.post__react-picker {
+  position: absolute; left: 0; bottom: calc(100% + 6px);
+  display: flex; gap: 2px;
+  background: var(--color-surface, #fff);
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: 999px;
+  padding: 4px 6px;
+  box-shadow: 0 8px 24px rgba(15,23,42,0.16);
+  z-index: 12;
+}
+.post__react-picker button {
+  background: transparent; border: none; cursor: pointer;
+  font-size: 1.2rem; padding: 2px 4px; border-radius: 6px;
+}
+.post__react-picker button:hover { background: var(--color-surface-2, #f8fafc); transform: scale(1.15); }
+
+.post__react {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: transparent; border: none; cursor: pointer;
+  padding: 6px 10px; border-radius: 8px;
+  color: var(--color-text-muted, #64748b);
+  font-size: 0.84rem; font-weight: 600; font-family: inherit;
+}
+.post__react:hover { background: var(--color-surface-2, #f8fafc); }
+.post__views {
+  margin-left: auto;
+  display: inline-flex; align-items: center; gap: 6px;
+  color: var(--color-text-subtle, #94a3b8); font-size: 0.82rem;
 }
 
-.dash-action:focus-visible {
-  outline: none;
-  box-shadow: var(--shadow-focus);
+/* ===== Комментарии ===== */
+.post__comments {
+  margin-top: 12px; padding-top: 12px;
+  border-top: 1px solid var(--color-border-subtle, rgba(0,0,0,0.06));
+  display: flex; flex-direction: column; gap: 10px;
+}
+.post__comments-loading { font-size: 0.84rem; color: var(--color-text-muted, #64748b); }
+.comment { display: flex; gap: 8px; }
+.comment__bubble {
+  flex: 1; min-width: 0;
+  background: var(--color-surface-2, #f8fafc);
+  border-radius: 10px; padding: 8px 12px;
+}
+.comment__head { display: flex; align-items: baseline; gap: 8px; }
+.comment__head strong { font-size: 0.84rem; color: var(--color-text, #0f172a); }
+.comment__when { font-size: 0.72rem; color: var(--color-text-subtle, #94a3b8); }
+.comment__del {
+  margin-left: auto; background: transparent; border: none; cursor: pointer;
+  color: var(--color-text-subtle, #94a3b8); font-size: 0.72rem;
+}
+.comment__del:hover { color: var(--color-danger, #dc2626); }
+.comment__text {
+  font-size: 0.88rem; color: var(--color-text, #0f172a);
+  line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere;
 }
 
-.dash-action--primary {
-  color: var(--color-primary);
-  background: var(--color-primary-soft);
-  border-color: color-mix(in srgb, var(--color-primary) 32%, transparent);
+.comment-form { display: flex; gap: 8px; align-items: center; }
+.comment-form__input {
+  flex: 1;
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: 999px;
+  padding: 8px 14px;
+  background: var(--color-surface-2, #f8fafc);
 }
-
-.dash-action--primary:hover {
-  background: color-mix(in srgb, var(--color-primary) 16%, transparent);
-  border-color: var(--color-primary);
+.comment-form__input :deep(.mention-input__field) { font-size: 0.88rem; }
+.comment-form__send {
+  width: 34px; height: 34px;
+  border: none; border-radius: 50%;
+  background: var(--color-primary, #6366f1); color: #fff;
+  cursor: pointer; flex-shrink: 0;
 }
+.comment-form__send:disabled { opacity: 0.4; cursor: not-allowed; }
 
-/* ---- Responsive ---- */
-@media (max-width: 1180px) {
-  .dash-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .dash-hero {
-    grid-template-columns: 1fr;
-  }
+/* ===== Сайдбар ===== */
+.feed-side { display: flex; flex-direction: column; gap: 14px; position: sticky; top: 12px; }
+.widget {
+  background: var(--color-surface, #fff);
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: 14px;
+  padding: 14px 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
 }
-
-@media (max-width: 720px) {
-  .dash-topbar__tools {
-    width: 100%;
-    justify-content: space-between;
-  }
-
-  .dash-seg {
-    flex: 1;
-  }
-
-  .dash-seg__btn {
-    flex: 1;
-    justify-content: center;
-  }
-
-  .dash-row {
-    grid-template-columns: 1fr;
-    gap: 4px;
-  }
-
-  .dash-row:has(.dash-row__dot) {
-    grid-template-columns: 1fr;
-  }
-
-  .dash-row__aside {
-    gap: var(--space-3);
-  }
+.widget__title { margin: 0 0 12px; font-size: 0.95rem; font-weight: 700; color: var(--color-text, #0f172a); }
+.widget__tasks { display: flex; flex-direction: column; gap: 4px; }
+.wtask {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 7px 10px; border-radius: 8px;
+  text-decoration: none; color: var(--color-text, #0f172a); font-size: 0.88rem;
 }
-
-@media (prefers-reduced-motion: reduce) {
-  .dash-kpi,
-  .dash-action,
-  .dash-row,
-  .dash-seg__btn,
-  .dash-bar__fill,
-  .dash-refresh {
-    transition: none;
-  }
-
-  .dash-refresh--spin {
-    animation: none;
-  }
+.wtask:hover { background: var(--color-surface-2, #f8fafc); }
+.wtask__count {
+  background: var(--color-primary-soft, rgba(99,102,241,0.12));
+  color: var(--color-primary, #4338ca);
+  font-weight: 700; font-size: 0.8rem;
+  padding: 1px 9px; border-radius: 999px;
+  min-width: 26px; text-align: center;
+}
+.widget__kpi { display: flex; flex-direction: column; gap: 6px; }
+.wkpi {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 6px 10px; border-radius: 8px;
+  text-decoration: none; color: var(--color-text, #0f172a);
+}
+.wkpi:hover { background: var(--color-surface-2, #f8fafc); }
+.wkpi__value { font-size: 1.2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.wkpi__label { font-size: 0.8rem; color: var(--color-text-muted, #64748b); }
+.wkpi.is-warn .wkpi__value { color: var(--color-danger, #dc2626); }
+.widget__popular { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.widget__popular li { cursor: pointer; }
+.widget__popular li:hover .wpop__text { color: var(--color-primary, #4338ca); }
+.wpop__text { font-size: 0.84rem; color: var(--color-text, #0f172a); line-height: 1.4; }
+.wpop__meta { font-size: 0.74rem; color: var(--color-text-subtle, #94a3b8); display: flex; gap: 10px; margin-top: 2px; }
+.wpop__meta i { margin-right: 3px; }
+.widget__people { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.widget__people li { display: flex; align-items: center; gap: 10px; }
+.wperson__meta { flex: 1; min-width: 0; }
+.wperson__name {
+  font-size: 0.86rem; font-weight: 600; color: var(--color-text, #0f172a);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.wperson__sub { font-size: 0.74rem; color: var(--color-text-muted, #64748b); }
+.wperson__today { color: var(--color-success, #16a34a); font-weight: 600; }
+.wperson__gift { color: #e11d48; }
+.wperson__abs { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.wperson__abs.is-vacation { background: #16a34a; }
+.wperson__abs.is-sick_leave { background: #dc2626; }
+.wperson__abs.is-business_trip { background: #6366f1; }
+.wperson__abs.is-other { background: #94a3b8; }
+.widget__more {
+  display: block; margin-top: 10px;
+  font-size: 0.8rem; color: var(--color-primary, #4338ca); text-decoration: none;
+}
+.widget__more:hover { text-decoration: underline; }
+.feed-side__foot {
+  font-size: 0.74rem; color: var(--color-text-subtle, #94a3b8);
+  text-align: center; padding: 4px;
 }
 </style>

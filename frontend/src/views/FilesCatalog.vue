@@ -284,7 +284,7 @@
     </div>
 
     <!-- Create folder modal -->
-    <div v-if="showCreateModal" class="modal-overlay" @click="closeCreateFolder">
+    <div v-if="showCreateModal" class="modal-overlay" v-modal-close="closeCreateFolder">
       <div class="modal-dialog" @click.stop>
         <div class="modal-header">
           <div class="modal-icon folder">
@@ -316,7 +316,7 @@
     </div>
 
     <!-- Rename modal -->
-    <div v-if="showRenameModal" class="modal-overlay" @click="closeRename">
+    <div v-if="showRenameModal" class="modal-overlay" v-modal-close="closeRename">
       <div class="modal-dialog" @click.stop>
         <div class="modal-header">
           <div class="modal-icon edit">
@@ -346,7 +346,7 @@
     </div>
 
     <!-- Move modal -->
-    <div v-if="showMoveModal" class="modal-overlay" @click="closeMove">
+    <div v-if="showMoveModal" class="modal-overlay" v-modal-close="closeMove">
       <div class="modal-dialog" @click.stop>
         <div class="modal-header">
           <div class="modal-icon move">

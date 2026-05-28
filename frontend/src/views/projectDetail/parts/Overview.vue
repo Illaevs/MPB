@@ -1,233 +1,374 @@
 <template>
-          <div
-             v-if="activeTab === 'overview'"
-             id="panel-overview"
-             class="overview-layout h-100"
-             role="tabpanel"
-             aria-labelledby="tab-overview"
-          >
-             <div class="overview-kpis d-grid grid-cols-3 gap-3">
-                <div class="glass-card kpi-card">
-                   <div class="kpi-card-head">
-                      <span class="kpi-card-label">Контракт</span>
-                      <i class="fas fa-file-signature text-primary"></i>
-                   </div>
-                   <div class="kpi-card-value text-primary">{{ formatCurrency(contractAmount) }}</div>
-                   <div class="kpi-progress">
-                      <div class="kpi-progress-fill kpi-progress-fill--primary" :style="{ width: `${paymentProgressPercent}%` }"></div>
-                   </div>
-                   <div class="small text-muted mt-1">Оплачено {{ paymentProgressPercent.toFixed(1) }}%</div>
-                </div>
+  <div
+    v-if="activeTab === 'overview'"
+    id="panel-overview"
+    class="project-overview-shell h-100"
+    role="tabpanel"
+    aria-labelledby="tab-overview"
+  >
+    <!--
+      1-в-1 с .lead-detail-body на вкладке Info лидов:
+        * внешний `.project-overview-shell` = единая «коробка» с одной
+          рамкой 12px вокруг обеих колонок;
+        * `.dashboard-grid` — 2 колонки без зазора, с вертикальным
+          разделителем между ними;
+        * каждая «секция» = обычный `.card` без своей рамки/тени
+          (стили снимаются `.project-overview-shell .card` ниже).
+    -->
+    <div class="dashboard-grid h-100">
+      <!-- LEFT: «Основная информация» -->
+      <div class="dashboard-left d-flex flex-column gap-3">
+        <div class="card p-4">
+          <h3 class="card-title mb-3">Основная информация</h3>
+          <div class="info-grid">
+            <div class="info-row info-row--editable" @click="beginInlineEdit('title')">
+              <span class="text-muted">Название</span>
+              <input
+                v-if="editingField === 'title'"
+                ref="inlineInputRef"
+                v-model="editDraft"
+                type="text"
+                class="info-edit-input"
+                :disabled="inlineSaving"
+                @click.stop
+                @keydown.enter.prevent="saveInlineEdit"
+                @keydown.esc.prevent="cancelInlineEdit"
+                @blur="saveInlineEdit"
+              />
+              <span v-else class="fw-500 text-right info-row__value">{{ project.title || '—' }}</span>
+            </div>
 
-                <div class="glass-card kpi-card">
-                   <div class="kpi-card-head">
-                      <span class="kpi-card-label">Оплачено</span>
-                      <i class="fas fa-check-circle text-success"></i>
-                   </div>
-                   <div class="kpi-card-value text-success">{{ formatCurrency(paidAmount) }}</div>
-                   <div class="small text-muted mt-1">Факт платежей</div>
-                </div>
+            <div class="info-row info-row--editable" @click="beginInlineEdit('obj_name')">
+              <span class="text-muted">Объект</span>
+              <input
+                v-if="editingField === 'obj_name'"
+                ref="inlineInputRef"
+                v-model="editDraft"
+                type="text"
+                class="info-edit-input"
+                :disabled="inlineSaving"
+                @click.stop
+                @keydown.enter.prevent="saveInlineEdit"
+                @keydown.esc.prevent="cancelInlineEdit"
+                @blur="saveInlineEdit"
+              />
+              <span v-else class="fw-500 text-right info-row__value">{{ project.obj_name || '—' }}</span>
+            </div>
 
-                <div class="glass-card kpi-card">
-                   <div class="kpi-card-head">
-                      <span class="kpi-card-label">Остаток</span>
-                      <i class="fas fa-hourglass-half" :class="remainingTextClass"></i>
-                   </div>
-                   <div class="kpi-card-value" :class="remainingTextClass">{{ formatCurrency(remainingAmount) }}</div>
-                   <div class="small text-muted mt-1">Неоплачено {{ remainingPercent.toFixed(1) }}%</div>
-                </div>
-             </div>
+            <div class="info-row info-row--editable" @click="beginInlineEdit('address')">
+              <span class="text-muted">Адрес</span>
+              <input
+                v-if="editingField === 'address'"
+                ref="inlineInputRef"
+                v-model="editDraft"
+                type="text"
+                class="info-edit-input"
+                :disabled="inlineSaving"
+                @click.stop
+                @keydown.enter.prevent="saveInlineEdit"
+                @keydown.esc.prevent="cancelInlineEdit"
+                @blur="saveInlineEdit"
+              />
+              <span v-else class="fw-500 text-right info-row__value">{{ project.address || '—' }}</span>
+            </div>
 
-             <div class="overview-main d-grid gap-3">
-                <div class="glass-card p-4">
-                   <h3 class="card-title mb-3">Основная информация</h3>
-                   <div class="info-grid">
-                      <div class="info-row">
-                         <span class="text-muted">Объект</span>
-                         <span class="fw-500 text-right">{{ project.obj_name || '-' }}</span>
-                      </div>
-                      <div class="info-row">
-                         <span class="text-muted">Адрес</span>
-                         <span class="fw-500 text-right">{{ project.address || '-' }}</span>
-                      </div>
-                      <div class="info-row">
-                         <span class="text-muted">Тип объекта</span>
-                         <span class="fw-500 text-right">{{ project.object_type || '-' }}</span>
-                      </div>
-                      <div class="info-row">
-                         <span class="text-muted">Площадь</span>
-                         <span class="fw-500 text-right">{{ project.object_area ? project.object_area + ' м²' : '-' }}</span>
-                      </div>
-                      <div class="info-row">
-                         <span class="text-muted">Заказчик</span>
-                         <span class="fw-500 text-right">{{ getCompanyName(project.customer?.name, project.customer_id) }}</span>
-                      </div>
-                      <div class="info-row">
-                         <span class="text-muted">Наша компания</span>
-                         <span class="fw-500 text-right">{{ getCompanyName(project.our_company?.name, project.our_company_id) }}</span>
-                      </div>
-                      <div class="separator my-2"></div>
-                      <div class="info-row">
-                         <span class="text-muted">ГИП</span>
-                         <span class="fw-500 text-right">{{ gipNames || '-' }}</span>
-                      </div>
-                      <div class="mt-2">
-                         <div class="d-flex justify-between align-center mb-2">
-                            <label class="text-muted small m-0">Привязанные ГИПы</label>
-                            <button class="btn btn-sm btn-outline-primary" @click="openGipDialog" :disabled="gipSaving">
-                               Добавить
-                            </button>
-                         </div>
-                         <div v-if="!gipUsers.length" class="text-muted small">Нет привязанных ГИПов</div>
-                         <div v-else class="d-flex flex-column gap-1">
-                            <div v-for="user in gipUsers" :key="user.id" class="d-flex justify-between align-center bg-light rounded px-2 py-1">
-                               <span class="small">{{ user.full_name || user.email }}</span>
-                               <button class="btn btn-sm btn-icon text-danger" @click="removeGip(user.id)">
-                                  <i class="fas fa-times"></i>
-                               </button>
-                            </div>
-                         </div>
-                         <div v-if="gipDirty" class="small text-warning mb-2">
-                            Есть несохраненные изменения
-                         </div>
-                         <div class="mt-2 d-flex gap-2">
-                            <button class="btn btn-sm btn-outline-primary" :disabled="gipSaving || !gipDirty" @click="saveDealGips">
-                               <i v-if="gipSaving" class="fas fa-spinner fa-spin"></i>
-                               <span v-else>Сохранить</span>
-                            </button>
-                            <button class="btn btn-sm btn-secondary" :disabled="gipSaving || !gipDirty" @click="resetDealGips">
-                               Отменить
-                            </button>
-                         </div>
-                      </div>
-                      <div class="separator my-2"></div>
-                      <div class="info-row">
-                         <span class="text-muted">Ставка НДС</span>
-                         <span class="fw-500 text-right">{{ project.vat_rate ?? 0 }}%</span>
-                      </div>
-                      <div class="mt-2">
-                         <label class="text-muted small">Изменить ставку НДС</label>
-                         <div class="d-flex gap-2 align-center">
-                            <select v-model.number="vatRate" class="form-control form-control-sm" style="max-width: 120px;">
-                               <option v-for="rate in vatRateOptions" :key="`project-vat-${rate}`" :value="rate">{{ rate }}%</option>
-                            </select>
-                            <button class="btn btn-sm btn-outline-primary" :disabled="!vatRateDirty || vatSaving" @click="saveVatRate">
-                               <i v-if="vatSaving" class="fas fa-spinner fa-spin"></i>
-                               <span v-else>Сохранить</span>
-                            </button>
-                         </div>
-                         <div v-if="vatRateDirty" class="small text-warning mt-1">
-                            Предпросмотр сметы с НДС {{ previewVatRate }}%
-                         </div>
-                      </div>
-                   </div>
-                </div>
+            <div class="info-row info-row--editable" @click="beginInlineEdit('object_type')">
+              <span class="text-muted">Тип объекта</span>
+              <select
+                v-if="editingField === 'object_type'"
+                ref="inlineInputRef"
+                v-model="editDraft"
+                class="info-edit-input"
+                :disabled="inlineSaving"
+                @click.stop
+                @change="saveInlineEdit"
+                @keydown.esc.prevent="cancelInlineEdit"
+                @blur="saveInlineEdit"
+              >
+                <option value="">— не указан —</option>
+                <option v-for="t in PROJECT_OBJECT_TYPES" :key="t" :value="t">{{ t }}</option>
+              </select>
+              <span v-else class="fw-500 text-right info-row__value">{{ project.object_type || '—' }}</span>
+            </div>
 
-                <div class="glass-card p-4">
-                   <div class="d-flex justify-between align-center mb-3">
-                      <h3 class="card-title m-0">Договоры</h3>
-                      <button
-                         class="btn btn-sm btn-primary"
-                         @click="showContractLinker = !showContractLinker"
-                         :disabled="contractLinking"
-                         title="Привязать договор"
-                      >
-                         <i class="fas fa-plus"></i>
-                      </button>
-                   </div>
-                   <div v-if="showContractLinker" class="contracts-linker-popover mb-3">
-                      <div class="contracts-link-controls">
-                         <input
-                            v-model.trim="contractSearch"
-                            type="text"
-                            class="form-control form-control-sm"
-                            placeholder="Поиск договора"
-                            :disabled="!canLinkContract || contractLinking"
-                         >
-                         <div class="d-flex gap-2 align-center">
-                            <select
-                               v-model="selectedContractId"
-                               class="form-control form-control-sm"
-                               style="width: 220px;"
-                               :disabled="!canLinkContract || contractLinking"
-                            >
-                               <option value="">{{ contractSelectPlaceholder }}</option>
-                               <option v-for="c in filteredProjectLinkableContracts" :key="c.id" :value="c.id">
-                               {{ c.contract_number }} ({{ formatDate(c.contract_date) }})
-                               </option>
-                            </select>
-                            <button
-                               class="btn btn-sm btn-primary"
-                               @click="linkContractToProject"
-                               :disabled="!selectedContractId || !canLinkContract || contractLinking"
-                               :title="contractLinkDisabledReason || 'Привязать договор'"
-                            >
-                               <i v-if="contractLinking" class="fas fa-spinner fa-spin"></i>
-                               <i v-else class="fas fa-link"></i>
-                            </button>
-                         </div>
-                         <div v-if="contractLinkDisabledReason" class="small text-muted mt-1">
-                            {{ contractLinkDisabledReason }}
-                         </div>
-                      </div>
-                   </div>
-                   
+            <div class="info-row info-row--editable" @click="beginInlineEdit('object_area')">
+              <span class="text-muted">Площадь</span>
+              <input
+                v-if="editingField === 'object_area'"
+                ref="inlineInputRef"
+                v-model="editDraft"
+                type="number"
+                min="0"
+                step="0.1"
+                class="info-edit-input"
+                :disabled="inlineSaving"
+                @click.stop
+                @keydown.enter.prevent="saveInlineEdit"
+                @keydown.esc.prevent="cancelInlineEdit"
+                @blur="saveInlineEdit"
+              />
+              <span v-else class="fw-500 text-right info-row__value">{{ project.object_area ? `${project.object_area} м²` : '—' }}</span>
+            </div>
 
-                   <div v-if="contractsLoading" class="my-3 d-flex flex-column gap-2">
-                      <SkeletonLoader height="40px" v-for="i in 3" :key="i" />
-                   </div>
-                   <div v-else-if="!contracts.length" class="text-center text-muted small py-4">Нет привязанных договоров</div>
-                   <div v-else class="table-container contracts-table-container">
-                      <table class="table">
-                         <thead>
-                            <tr>
-                               <th>Номер</th>
-                               <th>Дата</th>
-                               <th>Статус</th>
-                               <th class="text-right">Сумма</th>
-                               <th></th>
-                            </tr>
-                         </thead>
-                         <tbody>
-                            <tr v-for="c in contractsDisplay" :key="c.id" :class="c.contract_type === 'general_contractor' ? 'bg-primary-container' : ''">
-                               <td>
-                                  <div class="fw-500">{{ c.contract_number }}</div>
-                                  <small v-if="c.contract_type === 'general_contractor'" class="badge badge-sm badge-primary">Генподрядный</small>
-                               </td>
-                               <td>{{ formatDate(c.contract_date) }}</td>
-                               <td><span class="badge badge-sm" :class="getContractStatusClass(c.status)">{{ getContractStatusText(c.status) }}</span></td>
-                               <td class="text-right">{{ formatCurrency(c.amount) }}</td>
-                               <td class="text-right">
-                                  <button
-                                     class="btn btn-sm btn-icon text-danger"
-                                     @click="unlinkContractFromProject(c)"
-                                     :disabled="contractUnlinkingId === c.id"
-                                  >
-                                     <i v-if="contractUnlinkingId === c.id" class="fas fa-spinner fa-spin"></i>
-                                     <i v-else class="fas fa-unlink"></i>
-                                  </button>
-                                  <router-link class="btn btn-sm btn-icon" :to="`/contracts/${c.id}`">
-                                     <i class="fas fa-eye"></i>
-                                  </router-link>
-                               </td>
-                            </tr>
-                         </tbody>
-                      </table>
-                   </div>
-                </div>
-             </div>
+            <div class="separator my-2"></div>
+
+            <div class="info-row info-row--editable" @click="beginInlineEdit('customer_id')">
+              <span class="text-muted">Заказчик</span>
+              <!-- CompanySmartSelect — поиск по ИНН/названию, тот же UX, что у лидов. -->
+              <div
+                v-if="editingField === 'customer_id'"
+                class="info-edit-select"
+                @click.stop
+                @keydown.esc.prevent="cancelInlineEdit"
+              >
+                <CompanySmartSelect
+                  v-model="editDraft"
+                  :options="customerCompanies"
+                  placeholder="Не выбран"
+                  @update:modelValue="saveInlineEdit"
+                />
+                <button type="button" class="info-edit-cancel" title="Отмена" @click.stop="cancelInlineEdit">
+                  <i class="fas fa-times"></i>
+                </button>
+              </div>
+              <span v-else class="fw-500 text-right info-row__value">{{ getCompanyName(project.customer?.name, project.customer_id) }}</span>
+            </div>
+
+            <!--
+              Статус из «Основной информации» убран — он отображается и
+              переключается на верхней панели проекта (unified-header badge).
+            -->
+
+            <div class="info-row info-row--editable" @click="beginInlineEdit('total_contract_value')">
+              <span class="text-muted">Договорная стоимость</span>
+              <input
+                v-if="editingField === 'total_contract_value'"
+                ref="inlineInputRef"
+                v-model="editDraft"
+                type="number"
+                min="0"
+                step="0.01"
+                class="info-edit-input"
+                :disabled="inlineSaving"
+                @click.stop
+                @keydown.enter.prevent="saveInlineEdit"
+                @keydown.esc.prevent="cancelInlineEdit"
+                @blur="saveInlineEdit"
+              />
+              <span v-else class="fw-500 text-right info-row__value text-primary">{{ formatCurrency(contractAmount) }}</span>
+            </div>
+
+            <div class="separator my-2"></div>
+
+            <!--
+              ГИП — как «Ответственный» у лидов: одна info-row, при клике
+              открывается inline-select со списком юзеров (кандидаты ≠ уже
+              привязанные ГИПы), выбор моментально сохраняется на сервер
+              без отдельной кнопки «Добавить». Под строкой — список уже
+              привязанных ГИПов как чипы с аватарками; крестик на каждом
+              удаляет ГИПа (тоже сразу с сохранением).
+            -->
+            <div class="info-row info-row--editable" @click="beginGipInlineEdit">
+              <span class="text-muted">ГИП</span>
+              <select
+                v-if="editingField === '__gip_picker__'"
+                ref="inlineInputRef"
+                v-model="editDraft"
+                class="info-edit-input"
+                :disabled="gipSaving"
+                @click.stop
+                @change="onGipSelected"
+                @keydown.esc.prevent="cancelInlineEdit"
+                @blur="cancelInlineEdit"
+              >
+                <option value="">— добавить ГИПа —</option>
+                <option v-for="u in availableGipCandidates" :key="u.id" :value="u.id">
+                  {{ u.full_name || u.email || u.id }}
+                </option>
+              </select>
+              <span v-else class="fw-500 text-right info-row__value">
+                <span v-if="!gipUsers.length" class="text-muted">—</span>
+                <span v-else>{{ gipUsers.length }}</span>
+              </span>
+            </div>
+            <!-- Чипы привязанных ГИПов с аватарками + крестиком удаления. -->
+            <div v-if="gipUsers.length" class="project-gip-chips">
+              <span
+                v-for="user in gipUsers"
+                :key="user.id"
+                class="project-gip-chip"
+              >
+                <UiAvatar
+                  :src="user.avatar_url"
+                  :name="user.full_name || user.email || '?'"
+                  size="xs"
+                />
+                <span class="project-gip-chip__name">{{ user.full_name || user.email || '—' }}</span>
+                <button
+                  type="button"
+                  class="project-gip-chip__remove"
+                  title="Убрать"
+                  :disabled="gipSaving"
+                  @click.stop="removeGipInline(user.id)"
+                >
+                  <i class="fas fa-times"></i>
+                </button>
+              </span>
+            </div>
           </div>
+        </div>
+      </div>
 
+      <!-- RIGHT: Финансовый виджет + История событий (timeline) -->
+      <div class="dashboard-right card p-0 d-flex flex-column h-100 overflow-hidden">
+        <div v-if="hasSectionAccess('contracts')" class="project-money-bar px-4 pt-4 pb-3">
+          <div class="project-money-grid">
+            <div class="project-money-cell">
+              <div class="project-money-label">Всего</div>
+              <div class="project-money-value">{{ formatCurrency(contractAmount) }}</div>
+            </div>
+            <div class="project-money-cell">
+              <div class="project-money-label">Оплачено</div>
+              <div class="project-money-value text-success">{{ formatCurrency(paidAmount) }}</div>
+            </div>
+            <div class="project-money-cell">
+              <div class="project-money-label">Не оплачено</div>
+              <div class="project-money-value" :class="remainingTextClass">{{ formatCurrency(remainingAmount) }}</div>
+            </div>
+          </div>
+          <div class="project-money-progress" :title="`Оплачено ${paymentProgressPercent.toFixed(1)}%`">
+            <div
+              class="project-money-progress__fill"
+              :style="{ width: `${paymentProgressPercent}%` }"
+            ></div>
+          </div>
+        </div>
+
+        <div class="px-4 pt-2 pb-2">
+          <h3 class="card-title m-0">История событий</h3>
+        </div>
+        <div class="flex-grow-1 overflow-auto p-2">
+          <DealTimeline
+            v-if="project && project.id"
+            :deal-id="String(project.id)"
+            :users="allUsers"
+            :current-user-id="String(currentUserId || '')"
+            @deal-updated="onDealTimelineUpdated"
+          />
+        </div>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script>
-import SkeletonLoader from '../../../components/ui/SkeletonLoader.vue'
+/**
+ * Обзор сделки/проекта — 1-в-1 шаблон левой+правой колонки LeadDetail
+ * (вкладка «Информация»). Ключевая идея — единая «коробка»
+ * `.project-overview-shell` с одной общей рамкой 12px; обе колонки внутри
+ * используют общий класс `.card` без своих рамок/теней (стили снимаются
+ * в ProjectDetail.vue через `.project-overview-shell .card`).
+ *
+ * Слева: карточка «Основная информация» с inline-редактируемыми полями
+ * (title/obj_name/address/object_type/object_area/customer_id/status/
+ *  total_contract_value) + блок «Привязанные ГИПы» (встроен в info-grid
+ * без своих рамок).
+ *
+ * Справа: финансовый мини-виджет (3 цифры + плашка-прогресс) → заголовок
+ * «История событий» → DealTimeline (composer Комментарий/Задача/Файл +
+ * чип-фильтры + лента). Договоры вынесены в отдельную вкладку.
+ */
+import DealTimeline from '../../../components/projects/DealTimeline.vue'
+import CompanySmartSelect from '../../../components/ui/CompanySmartSelect.vue'
+import UiAvatar from '../../../components/ui/UiAvatar.vue'
+import { hasSectionAccess, getActiveUser } from '../../../utils/permissions'
+import { computed } from 'vue'
 export default {
   name: 'Overview',
-  components: { SkeletonLoader },
+  components: { DealTimeline, CompanySmartSelect, UiAvatar },
   props: { state: { type: Object, required: true } },
   setup(props) {
-    return { ...props.state }
+    const state = props.state
+    const currentUserId = computed(() => {
+      try { return getActiveUser()?.id || '' } catch (e) { return '' }
+    })
+    const onDealTimelineUpdated = () => {
+      // Когда из таймлайна создаётся задача — Tasks.vue подгрузит её
+      // при следующем заходе на свою вкладку.
+    }
+    // Sentinel field-id для inline-select "добавить ГИПа": переиспользуем
+    // ту же editingField/editDraft машину, что и для прочих info-row, но
+    // под уникальным маркером (чтоб не путаться с реальными полями Deal).
+    const beginGipInlineEdit = () => {
+      if (state.inlineSaving?.value || state.gipSaving?.value) return
+      state.editingField.value = '__gip_picker__'
+      state.editDraft.value = ''
+    }
+    const onGipSelected = async () => {
+      const userId = state.editDraft.value
+      // Закрываем picker сразу — async-сохранение само разрулит ошибку.
+      state.editingField.value = null
+      state.editDraft.value = null
+      if (userId) await state.addGipInline(userId)
+    }
+    return {
+      ...state,
+      hasSectionAccess,
+      currentUserId,
+      onDealTimelineUpdated,
+      beginGipInlineEdit,
+      onGipSelected,
+    }
   }
 }
 </script>
+
+<style scoped>
+/* Чипы привязанных ГИПов: компактный пилюлевидный ряд с аватаром,
+   именем и крестиком удаления. Сидит сразу под info-row "ГИП". */
+.project-gip-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+.project-gip-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px 3px 4px;
+  border: 1px solid var(--md-sys-color-outline-variant, rgba(15, 23, 42, 0.15));
+  border-radius: 999px;
+  background: var(--md-sys-color-surface, #fff);
+  font-size: 0.82rem;
+  line-height: 1.2;
+}
+.project-gip-chip__name {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-gip-chip__remove {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.68rem;
+  padding: 0;
+}
+.project-gip-chip__remove:hover {
+  background: rgba(198, 40, 40, 0.12);
+  color: #c62828;
+}
+.project-gip-chip__remove:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+</style>

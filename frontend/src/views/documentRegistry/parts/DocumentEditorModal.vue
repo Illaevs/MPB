@@ -1,5 +1,5 @@
 <template>
-  <div v-if="show" class="modal-overlay" @click="$emit('close')">
+  <div v-if="show" class="modal-overlay" v-modal-close="() => $emit('close')">
     <div class="modal-content" @click.stop style="max-width: 900px;">
       <div class="modal-header">
         <h3 class="m-0">{{ isEditing ? 'Редактирование документа' : 'Новый документ' }}</h3>
@@ -59,15 +59,6 @@
               :options="companies"
               placeholder="Найти контрагента"
             />
-          </div>
-          <div class="form-group">
-            <label class="small text-muted mb-1">Наша компания</label>
-            <select v-model="documentForm.our_company_id" class="form-control">
-              <option value="">Не выбрано</option>
-              <option v-for="company in ourCompanies" :key="company.id" :value="company.id">
-                {{ company.name }}
-              </option>
-            </select>
           </div>
         </div>
 
@@ -179,7 +170,6 @@ export default {
     relationForm: { type: Object, required: true },
     documentOptions: { type: Array, required: true },
     companies: { type: Array, required: true },
-    ourCompanies: { type: Array, required: true },
     deals: { type: Array, required: true },
     getDocumentTitle: { type: Function, required: true }
   },

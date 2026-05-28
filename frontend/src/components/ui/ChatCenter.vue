@@ -1,7 +1,7 @@
 <template>
   <teleport to="body">
     <transition name="cc-overlay">
-      <div v-if="visible" class="cc-overlay" @click.self="close">
+      <div v-if="visible" class="cc-overlay" v-modal-close="close">
         <transition name="cc-panel">
           <div v-if="visible" class="cc-panel">
             <div class="cc-header">
@@ -105,6 +105,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import * as messengerApi from '../../services/api/messenger'
 import { getActiveUser } from '../../utils/permissions'
+import { formatDateTime } from '../../utils/format'
 
 const LAST_SEEN_KEY_PREFIX = 'messenger_last_seen_'
 
@@ -299,7 +300,7 @@ function conversationPreview(conversation) {
 function formatConversationTime(value) {
   if (!value) return ''
   try {
-    return new Date(value).toLocaleString('ru-RU', {
+    return formatDateTime(value, {
       day: '2-digit',
       month: 'short',
       hour: '2-digit',

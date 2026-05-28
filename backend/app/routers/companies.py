@@ -347,6 +347,22 @@ async def create_company(
 ):
     """Создать новую компанию"""
     db_company = await Company.create(db, **company.dict())
+
+    # Event Bus v2: новая компания — 1С/Диадок синхронизируют справочник.
+    from app.services.event_outbox import emit_event_safe
+    await emit_event_safe(
+        db,
+        event_type="company.after_create",
+        entity_type="company",
+        entity_id=str(db_company.id),
+        payload={
+            "id": str(db_company.id),
+            "name": db_company.name,
+            "inn": getattr(db_company, "inn", None),
+            "kpp": getattr(db_company, "kpp", None),
+            "company_type": getattr(db_company, "company_type", None),
+        },
+    )
     return db_company
 
 
@@ -526,6 +542,22 @@ async def update_company(
     company = await Company.update(db, company_id, **company_update.dict(exclude_unset=True))
     if not company:
         raise HTTPException(status_code=404, detail="Компания не найдена")
+
+    # Event Bus v2: 1С/Диадок обновляют справочник контрагентов.
+    from app.services.event_outbox import emit_event_safe
+    await emit_event_safe(
+        db,
+        event_type="company.after_update",
+        entity_type="company",
+        entity_id=str(company.id),
+        payload={
+            "id": str(company.id),
+            "name": company.name,
+            "inn": getattr(company, "inn", None),
+            "kpp": getattr(company, "kpp", None),
+            "company_type": getattr(company, "company_type", None),
+        },
+    )
     return company
 
 @router.delete("/{company_id}")
@@ -535,9 +567,24 @@ async def delete_company(
     _=Depends(require_section_write("companies")),
 ):
     """Удалить компанию"""
+    # Сохраним инфу ДО удаления (после success запись недоступна).
+    pre = await Company.get_by_id(db, company_id)
     success = await Company.delete(db, company_id)
     if not success:
         raise HTTPException(status_code=404, detail="Компания не найдена")
+
+    from app.services.event_outbox import emit_event_safe
+    await emit_event_safe(
+        db,
+        event_type="company.after_delete",
+        entity_type="company",
+        entity_id=str(company_id),
+        payload={
+            "id": str(company_id),
+            "name": pre.name if pre else None,
+            "inn": getattr(pre, "inn", None) if pre else None,
+        },
+    )
     return {"message": "Компания удалена"}
 
 

@@ -360,12 +360,43 @@ async def update_tender(
     tender = result.scalar_one_or_none()
     if not tender:
         raise HTTPException(status_code=404, detail="Tender not found")
+    prev_status = tender.status
     data = payload.model_dump(exclude_unset=True)
     for field in ("status", "winner_company_id", "submission_deadline"):
         if field in data:
             setattr(tender, field, data[field])
     await db.commit()
     await db.refresh(tender)
+
+    # Event Bus v2: тендерные площадки (Госзакупки 44/223-ФЗ, B2B-Center,
+    # РТС, ЭТП-Газпром) подписываются на эти события для синхронизации
+    # статусов между нашим CRM и внешними системами.
+    from app.services.event_outbox import emit_event_safe
+    if prev_status != tender.status:
+        if tender.status == "published":
+            await emit_event_safe(
+                db,
+                event_type="tender.after_publish",
+                entity_type="tender",
+                entity_id=str(tender.id),
+                payload={
+                    "id": str(tender.id),
+                    "deal_product_id": str(tender.deal_product_id) if tender.deal_product_id else None,
+                    "submission_deadline": str(tender.submission_deadline) if tender.submission_deadline else None,
+                },
+            )
+        elif tender.status in {"closed", "completed", "cancelled"}:
+            await emit_event_safe(
+                db,
+                event_type="tender.after_close",
+                entity_type="tender",
+                entity_id=str(tender.id),
+                payload={
+                    "id": str(tender.id),
+                    "status": tender.status,
+                    "winner_company_id": str(tender.winner_company_id) if tender.winner_company_id else None,
+                },
+            )
     return TenderResponse.model_validate(tender)
 
 
@@ -499,10 +530,46 @@ async def select_winner(
         select(TenderOffer).where(TenderOffer.tender_id == tender_id)
     )
     offers = offers_result.scalars().all()
+    accepted_offer_id = None
+    rejected_offer_ids = []
     for item in offers:
-        item.status = "winner" if item.id == offer_id else "rejected"
+        if item.id == offer_id:
+            item.status = "winner"
+            accepted_offer_id = str(item.id)
+        else:
+            item.status = "rejected"
+            rejected_offer_ids.append(str(item.id))
 
     await db.commit()
+
+    # Event Bus v2: tender_offer.after_accept (победитель) + N×reject.
+    # Тендерные площадки слушают эти события для обновления статусов
+    # в Госзакупках / B2B-Center / РТС.
+    from app.services.event_outbox import emit_event_safe
+    if accepted_offer_id:
+        await emit_event_safe(
+            db,
+            event_type="tender_offer.after_accept",
+            entity_type="tender_offer",
+            entity_id=accepted_offer_id,
+            payload={
+                "id": accepted_offer_id,
+                "tender_id": str(tender_id),
+                "company_id": str(offer.company_id) if offer.company_id else None,
+                "proposed_amount": float(offer.proposed_amount or 0),
+            },
+        )
+    for rid in rejected_offer_ids:
+        await emit_event_safe(
+            db,
+            event_type="tender_offer.after_reject",
+            entity_type="tender_offer",
+            entity_id=rid,
+            payload={
+                "id": rid,
+                "tender_id": str(tender_id),
+            },
+        )
     return {"status": "ok"}
 
 

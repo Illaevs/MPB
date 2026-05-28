@@ -4,7 +4,7 @@
       <div
         v-if="modelValue"
         class="ui-drawer__overlay"
-        @click.self="onOverlayClick"
+        v-modal-close="onOverlayClick"
       >
         <aside
           class="ui-drawer"

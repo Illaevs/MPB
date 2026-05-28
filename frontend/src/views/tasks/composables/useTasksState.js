@@ -78,6 +78,12 @@ export function useTasksState() {
   const loading = ref(false)
   const saving = ref(false)
   const initialTaskOpened = ref(false)
+  // Map { taskId -> непрочитанные сообщения от других юзеров }. Заполняется
+  // bulk-эндпоинтом chat-unread-counts; отображается рядом со статус-точкой
+  // задачи в списке и канбане. Обнуляется по конкретной задаче при открытии
+  // её модалки (mark-read). 0 рендерится серым «нулевым» кружком, >0 —
+  // зелёный с числом.
+  const taskChatUnread = ref({})
   const showCreateModal = ref(false)
   const isEditing = ref(false)
   const activeUser = ref(getActiveUser())
@@ -114,6 +120,10 @@ export function useTasksState() {
   const taskAttachmentInput = ref(null)
   const taskPendingFiles = ref([])
   const taskAttachmentDragActive = ref(false)
+  // Pending checklist items для НОВОЙ задачи. До первого save'а задача
+  // не имеет id, поэтому API task-subtasks недоступен — копим items
+  // локально, batch-создаём после save (по аналогии с pending files).
+  const taskPendingChecklist = ref([])
 
   const taskChatVisible = computed(() => {
     if (!isEditing.value || !taskForm.value?.id) return false
@@ -384,6 +394,10 @@ export function useTasksState() {
         selectedTaskIds.value.forEach(id => { if (onPage.has(String(id))) next.add(id) })
         selectedTaskIds.value = next
       }
+      // Подтягиваем непрочитанные счётчики чата параллельно — индикаторы
+      // в строках/карточках появляются сразу после рендера списка.
+      // Эндпоинт быстрый и фильтрует bulk на бэке.
+      loadChatUnreadCounts()
     } catch (e) {
       console.error(e)
       tasks.value = []
@@ -826,6 +840,61 @@ export function useTasksState() {
     taskPendingFiles.value = []
     taskAttachmentDragActive.value = false
     if (taskAttachmentInput.value) taskAttachmentInput.value.value = ''
+    // Pending checklist всегда сбрасывается вместе с pending files —
+    // оба состояния «живут» только во время create-modal.
+    taskPendingChecklist.value = []
+  }
+  const appendPendingChecklistItem = (title) => {
+    const t = String(title || '').trim()
+    if (!t) return
+    taskPendingChecklist.value = [
+      ...taskPendingChecklist.value,
+      { tempId: Date.now() + Math.random(), title: t, is_done: false },
+    ]
+  }
+  const togglePendingChecklistItem = (tempId) => {
+    taskPendingChecklist.value = taskPendingChecklist.value.map(
+      it => it.tempId === tempId ? { ...it, is_done: !it.is_done } : it,
+    )
+  }
+  const removePendingChecklistItem = (tempId) => {
+    taskPendingChecklist.value = taskPendingChecklist.value.filter(it => it.tempId !== tempId)
+  }
+  // После save задачи — batched create subtasks. Возвращает кол-во
+  // успешно созданных. Если что-то упало — глотаем (это не блокирует
+  // сохранение самой задачи; user увидит созданную задачу без чек-листа
+  // и сможет дозагрузить вручную).
+  //
+  // Передаём все поля что юзер мог установить в local-only TaskSubtasks:
+  // title, assigned_to_user_id, due_date, due_time, is_urgent.
+  // is_done у новых пунктов отдельным PATCH'ом — у TaskSubtaskCreate
+  // схемы поля нет, но 99% пунктов в новой задаче не выполнены.
+  const flushPendingChecklist = async (taskId) => {
+    if (!taskId || !taskPendingChecklist.value.length) return 0
+    let ok = 0
+    for (const it of taskPendingChecklist.value) {
+      try {
+        const created = await apiTasks.createSubtask(taskId, {
+          title: it.title,
+          assigned_to_user_id: it.assigned_to_user_id || null,
+          due_date: it.due_date || null,
+          due_time: it.due_time || null,
+          is_urgent: !!it.is_urgent,
+        })
+        // is_done на create-схеме не поддерживается, но юзер мог отметить
+        // пункт «выполнено» прямо в форме создания — синхронизируем
+        // отдельным PATCH'ом (только если реально отмечен).
+        if (it.is_done && created?.id) {
+          try { await apiTasks.updateSubtask(created.id, { is_done: true }) }
+          catch (e2) { console.warn('updateSubtask is_done failed:', e2) }
+        }
+        ok += 1
+      } catch (e) {
+        console.warn('createSubtask failed for pending item:', e)
+      }
+    }
+    taskPendingChecklist.value = []
+    return ok
   }
   const appendTaskPendingFiles = (files) => {
     const incoming = Array.from(files || []).filter(file => file instanceof File)
@@ -1046,6 +1115,11 @@ export function useTasksState() {
           return
         }
       }
+      // Создаём pending checklist items для новой задачи. Не блокирует
+      // save — упавшие пункты просто не появятся, юзер увидит в UI.
+      if (savedTaskId && taskPendingChecklist.value.length) {
+        await flushPendingChecklist(savedTaskId)
+      }
 
       await loadTasks()
       closeModal(true)
@@ -1066,6 +1140,51 @@ export function useTasksState() {
     })
   }
 
+  // ===== Chat unread counters =====
+  const loadChatUnreadCounts = async () => {
+    try {
+      const data = await apiTasks.listChatUnreadCounts()
+      // API возвращает {task_id: count}; перезаписываем как новый объект,
+      // чтобы Vue гарантированно перерисовал индикаторы (а не пытался
+      // мутировать existing reactive map по ключам).
+      if (data && typeof data === 'object') {
+        taskChatUnread.value = { ...data }
+      } else {
+        taskChatUnread.value = {}
+      }
+    } catch (e) {
+      // Тихо — индикаторы просто не появятся; работа списка не ломается.
+      console.warn('[tasks] unread counts failed', e)
+    }
+  }
+
+  // Возвращает число непрочитанных сообщений по задаче (или 0).
+  const getTaskUnreadCount = (taskId) => {
+    if (!taskId) return 0
+    const v = taskChatUnread.value[String(taskId)]
+    return Number.isFinite(v) ? v : 0
+  }
+
+  // Помечает чат задачи как прочитанный: дёргает бэк и локально
+  // обнуляет счётчик (мгновенный UI feedback, не ждём round-trip).
+  const markTaskChatRead = async (taskId) => {
+    if (!taskId) return
+    const key = String(taskId)
+    // Оптимистично обнуляем — пользователь уже открыл модалку, бейдж
+    // в фоне должен исчезнуть сразу, даже если сеть тормозит.
+    if (taskChatUnread.value[key]) {
+      const next = { ...taskChatUnread.value }
+      delete next[key]
+      taskChatUnread.value = next
+    }
+    try {
+      await apiTasks.markChatRead(taskId)
+    } catch (e) {
+      // Откат на следующий поллинг — счётчик восстановится через loadChatUnreadCounts.
+      console.warn('[tasks] mark-read failed', e)
+    }
+  }
+
   const editTask = (task) => {
     taskApprovalState.value = { activeInstance: null, latestInstance: null, latestStatus: null, templateCount: 0 }
     taskForm.value = {
@@ -1081,6 +1200,9 @@ export function useTasksState() {
     taskValidation.value = { title: '', date: '' }
     autoDraftFired = true
     if (autoDraftTimer) { clearTimeout(autoDraftTimer); autoDraftTimer = null }
+    // Открытие модалки = «пользователь читает». Дёргаем mark-read и
+    // обнуляем бейдж. Не блокируем UI (await не нужен).
+    if (task?.id) markTaskChatRead(task.id)
   }
 
   const openCreateTaskModal = (presetStatus = null) => {
@@ -1767,6 +1889,8 @@ export function useTasksState() {
     // tasks
     tasks, sortedTasks, projects, users, companies, loading, saving, showCreateModal, isEditing,
     filters, taskForm, loadTasks, saveTask, editTask, deleteTask, closeModal, openCreateTaskModal,
+    // chat unread indicators
+    taskChatUnread, getTaskUnreadCount, loadChatUnreadCounts, markTaskChatRead,
     handleTaskApprovalState, refreshTasksAfterApproval,
     autoSaving, autoSavedAt, flushAutoSave,
     loadErrors, reloadTaskData,
@@ -1801,6 +1925,7 @@ export function useTasksState() {
     currentTaskProjectLabel, currentTaskCode, currentTaskAttachmentsCount,
     currentTaskPayerLabel, currentTaskPayeeLabel,
     taskAttachmentInput, taskPendingFiles, taskAttachmentDragActive,
+    taskPendingChecklist, appendPendingChecklistItem, togglePendingChecklistItem, removePendingChecklistItem,
     taskAttachmentItems, taskAttachmentsTotalCount,
     formatTaskAttachmentSize, openTaskAttachmentPicker, onTaskAttachmentPicked,
     onTaskAttachmentDragOver, onTaskAttachmentDragLeave, onTaskAttachmentDrop,

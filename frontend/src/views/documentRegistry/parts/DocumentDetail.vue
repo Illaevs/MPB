@@ -19,7 +19,6 @@
             <div class="info-item"><label>Тип</label><span>{{ getTypeText(selectedDoc.doc_type) }}</span></div>
             <div class="info-item"><label>Контрагент</label><span>{{ getCompanyName(selectedDoc.counterparty_id) }}</span></div>
             <div class="info-item"><label>Статус</label><span class="badge badge-sm" :class="getStatusClass(selectedDoc.status)">{{ getStatusText(selectedDoc.status) }}</span></div>
-            <div class="info-item"><label>Наша компания</label><span>{{ getCompanyName(selectedDoc.our_company_id) }}</span></div>
           </div>
         </div>
         <div class="detail-right">

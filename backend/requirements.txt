@@ -30,3 +30,16 @@ beautifulsoup4==4.14.3
 lxml==6.0.2
 # L3: defused XML parsing for uploaded DOCX (entity-expansion DoS).
 defusedxml==0.7.1
+
+# Step 1 (semantic search): embedding model + векторный индекс в SQLite.
+#
+# sentence-transformers тащит torch как зависимость (~700 МБ на диск
+# для CPU-версии). Это разовая стоимость, в runtime модель грузится
+# лениво в отдельном процессе `embedding_worker.py`. FastAPI-процесс
+# torch НЕ импортирует — экономит RAM на основном сервере.
+#
+# sqlite-vec даёт `vec0` virtual table для cosine similarity search в
+# SQLite без миграции в pgvector / Qdrant. Скомпилирован как extension,
+# подключается через `conn.enable_load_extension(True)` + `load_extension`.
+sentence-transformers==3.3.1
+sqlite-vec==0.1.6

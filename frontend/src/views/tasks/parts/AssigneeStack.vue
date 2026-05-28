@@ -87,6 +87,9 @@ export default {
   justify-content: center;
   width: 26px;
   height: 26px;
+  /* без flex-shrink:0 узкий контейнер (например карточка матрицы)
+     давит ширину пилла → круг превращается в овал/полоску. */
+  flex: 0 0 26px;
   border-radius: 50%;
   overflow: hidden;
   font-size: var(--text-xs);
@@ -119,6 +122,7 @@ export default {
   justify-content: center;
   height: 26px;
   min-width: 26px;
+  flex-shrink: 0;
   padding: 0 6px;
   border-radius: var(--radius-pill);
   background: var(--color-surface-3);

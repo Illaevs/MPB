@@ -33,7 +33,7 @@
 
     <!-- Delete confirm -->
     <Teleport to="body">
-      <div v-if="deleteModalOpen" class="modal-overlay" @click.self="$emit('close-delete')">
+      <div v-if="deleteModalOpen" class="modal-overlay" v-modal-close="() => $emit('close-delete')">
         <div class="modal-glass">
           <div class="modal-glass-header">
             <h5 class="m-0">Удалить документ?</h5>
@@ -56,7 +56,7 @@
 
     <!-- Sequences -->
     <Teleport to="body">
-      <div v-if="sequencesModalOpen" class="modal-overlay" @click.self="$emit('close-sequences')">
+      <div v-if="sequencesModalOpen" class="modal-overlay" v-modal-close="() => $emit('close-sequences')">
         <div class="modal-glass">
           <div class="modal-glass-header">
             <h5 class="m-0">Нумерация: {{ activeKindMeta.singular }}</h5>
@@ -103,7 +103,7 @@
 
     <!-- Table modal -->
     <Teleport to="body">
-      <div v-if="tableModalOpen" class="modal-overlay" @click.self="$emit('close-table-modal')">
+      <div v-if="tableModalOpen" class="modal-overlay" v-modal-close="() => $emit('close-table-modal')">
         <div class="modal-glass">
           <div class="modal-glass-header">
             <h5 class="m-0">Вставить таблицу</h5>

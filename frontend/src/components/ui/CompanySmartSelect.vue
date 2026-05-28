@@ -12,7 +12,11 @@
       @blur="onBlur"
       autocomplete="off"
     />
-    <div v-if="showDropdown" class="smart-select__dropdown">
+    <div
+      v-if="showDropdown"
+      class="smart-select__dropdown"
+      @mousedown.prevent
+    >
       <button
         v-for="item in filtered"
         :key="item.id"
@@ -206,7 +210,9 @@ watch(query, (value) => {
   top: 100%;
   left: 0;
   right: 0;
-  z-index: 10;
+  /* 3000 — внутри модалки (z-index ~1000-2000) и при backdrop-filter
+     этого хватает, чтоб dropdown не перекрывался соседями. */
+  z-index: 3000;
   background: var(--md-sys-color-surface);
   border: 1px solid var(--md-sys-color-outline-variant);
   border-radius: 8px;

@@ -1,12 +1,12 @@
 # Analytics & Audit API
 
-Сгенерировано из `docs/API.md` на 2026-02-15 03:22:39 (local time).
+Сгенерировано из `docs/API.md` на 2026-05-29 01:30:42 (local time).
 
 ## Scope
 - Домен: `analytics`
 - Описание: Дашбордовые сводки и аудит событий.
 - Routers: `2`
-- Endpoints: `4`
+- Endpoints: `6`
 - Список роутеров: `dashboard`, `audit_logs`
 
 ## Common Rules
@@ -25,7 +25,7 @@ Source: `backend/app/routers/dashboard.py`
 
 Prefix: `/api/v1/dashboard`
 
-Endpoints: `2`
+Endpoints: `4`
 
 #### `GET /api/v1/dashboard/activity`
 
@@ -55,6 +55,72 @@ Endpoints: `2`
     - `func.count`
     - `EventLog.entity_id.in_`
   - Side effects: DB read, Audit/Event logging
+- Error Handling:
+  - Explicit `HTTPException` not found in handler body
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/dashboard/manager-summary`
+
+- Controller: `backend/app/routers/dashboard.py::get_manager_summary`
+- Data Contract:
+  - Path params: none
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `Task.status.notin_`
+    - `and_`
+    - `Task.due_date.is_not`
+    - `db.execute`
+    - `desc`
+    - `User.full_name.asc`
+    - `select`
+    - `Deal.id.in_`
+    - `Task.deal_id.in_`
+    - `func.sum`
+    - `func.count`
+  - Side effects: DB write, DB read
+- Error Handling:
+  - Explicit `HTTPException` not found in handler body
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/dashboard/my-task-counts`
+
+- Controller: `backend/app/routers/dashboard.py::my_task_counts`
+- Summary: Счётчики виджета «Мои задачи» (только незавершённые):
+- Data Contract:
+  - Path params: none
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `db.execute`
+    - `Task.status.in_`
+    - `select`
+    - `Task.assigned_to_user_id.is_`
+    - `func.count`
+    - `func.distinct`
+  - Side effects: DB read
 - Error Handling:
   - Explicit `HTTPException` not found in handler body
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`

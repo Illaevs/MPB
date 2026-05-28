@@ -7,6 +7,8 @@ import { useUploadQueueStore } from '../../../stores/uploadQueue'
 import { useCompaniesStore } from '../../../stores/companies'
 import { useUsersStore } from '../../../stores/users'
 import { useToast } from '../../../composables/useToast'
+import { hasSectionAccess } from '../../../utils/permissions'
+import { OBJECT_TYPES } from '../../../config/objectTypes'
 
 /**
  * ProjectDetail view shared state.
@@ -141,7 +143,7 @@ export function useProjectDetailState() {
     const dealActivityCategory = ref('all')
     const dealActivityCategoryOptions = [
       { value: 'all', label: 'Все события' },
-      { value: 'deal', label: 'Сделка' },
+      { value: 'deal', label: 'Проект' },
       { value: 'stages', label: 'Этапы' },
       { value: 'tasks', label: 'Задачи' },
       { value: 'contracts', label: 'Договоры' },
@@ -204,8 +206,28 @@ export function useProjectDetailState() {
       problems: false,
       activity: false
     })
-    const tabs = [
+    // Per-tab section requirement. Tab is hidden if the user has no
+    // read access to the listed section. `null` ⇒ always visible (the
+    // tab is part of the projects section itself, which is what gates
+    // the whole view).
+    const _TAB_SECTION = {
+      overview: null,
+      products: null,
+      stages: null,
+      gantt: null,
+      dejure: 'contracts',
+      defacto: null,
+      files: 'executor',
+      letters: 'outgoing_registry',
+      problems: 'data_health',
+      contracts: 'contracts',
+    }
+    // NB: вкладка 'activity' выпилена — таймлайн теперь в правой колонке
+    // Обзора (как в LeadDetail). Компонент Activity.vue оставлен в parts/
+    // на случай возврата отдельной полноэкранной ленты.
+    const _ALL_TABS = [
       { id: 'overview', name: 'Обзор', icon: 'fas fa-info-circle' },
+      { id: 'contracts', name: 'Договоры', icon: 'fas fa-file-signature' },
       { id: 'products', name: 'Состав проекта', icon: 'fas fa-boxes-stacked' },
       { id: 'stages', name: 'Этапы', icon: 'fas fa-tasks' },
       { id: 'gantt', name: 'Гант', icon: 'fas fa-chart-gantt' },
@@ -214,18 +236,29 @@ export function useProjectDetailState() {
       { id: 'files', name: 'Документация', icon: 'fas fa-folder-open' },
       { id: 'letters', name: 'Письма', icon: 'fas fa-envelope' },
       { id: 'problems', name: 'Проблемы', icon: 'fas fa-triangle-exclamation' },
-      { id: 'activity', name: 'Активность', icon: 'fas fa-clock-rotate-left' },
     ]
-    const tabIds = tabs.map((tab) => tab.id)
+    const tabs = computed(() => _ALL_TABS.filter((tab) => {
+      const section = _TAB_SECTION[tab.id]
+      return section ? hasSectionAccess(section) : true
+    }))
+    const tabIds = computed(() => tabs.value.map((tab) => tab.id))
     const normalizeTab = (tabId) => {
       const raw = String(tabId || '')
       if (raw === 'info') return 'overview'
       if (raw === 'smeta' || raw === 'goods') return 'products'
-      return tabIds.includes(raw) ? raw : 'overview'
+      return tabIds.value.includes(raw) ? raw : 'overview'
     }
     const selectTab = (tabId) => {
       activeTab.value = normalizeTab(tabId)
     }
+    // If permissions change (e.g. switching active user) and the current
+    // tab disappears from the visible set, fall back to the first visible
+    // tab so the content area doesn't go blank.
+    watch(tabs, (newTabs) => {
+      if (!newTabs.some((t) => t.id === activeTab.value)) {
+        activeTab.value = newTabs[0]?.id || 'overview'
+      }
+    })
     const setGanttViewMode = async (mode) => {
       ganttViewMode.value = mode
       if (mode === 'execution' && activeTab.value === 'gantt' && !defactoData.value.stages.length) {
@@ -239,22 +272,24 @@ export function useProjectDetailState() {
       })
     }
     const onTabKeydown = (e) => {
-       const idx = tabs.findIndex(t => t.id === activeTab.value)
+       const list = tabs.value
+       if (!list.length) return
+       const idx = list.findIndex(t => t.id === activeTab.value)
        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
           e.preventDefault()
-          activeTab.value = tabs[(idx + 1) % tabs.length].id
+          activeTab.value = list[(idx + 1) % list.length].id
           focusActiveTab()
        } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
           e.preventDefault()
-          activeTab.value = tabs[(idx - 1 + tabs.length) % tabs.length].id
+          activeTab.value = list[(idx - 1 + list.length) % list.length].id
           focusActiveTab()
        } else if (e.key === 'Home') {
           e.preventDefault()
-          activeTab.value = tabs[0].id
+          activeTab.value = list[0].id
           focusActiveTab()
        } else if (e.key === 'End') {
           e.preventDefault()
-          activeTab.value = tabs[tabs.length - 1].id
+          activeTab.value = list[list.length - 1].id
           focusActiveTab()
        }
     }
@@ -532,14 +567,93 @@ export function useProjectDetailState() {
       subcontractorId: ''
     })
 
-    // Edit Project modal
+    // Edit Project modal — оставлен для совместимости, но фактически
+    // карточка «Основная информация» в Overview редактируется инлайном (как
+    // в LeadDetail). Модалку отключим в шапке, см. inline-* ниже.
     const showEditProjectModal = ref(false)
     const editProjectSaving = ref(false)
     const editProjectForm = ref({
       title: '', obj_name: '', address: '', object_type: '', object_area: null,
-      customer_id: '', our_company_id: '', status: 'active'
+      customer_id: '', status: 'active'
     })
-    const internalCompanies = computed(() => companies.value.filter(c => c.type === 'internal'))
+
+    // ----- Inline-edit (карточка "Основная информация" во вкладке Обзор) -----
+    // Тот же шаблон, что в LeadDetail.vue:beginEdit/cancelEdit/saveEdit.
+    // editingField — имя текущего активного поля (или null), editDraft —
+    // ввод пользователя, inlineSaving — флаг сетевой задержки.
+    const editingField = ref(null)
+    const editDraft = ref(null)
+    const inlineSaving = ref(false)
+    const inlineInputRef = ref(null)
+    // Единый список типов объектов — импорт из config/objectTypes.js.
+    // Раньше тут был обрезанный массив из 5 значений, что создавало
+    // расхождение с модалом создания проекта (Projects.vue, 13 значений).
+    const PROJECT_OBJECT_TYPES = OBJECT_TYPES
+    const PROJECT_STATUS_OPTIONS = [
+      { value: 'active', label: 'Активен' },
+      { value: 'completed', label: 'Завершен' },
+      { value: 'on_hold', label: 'Пауза' },
+      { value: 'cancelled', label: 'Отмена' },
+    ]
+    const customerCompanies = computed(() =>
+      companies.value.filter((c) => (c?.type || 'customer') === 'customer')
+    )
+    const beginInlineEdit = (field) => {
+      if (inlineSaving.value) return
+      if (editingField.value === field) return
+      editingField.value = field
+      const raw = project.value?.[field]
+      editDraft.value = raw == null ? '' : raw
+      nextTick(() => {
+        const el = inlineInputRef.value
+        if (el && typeof el.focus === 'function') {
+          el.focus()
+          if (typeof el.select === 'function') el.select()
+        }
+      })
+    }
+    const cancelInlineEdit = () => {
+      editingField.value = null
+      editDraft.value = null
+    }
+    const normalizeInlineValue = (field, raw) => {
+      if (raw === null || raw === undefined) return null
+      if (field === 'object_area' || field === 'total_contract_value') {
+        if (raw === '') return null
+        const n = Number(raw)
+        return Number.isNaN(n) ? null : n
+      }
+      if (raw === '') return null
+      const s = String(raw).trim()
+      return s === '' ? null : s
+    }
+    const saveInlineEdit = async () => {
+      if (!editingField.value || inlineSaving.value) return
+      const field = editingField.value
+      const value = normalizeInlineValue(field, editDraft.value)
+      const current = normalizeInlineValue(field, project.value?.[field])
+      if (value === current) { cancelInlineEdit(); return }
+      // Бэк фильтрует None в Deal.update → "No fields to update".
+      // Очистку поля до пустого инлайн не делаем; через модалку доступно.
+      if (value === null) { cancelInlineEdit(); return }
+      inlineSaving.value = true
+      try {
+        await api.deals.update(normalizeUuid(project.value.id), { [field]: value })
+        // Локальное обновление поля, без полного перезапроса проекта —
+        // финансовый виджет/виджеты переcчитают computeds сразу.
+        project.value = { ...project.value, [field]: value }
+        cancelInlineEdit()
+      } catch (e) {
+        const detail = e?.response?.data?.detail || ''
+        if (typeof detail === 'string' && /no fields|нет полей/i.test(detail)) {
+          cancelInlineEdit()
+          return
+        }
+        toastError(detail || 'Не удалось сохранить')
+      } finally {
+        inlineSaving.value = false
+      }
+    }
 
     const expandedProductIds = ref([])
     const toggleProduct = (id) => {
@@ -827,6 +941,7 @@ export function useProjectDetailState() {
     }
 
     const loadDealLetters = async () => {
+      if (!hasSectionAccess('outgoing_registry')) { dealLetters.value = []; return }
       dealLettersLoading.value = true
       try {
         const dealId = normalizeUuid(route.params.id)
@@ -920,6 +1035,11 @@ export function useProjectDetailState() {
     }
 
     const loadDealHealthIssues = async (refresh = false) => {
+      if (!hasSectionAccess('data_health')) {
+        dealHealthIssues.value = []
+        dealHealthSummary.value = { total: 0, open: 0, ignored: 0, resolved: 0, errors: 0, warnings: 0, infos: 0 }
+        return
+      }
       dealHealthLoading.value = true
       try {
         const payload = (await api.dataHealth.listDealIssues(normalizeUuid(route.params.id), {
@@ -1414,6 +1534,7 @@ export function useProjectDetailState() {
 
     const fetchDealFolderEntries = async (path) => {
       if (!path) return []
+      if (!hasSectionAccess('executor')) return []
       const data = await api.executor.storageList({ path })
       return sortDealItems(data || [])
     }
@@ -1796,6 +1917,7 @@ export function useProjectDetailState() {
     }
 
     const loadContracts = async () => {
+       if (!hasSectionAccess('contracts')) { contracts.value = []; return }
        contractsLoading.value = true
        try {
           contracts.value = await api.contracts.listByDeal(normalizeUuid(route.params.id))
@@ -1804,6 +1926,7 @@ export function useProjectDetailState() {
     }
 
     const loadAvailableContracts = async () => {
+       if (!hasSectionAccess('contracts')) { availableContracts.value = []; return }
        try {
           const data = await api.contracts.list()
           availableContracts.value = Array.isArray(data) ? data : (data?.items ?? [])
@@ -1881,6 +2004,30 @@ export function useProjectDetailState() {
        }
     }
 
+    // ----- Inline-добавление ГИП (Overview.vue, без модалки и кнопки) -----
+    // Кандидаты для добавления = все юзеры, ещё не привязанные как ГИП.
+    const availableGipCandidates = computed(() => {
+      const taken = new Set(gipUserIds.value.map(id => normalizeUuid(id)))
+      return (allUsers.value || []).filter(u => u && u.id && !taken.has(normalizeUuid(u.id)))
+    })
+    // Добавляем выбранного юзера в ГИПы и СРАЗУ шлём PUT (inline-режим:
+    // никакой кнопки "Сохранить"). Если уже привязан или сохранение в
+    // процессе — игнорируем.
+    const addGipInline = async (userId) => {
+      if (!userId || gipSaving.value) return
+      const normalized = normalizeUuid(userId)
+      if (gipUserIds.value.some(id => normalizeUuid(id) === normalized)) return
+      const user = (allUsers.value || []).find(u => normalizeUuid(u.id) === normalized)
+      addGip(user || { id: userId })
+      await saveDealGips()
+    }
+    // Удаляем ГИП и СРАЗУ шлём PUT (то же поведение, что и addGipInline).
+    const removeGipInline = async (userId) => {
+      if (!userId || gipSaving.value) return
+      removeGip(userId)
+      await saveDealGips()
+    }
+
     const getCompanyName = (explicitName, companyId) => {
       if (explicitName) return explicitName
       const normalized = normalizeUuid(companyId)
@@ -1901,6 +2048,10 @@ export function useProjectDetailState() {
     const loadStageClosingDocuments = async () => {
        const dealId = normalizeUuid(route.params.id)
        if (!dealId) {
+          stageClosingDocumentsMap.value = {}
+          return
+       }
+       if (!hasSectionAccess('outgoing_registry')) {
           stageClosingDocumentsMap.value = {}
           return
        }
@@ -1957,6 +2108,7 @@ export function useProjectDetailState() {
     }
 
     const loadStagePaymentMap = async () => {
+       if (!hasSectionAccess('income_expense')) { stagePaymentMap.value = {}; return }
        try {
           const data = await api.incomeExpense.list({ deal_id: normalizeUuid(route.params.id) })
           const map = {}
@@ -1981,6 +2133,7 @@ export function useProjectDetailState() {
           paidAmountFromRegistry.value = 0
           return
        }
+       if (!hasSectionAccess('income_expense')) { paidAmountFromRegistry.value = 0; return }
        try {
           const limit = 500
           let skip = 0
@@ -3540,7 +3693,6 @@ export function useProjectDetailState() {
           object_type: project.value.object_type || '',
           object_area: project.value.object_area || null,
           customer_id: project.value.customer_id ? normalizeUuid(project.value.customer_id) : '',
-          our_company_id: project.value.our_company_id ? normalizeUuid(project.value.our_company_id) : '',
           status: project.value.status || 'active'
        }
        showEditProjectModal.value = true
@@ -3858,6 +4010,7 @@ export function useProjectDetailState() {
        totalAmount, vatAmount, totalWithVat, previewVatRate, contractAmount, paidAmount, remainingAmount, paymentProgressPercent, remainingPercent, remainingTextClass, getCompanyName,
        vatRate, vatRateDirty, vatSaving, saveVatRate,
        allUsers, gipUsers, gipUserIds, gipSaving, gipNames, gipDirty, saveDealGips, resetDealGips,
+       availableGipCandidates, addGipInline, removeGipInline,
        showGipDialog, gipSearch, gipSearchInput, filteredGipUsers, openGipDialog, closeGipDialog, addGip, removeGip,
        expandedProductIds, toggleProduct, countCompletedSubtasks, countTotalSubtasks,
        // Confirm modal
@@ -3865,7 +4018,12 @@ export function useProjectDetailState() {
        stageCloseModalOpen, stageCloseModalSaving, stageCloseForm, stageCloseWarningText, isStageCloseOutOfRange,
        closeStageCloseModal, submitStageCloseModal,
        // Edit Project modal
-       showEditProjectModal, editProjectForm, editProjectSaving, saveProjectEdit, internalCompanies,
+       showEditProjectModal, editProjectForm, editProjectSaving, saveProjectEdit,
+       // Inline-edit для карточки "Основная информация" во вкладке Обзор
+       editingField, editDraft, inlineSaving, inlineInputRef,
+       beginInlineEdit, cancelInlineEdit, saveInlineEdit,
+       customerCompanies,
+       PROJECT_OBJECT_TYPES, PROJECT_STATUS_OPTIONS,
        // Keyboard nav
        onTabKeydown
     }

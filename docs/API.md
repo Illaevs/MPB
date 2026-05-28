@@ -11,6 +11,8 @@
 - `docs/api/documents.md`
 - `docs/api/communications.md`
 - `docs/api/legal_compliance.md`
+- `docs/api/hr.md`
+- `docs/api/platform.md`
 - `docs/api/analytics.md`
 
 ## Regeneration

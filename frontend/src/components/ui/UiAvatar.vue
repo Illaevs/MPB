@@ -28,7 +28,7 @@
 import { computed, ref, watch } from 'vue'
 import Tooltip from './Tooltip.vue'
 
-const SIZES = ['xs', 'sm', 'md', 'lg']
+const SIZES = ['xs', 'sm', 'md', 'lg', 'xl', '2xl']
 const PALETTE = ['blue', 'teal', 'amber', 'pink', 'purple', 'green', 'red', 'indigo']
 
 export default {
@@ -94,6 +94,8 @@ export default {
 .ui-avatar--sm { width: 26px; height: 26px; font-size: var(--text-xs); }
 .ui-avatar--md { width: 32px; height: 32px; font-size: var(--text-sm); }
 .ui-avatar--lg { width: 40px; height: 40px; font-size: var(--text-base); }
+.ui-avatar--xl { width: 64px; height: 64px; font-size: var(--text-xl, 1.25rem); }
+.ui-avatar--2xl { width: 96px; height: 96px; font-size: 2rem; }
 
 .ui-avatar__image {
   width: 100%;

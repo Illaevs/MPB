@@ -8,3 +8,7 @@ export const activity = (params, options) => get(`${BASE}/activity`, params, opt
 
 export const managerSummary = (options) =>
   get(`${BASE}/manager-summary`, undefined, options)
+
+// Счётчики виджета «Мои задачи»: { doing, helping, assigned, watching }.
+export const myTaskCounts = (options) =>
+  get(`${BASE}/my-task-counts`, undefined, options)

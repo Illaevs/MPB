@@ -1,25 +1,27 @@
 <template>
-  <transition name="confirm">
-    <div v-if="state.visible" class="confirm-overlay" @click.self="reject">
-      <div class="confirm-card" role="alertdialog" aria-modal="true">
-        <h4 class="confirm-title">{{ state.title }}</h4>
-        <div v-if="state.message" class="confirm-message">{{ state.message }}</div>
-        <div class="confirm-actions">
-          <UiButton variant="ghost" size="sm" @click="reject">
-            {{ state.cancelText }}
-          </UiButton>
-          <UiButton
-            ref="confirmBtn"
-            :variant="confirmVariant"
-            size="sm"
-            @click="accept"
-          >
-            {{ state.confirmText }}
-          </UiButton>
+  <Teleport to="body">
+    <transition name="confirm">
+      <div v-if="state.visible" class="confirm-overlay" v-modal-close="reject">
+        <div class="confirm-card" role="alertdialog" aria-modal="true">
+          <h4 class="confirm-title">{{ state.title }}</h4>
+          <div v-if="state.message" class="confirm-message">{{ state.message }}</div>
+          <div class="confirm-actions">
+            <UiButton variant="ghost" size="sm" @click="reject">
+              {{ state.cancelText }}
+            </UiButton>
+            <UiButton
+              ref="confirmBtn"
+              :variant="confirmVariant"
+              size="sm"
+              @click="accept"
+            >
+              {{ state.confirmText }}
+            </UiButton>
+          </div>
         </div>
       </div>
-    </div>
-  </transition>
+    </transition>
+  </Teleport>
 </template>
 
 <script>

@@ -1,0 +1,1355 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "_generated_at": "2026-05-27T13:30:14.851447+00:00",
+  "_generated_by": "backend/app/tools/dump_event_types.py",
+  "_warning": "Этот файл — autogen-результат AST-обхода backend/app/. Не редактируйте руками: при следующем запуске будет перезаписан. Чтобы добавить событие — emit_event/dispatch_before/dispatch_after или @on в коде.",
+  "stats": {
+    "total_event_keys": 117,
+    "by_entity_type": {
+      "approval_instance": 5,
+      "approval_instance_step": 2,
+      "approval_template": 2,
+      "company": 3,
+      "contract": 7,
+      "deal": 4,
+      "document": 10,
+      "document_dispatch": 2,
+      "feed_post": 1,
+      "gosklyuch": 1,
+      "income_expense_entry": 3,
+      "kp_document": 2,
+      "lead": 8,
+      "legal_case": 2,
+      "mail_message": 2,
+      "outgoing_document": 6,
+      "product": 4,
+      "product_category": 3,
+      "stage": 4,
+      "stage_dependency": 1,
+      "stage_product_assignment": 3,
+      "subcontractor_card": 3,
+      "subcontractor_stage": 2,
+      "task": 7,
+      "task_auction": 1,
+      "task_auction_bid": 1,
+      "task_message": 3,
+      "task_subtask": 4,
+      "telegram_message": 1,
+      "tender": 2,
+      "tender_offer": 2,
+      "treasury_allocation": 3,
+      "treasury_transaction": 5,
+      "user": 6,
+      "work_session": 2
+    },
+    "by_phase": {
+      "after": 99,
+      "batch": 1,
+      "before": 17
+    }
+  },
+  "events": [
+    {
+      "event_key": "approval_instance.after_complete",
+      "entity_type": "approval_instance",
+      "action": "complete",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/approvals.py:1052"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "approval_instance.after_reject",
+      "entity_type": "approval_instance",
+      "action": "reject",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/approvals.py:1126"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "approval_instance.after_start",
+      "entity_type": "approval_instance",
+      "action": "start",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/approvals.py:804"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "approval_instance.before_complete",
+      "entity_type": "approval_instance",
+      "action": "complete",
+      "phase": "before",
+      "payload_version": 1,
+      "emitted_from": [],
+      "handlers": [
+        "app/event_handlers/approvals.py:22 (require_all_steps_done)"
+      ]
+    },
+    {
+      "event_key": "approval_instance.before_reject",
+      "entity_type": "approval_instance",
+      "action": "reject",
+      "phase": "before",
+      "payload_version": 1,
+      "emitted_from": [],
+      "handlers": [
+        "app/event_handlers/approvals.py:38 (require_reject_reason)"
+      ]
+    },
+    {
+      "event_key": "approval_instance_step.after_complete",
+      "entity_type": "approval_instance_step",
+      "action": "complete",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/approvals.py:1039"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "approval_instance_step.after_reject",
+      "entity_type": "approval_instance_step",
+      "action": "reject",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/approvals.py:1114"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "approval_template.after_create",
+      "entity_type": "approval_template",
+      "action": "create",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/approvals.py:574"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "approval_template.after_update",
+      "entity_type": "approval_template",
+      "action": "update",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/approvals.py:614"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "company.after_create",
+      "entity_type": "company",
+      "action": "create",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/companies.py:353"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "company.after_delete",
+      "entity_type": "company",
+      "action": "delete",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/companies.py:577"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "company.after_update",
+      "entity_type": "company",
+      "action": "update",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/companies.py:548"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "contract.after_create",
+      "entity_type": "contract",
+      "action": "create",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/contracts.py:479"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "contract.after_delete",
+      "entity_type": "contract",
+      "action": "delete",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/contracts.py:791"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "contract.after_sign",
+      "entity_type": "contract",
+      "action": "sign",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [],
+      "handlers": [
+        "app/event_handlers/signing.py:123 (log_contract_signed)"
+      ]
+    },
+    {
+      "event_key": "contract.after_status_change",
+      "entity_type": "contract",
+      "action": "status_change",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/contracts.py:627"
+      ],
+      "handlers": [
+        "app/event_handlers/contracts.py:103 (log_significant_transition)"
+      ]
+    },
+    {
+      "event_key": "contract.after_update",
+      "entity_type": "contract",
+      "action": "update",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/contracts.py:659"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "contract.before_sign",
+      "entity_type": "contract",
+      "action": "sign",
+      "phase": "before",
+      "payload_version": 1,
+      "emitted_from": [],
+      "handlers": [
+        "app/event_handlers/signing.py:83 (validate_contract_sign)"
+      ]
+    },
+    {
+      "event_key": "contract.before_status_change",
+      "entity_type": "contract",
+      "action": "status_change",
+      "phase": "before",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/contracts.py:605"
+      ],
+      "handlers": [
+        "app/event_handlers/contracts.py:36 (validate_status_transition)",
+        "app/event_handlers/contracts.py:84 (normalize_status_change_meta)"
+      ]
+    },
+    {
+      "event_key": "deal.after_create",
+      "entity_type": "deal",
+      "action": "create",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/deals.py:487"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "deal.after_status_change",
+      "entity_type": "deal",
+      "action": "status_change",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/deals.py:935"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "deal.after_update",
+      "entity_type": "deal",
+      "action": "update",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/deals.py:919"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "deal.before_status_change",
+      "entity_type": "deal",
+      "action": "status_change",
+      "phase": "before",
+      "payload_version": 1,
+      "emitted_from": [],
+      "handlers": [
+        "app/event_handlers/deals.py:24 (validate_deal_status_transition)"
+      ]
+    },
+    {
+      "event_key": "document.after_create",
+      "entity_type": "document",
+      "action": "create",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/document_registry.py:198"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "document.after_delete",
+      "entity_type": "document",
+      "action": "delete",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/document_registry.py:333"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "document.after_inbound",
+      "entity_type": "document",
+      "action": "inbound",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/integrations/diadoc_inbound.py:161"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "document.after_send",
+      "entity_type": "document",
+      "action": "send",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/document_registry.py:631"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "document.after_sign",
+      "entity_type": "document",
+      "action": "sign",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [],
+      "handlers": [
+        "app/event_handlers/signing.py:110 (log_document_signed)"
+      ]
+    },
+    {
+      "event_key": "document.after_status_change",
+      "entity_type": "document",
+      "action": "status_change",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/document_registry.py:307"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "document.after_update",
+      "entity_type": "document",
+      "action": "update",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/document_registry.py:293"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "document.before_send",
+      "entity_type": "document",
+      "action": "send",
+      "phase": "before",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/document_registry.py:580"
+      ],
+      "handlers": [
+        "app/event_handlers/documents.py:21 (validate_before_send)"
+      ]
+    },
+    {
+      "event_key": "document.before_sign",
+      "entity_type": "document",
+      "action": "sign",
+      "phase": "before",
+      "payload_version": 1,
+      "emitted_from": [],
+      "handlers": [
+        "app/event_handlers/signing.py:75 (validate_document_sign)"
+      ]
+    },
+    {
+      "event_key": "document.before_status_change",
+      "entity_type": "document",
+      "action": "status_change",
+      "phase": "before",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/document_registry.py:249"
+      ],
+      "handlers": [
+        "app/event_handlers/documents.py:37 (validate_status_progression)"
+      ]
+    },
+    {
+      "event_key": "document_dispatch.after_create",
+      "entity_type": "document_dispatch",
+      "action": "create",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/document_registry.py:617"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "document_dispatch.after_send",
+      "entity_type": "document_dispatch",
+      "action": "send",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/document_registry.py:691"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "feed_post.after_create",
+      "entity_type": "feed_post",
+      "action": "create",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/feed.py:400"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "gosklyuch.after_inbound",
+      "entity_type": "gosklyuch",
+      "action": "inbound",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/integrations/gosklyuch_inbound.py:96"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "income_expense_entry.after_create",
+      "entity_type": "income_expense_entry",
+      "action": "create",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/income_expense.py:355"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "income_expense_entry.after_delete",
+      "entity_type": "income_expense_entry",
+      "action": "delete",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/income_expense.py:598"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "income_expense_entry.after_update",
+      "entity_type": "income_expense_entry",
+      "action": "update",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/income_expense.py:534"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "kp_document.after_create",
+      "entity_type": "kp_document",
+      "action": "create",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/kp.py:218"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "kp_document.before_render",
+      "entity_type": "kp_document",
+      "action": "render",
+      "phase": "before",
+      "payload_version": 1,
+      "emitted_from": [],
+      "handlers": [
+        "app/event_handlers/kp.py:22 (validate_kp_ready)"
+      ]
+    },
+    {
+      "event_key": "lead.after_convert_to_deal",
+      "entity_type": "lead",
+      "action": "convert_to_deal",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/leads.py:371"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "lead.after_create",
+      "entity_type": "lead",
+      "action": "create",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/leads.py:155"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "lead.after_delete",
+      "entity_type": "lead",
+      "action": "delete",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/leads.py:270"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "lead.after_status_change",
+      "entity_type": "lead",
+      "action": "status_change",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/leads.py:239"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "lead.after_update",
+      "entity_type": "lead",
+      "action": "update",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/leads.py:226"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "lead.before_convert_to_deal",
+      "entity_type": "lead",
+      "action": "convert_to_deal",
+      "phase": "before",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/leads.py:314"
+      ],
+      "handlers": [
+        "app/event_handlers/leads.py:23 (validate_lead_ready_for_conversion)",
+        "app/event_handlers/leads.py:40 (stamp_source_lead_id)"
+      ]
+    },
+    {
+      "event_key": "lead.before_create",
+      "entity_type": "lead",
+      "action": "create",
+      "phase": "before",
+      "payload_version": 1,
+      "emitted_from": [],
+      "handlers": [
+        "app/event_handlers/leads.py:48 (validate_new_lead)"
+      ]
+    },
+    {
+      "event_key": "lead.before_status_change",
+      "entity_type": "lead",
+      "action": "status_change",
+      "phase": "before",
+      "payload_version": 1,
+      "emitted_from": [],
+      "handlers": [
+        "app/event_handlers/leads.py:57 (validate_lead_status_transition)"
+      ]
+    },
+    {
+      "event_key": "legal_case.after_create",
+      "entity_type": "legal_case",
+      "action": "create",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/legal_work.py:266"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "legal_case.after_update",
+      "entity_type": "legal_case",
+      "action": "update",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/legal_work.py:310"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "mail_message.after_send",
+      "entity_type": "mail_message",
+      "action": "send",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/mail.py:602"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "mail_message.before_send",
+      "entity_type": "mail_message",
+      "action": "send",
+      "phase": "before",
+      "payload_version": 1,
+      "emitted_from": [],
+      "handlers": [
+        "app/event_handlers/mail.py:27 (validate_recipients)"
+      ]
+    },
+    {
+      "event_key": "outgoing_document.after_create",
+      "entity_type": "outgoing_document",
+      "action": "create",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/outgoing_registry.py:4339"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "outgoing_document.after_delete",
+      "entity_type": "outgoing_document",
+      "action": "delete",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/outgoing_registry.py:4520"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "outgoing_document.after_sign",
+      "entity_type": "outgoing_document",
+      "action": "sign",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [],
+      "handlers": [
+        "app/event_handlers/signing.py:132 (log_outgoing_signed)"
+      ]
+    },
+    {
+      "event_key": "outgoing_document.after_update",
+      "entity_type": "outgoing_document",
+      "action": "update",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/outgoing_registry.py:4467"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "outgoing_document.before_render",
+      "entity_type": "outgoing_document",
+      "action": "render",
+      "phase": "before",
+      "payload_version": 1,
+      "emitted_from": [],
+      "handlers": [
+        "app/event_handlers/outgoing_documents.py:24 (validate_required_fields)",
+        "app/event_handlers/outgoing_documents.py:44 (stamp_render_meta)"
+      ]
+    },
+    {
+      "event_key": "outgoing_document.before_sign",
+      "entity_type": "outgoing_document",
+      "action": "sign",
+      "phase": "before",
+      "payload_version": 1,
+      "emitted_from": [],
+      "handlers": [
+        "app/event_handlers/signing.py:98 (validate_outgoing_sign)"
+      ]
+    },
+    {
+      "event_key": "product.after_create",
+      "entity_type": "product",
+      "action": "create",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/products.py:201"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "product.after_delete",
+      "entity_type": "product",
+      "action": "delete",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/products.py:291"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "product.after_price_change",
+      "entity_type": "product",
+      "action": "price_change",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/products.py:261"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "product.after_update",
+      "entity_type": "product",
+      "action": "update",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/products.py:245"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "product_category.after_create",
+      "entity_type": "product_category",
+      "action": "create",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/products.py:94"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "product_category.after_delete",
+      "entity_type": "product_category",
+      "action": "delete",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/products.py:163"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "product_category.after_update",
+      "entity_type": "product_category",
+      "action": "update",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/products.py:132"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "stage.after_create",
+      "entity_type": "stage",
+      "action": "create",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/stages.py:558"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "stage.after_delete",
+      "entity_type": "stage",
+      "action": "delete",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/stages.py:879"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "stage.after_status_change",
+      "entity_type": "stage",
+      "action": "status_change",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/stages.py:799"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "stage.after_update",
+      "entity_type": "stage",
+      "action": "update",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/stages.py:784"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "stage_dependency.after_change",
+      "entity_type": "stage_dependency",
+      "action": "change",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/stages.py:486"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "stage_product_assignment.after_create",
+      "entity_type": "stage_product_assignment",
+      "action": "create",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/deal_execution.py:558"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "stage_product_assignment.after_delete",
+      "entity_type": "stage_product_assignment",
+      "action": "delete",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/deal_execution.py:615"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "stage_product_assignment.after_update",
+      "entity_type": "stage_product_assignment",
+      "action": "update",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/deal_execution.py:587"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "subcontractor_card.after_create",
+      "entity_type": "subcontractor_card",
+      "action": "create",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/subcontractors.py:54"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "subcontractor_card.after_delete",
+      "entity_type": "subcontractor_card",
+      "action": "delete",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/subcontractors.py:162"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "subcontractor_card.after_update",
+      "entity_type": "subcontractor_card",
+      "action": "update",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/subcontractors.py:98"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "subcontractor_stage.after_create",
+      "entity_type": "subcontractor_stage",
+      "action": "create",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/subcontractor_stages.py:242"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "subcontractor_stage.after_status_change",
+      "entity_type": "subcontractor_stage",
+      "action": "status_change",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/subcontractor_stages.py:317"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "task.after_create",
+      "entity_type": "task",
+      "action": "create",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/tasks.py:750"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "task.after_deadline_change",
+      "entity_type": "task",
+      "action": "deadline_change",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/tasks.py:1351"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "task.after_delete",
+      "entity_type": "task",
+      "action": "delete",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/tasks.py:1425"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "task.after_status_change",
+      "entity_type": "task",
+      "action": "status_change",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/tasks.py:1327"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "task.after_watchers_change",
+      "entity_type": "task",
+      "action": "watchers_change",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/tasks.py:1177",
+        "app/routers/tasks.py:695"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "task.before_assign",
+      "entity_type": "task",
+      "action": "assign",
+      "phase": "before",
+      "payload_version": 1,
+      "emitted_from": [],
+      "handlers": [
+        "app/event_handlers/tasks.py:63 (validate_task_assignee)"
+      ]
+    },
+    {
+      "event_key": "task.before_status_change",
+      "entity_type": "task",
+      "action": "status_change",
+      "phase": "before",
+      "payload_version": 1,
+      "emitted_from": [],
+      "handlers": [
+        "app/event_handlers/tasks.py:26 (validate_task_status_transition)"
+      ]
+    },
+    {
+      "event_key": "task_auction.after_open",
+      "entity_type": "task_auction",
+      "action": "open",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/task_auctions.py:257"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "task_auction_bid.after_place",
+      "entity_type": "task_auction_bid",
+      "action": "place",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/task_auctions.py:612"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "task_message.after_create",
+      "entity_type": "task_message",
+      "action": "create",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/task_messages.py:220"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "task_message.after_delete",
+      "entity_type": "task_message",
+      "action": "delete",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/task_messages.py:313"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "task_message.after_update",
+      "entity_type": "task_message",
+      "action": "update",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/task_messages.py:274"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "task_subtask.after_check",
+      "entity_type": "task_subtask",
+      "action": "check",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/task_subtasks.py:272"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "task_subtask.after_create",
+      "entity_type": "task_subtask",
+      "action": "create",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/task_subtasks.py:173"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "task_subtask.after_delete",
+      "entity_type": "task_subtask",
+      "action": "delete",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/task_subtasks.py:336"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "task_subtask.after_update",
+      "entity_type": "task_subtask",
+      "action": "update",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/task_subtasks.py:290"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "telegram_message.after_inbound",
+      "entity_type": "telegram_message",
+      "action": "inbound",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/integrations/telegram_inbound.py:98"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "tender.after_close",
+      "entity_type": "tender",
+      "action": "close",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/tenders.py:389"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "tender.after_publish",
+      "entity_type": "tender",
+      "action": "publish",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/tenders.py:377"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "tender_offer.after_accept",
+      "entity_type": "tender_offer",
+      "action": "accept",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/tenders.py:550"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "tender_offer.after_reject",
+      "entity_type": "tender_offer",
+      "action": "reject",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/tenders.py:563"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "treasury_allocation.after_create",
+      "entity_type": "treasury_allocation",
+      "action": "create",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/finance.py:1591"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "treasury_allocation.after_delete",
+      "entity_type": "treasury_allocation",
+      "action": "delete",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/finance.py:1702"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "treasury_allocation.after_update",
+      "entity_type": "treasury_allocation",
+      "action": "update",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/finance.py:1660"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "treasury_transaction.after_create",
+      "entity_type": "treasury_transaction",
+      "action": "create",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/finance.py:1160"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "treasury_transaction.after_delete",
+      "entity_type": "treasury_transaction",
+      "action": "delete",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/finance.py:1286"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "treasury_transaction.after_link",
+      "entity_type": "treasury_transaction",
+      "action": "link",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/finance.py:1250"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "treasury_transaction.after_update",
+      "entity_type": "treasury_transaction",
+      "action": "update",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/finance.py:1233"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "treasury_transaction.batch_imported",
+      "entity_type": "treasury_transaction",
+      "action": "imported",
+      "phase": "batch",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/integrations/bank_inbound.py:80",
+        "app/services/finance_service.py:470"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "user.after_create",
+      "entity_type": "user",
+      "action": "create",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/users.py:615"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "user.after_delete",
+      "entity_type": "user",
+      "action": "delete",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/users.py:716"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "user.after_login",
+      "entity_type": "user",
+      "action": "login",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/auth.py:187"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "user.after_logout",
+      "entity_type": "user",
+      "action": "logout",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/auth.py:724"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "user.after_role_change",
+      "entity_type": "user",
+      "action": "role_change",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/users.py:681"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "user.after_update",
+      "entity_type": "user",
+      "action": "update",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/users.py:663"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "work_session.after_start",
+      "entity_type": "work_session",
+      "action": "start",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/workday.py:265"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "work_session.after_stop",
+      "entity_type": "work_session",
+      "action": "stop",
+      "phase": "after",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/workday.py:331"
+      ],
+      "handlers": []
+    }
+  ]
+}

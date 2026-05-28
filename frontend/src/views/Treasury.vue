@@ -266,7 +266,7 @@
     </transition>
 
     <!-- Confirm Import Modal -->
-    <div v-if="showImportConfirmModal" class="modal-overlay" @click="closeImportModal">
+    <div v-if="showImportConfirmModal" class="modal-overlay" v-modal-close="closeImportModal">
       <div class="modal-content" @click.stop>
         <div class="modal-header">
            <h4>Подтверждение импорта</h4>
@@ -317,7 +317,7 @@
     </div>
 
     <!-- Create Transaction Modal -->
-    <div v-if="showCreateModal" class="modal-overlay" @click="closeCreateModal">
+    <div v-if="showCreateModal" class="modal-overlay" v-modal-close="closeCreateModal">
       <div class="modal-content" @click.stop style="max-width: 600px;">
         <div class="modal-header">
           <h4>Создать транзакцию</h4>
@@ -409,7 +409,7 @@
     </div>
 
     <!-- Rules Management Modal -->
-    <div v-if="showRulesModal" class="modal-overlay" @click="closeRulesModal">
+    <div v-if="showRulesModal" class="modal-overlay" v-modal-close="closeRulesModal">
       <div class="modal-content" @click.stop style="max-width: 900px;">
         <div class="modal-header">
           <h4>Правила автораспределения</h4>
@@ -547,7 +547,7 @@
     </div>
 
     <!-- Allocate Modal -->
-    <div v-if="showAllocateModal" class="modal-overlay" @click="closeAllocateModal">
+    <div v-if="showAllocateModal" class="modal-overlay" v-modal-close="closeAllocateModal">
       <div class="modal-content allocation-modal" @click.stop>
         <div class="modal-header d-flex justify-between align-center">
           <h4 class="m-0">Распределение платежа</h4>
@@ -701,7 +701,7 @@
     </div>
 
     <!-- UI Feedback Modal -->
-    <div v-if="uiModal.open" class="modal-overlay" @click="cancelUiModal">
+    <div v-if="uiModal.open" class="modal-overlay" v-modal-close="cancelUiModal">
       <div class="modal-content" @click.stop style="max-width: 480px;">
         <div class="modal-header">
           <h4>{{ uiModal.title }}</h4>

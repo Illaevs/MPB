@@ -156,6 +156,7 @@ import { useToast } from '../composables/useToast'
 import { useAuthStore } from '../stores/auth'
 import { normalizeAvatarUrl } from '../utils/avatar'
 import TicketDrawer from '../components/TicketDrawer.vue'
+import { formatDate, formatDateTime } from '../utils/format'
 
 const AVATAR_THEMES = [
   { bg: 'linear-gradient(135deg, #d7e7ff 0%, #b4d0ff 100%)', fg: '#2563eb' },
@@ -222,13 +223,13 @@ export default {
     const statusColor = (v) => STATUS_COLORS[v] || '#94a3b8'
     const fmtDate = (v) => {
       if (!v) return ''
-      try { return new Date(v).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: '2-digit' }) }
+      try { return formatDate(v, { day: '2-digit', month: 'short', year: '2-digit' }) }
       catch { return v }
     }
     const fmtDateTime = (v) => {
       if (!v) return ''
       try {
-        return new Date(v).toLocaleString('ru-RU', {
+        return formatDateTime(v, {
           day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
         })
       } catch { return v }

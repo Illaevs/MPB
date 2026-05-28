@@ -576,6 +576,17 @@
   outline-offset: 2px;
 }
 
+/* Sidebar menu items keep no focus ring even in high-contrast mode
+   (explicit product decision). Scoped strictly to .nav-link so all
+   other high-contrast focus indicators stay intact. Specificity
+   (0,4,0) beats the generic high-contrast rule above (0,3,0). */
+:root[data-contrast="high"] .nav-link:focus,
+:root[data-contrast="high"] .nav-link:focus-visible {
+  outline: none;
+  outline-offset: 0;
+  box-shadow: none;
+}
+
 /* ============================================================
    REDUCED MOTION (явный пользовательский тумблер).
    Зеркалит @media (prefers-reduced-motion) ниже, но управляется

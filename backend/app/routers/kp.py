@@ -24,6 +24,7 @@ from app.schemas.kp import (
     KpTemplateBindingCreate,
     KpTemplateBindingResponse,
 )
+from app.services.event_outbox import emit_event_safe
 from app.services.storage import upload_bytes_with_safe_extension, ensure_path, clean_name, read_file_bytes, publish
 from app.utils.num2words_ru import num2text_rur
 from app.core.auth_middleware import CurrentUser
@@ -214,6 +215,21 @@ async def create_kp(
     # Eager-load `versions` so the response model doesn't lazy-load it
     # outside the async context (MissingGreenlet 500).
     await db.refresh(kp, attribute_names=["versions"])
+    await emit_event_safe(
+        db,
+        event_type="kp_document.after_create",
+        entity_type="kp_document",
+        entity_id=str(kp.id),
+        payload={
+            "id": str(kp.id),
+            "lead_id": str(kp.lead_id),
+            "number_display": kp.number_display,
+            "our_company_id": str(kp.our_company_id) if kp.our_company_id else None,
+            "template_id": str(kp.template_id) if kp.template_id else None,
+        },
+        payload_version=1,
+    )
+    await db.commit()
     return kp
 
 

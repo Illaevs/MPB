@@ -100,7 +100,7 @@ export const useAuthStore = defineStore('auth', {
       clearActiveUser()
       disableUiSync()
     },
-    setSession({ user, permissions, is_superuser }) {
+    setSession({ user, permissions, is_superuser, requires_2fa_setup }) {
       const normalizedUser = normalizeUserAvatar(user || null)
       const normalizedPermissions = normalizePermissions(permissions, is_superuser)
       this.accessToken = normalizedUser ? 'cookie-session' : null
@@ -110,7 +110,18 @@ export const useAuthStore = defineStore('auth', {
       this.isSuperuser = Boolean(is_superuser)
       this.sessionChecked = true
       this._persistPendingTwoFactor(null)
-      if (!normalizedUser || normalizedUser.two_factor_enabled !== false) {
+      // Бэк — единственный источник истины по необходимости setup 2FA.
+      // Если он явно сказал «нужен setup» и юзер ещё без 2FA —
+      // выставляем pending, чтобы router увёл на форму. Иначе —
+      // принудительно очищаем, чтобы не зависать на устаревшем pending
+      // из sessionStorage прошлой попытки.
+      if (requires_2fa_setup === true
+          && normalizedUser
+          && normalizedUser.two_factor_enabled === false) {
+        this._persistPendingTwoFactorSetup({
+          email: normalizedUser.email || ''
+        })
+      } else {
         this._persistPendingTwoFactorSetup(null)
       }
       if (normalizedUser) {
@@ -151,6 +162,12 @@ export const useAuthStore = defineStore('auth', {
         this.setSession(data || {})
         return this.user
       } catch (e) {
+        // Сессии нет → также снимаем все «висящие» pending-флоу.
+        // Без этого после смены БД (или сброса бэка) фронт упорно
+        // ведёт юзера на форму setup 2FA, хотя setup-токен в бэке
+        // давно просрочен — TOTP даёт 400 «неверный код».
+        this._persistPendingTwoFactor(null)
+        this._persistPendingTwoFactorSetup(null)
         this._clearSessionState()
         this.sessionChecked = true
         return null
@@ -172,6 +189,11 @@ export const useAuthStore = defineStore('auth', {
         })
         return data
       }
+      // Если бэк больше не требует setup 2FA — снимаем любой
+      // pendingTwoFactorSetup, висящий от предыдущей попытки. Иначе
+      // фронт упорно ведёт на форму setup, хотя бэк уже выключил
+      // требование (например, REQUIRE_TWO_FACTOR=false на локалке).
+      this.clearPendingTwoFactorSetup()
       this.setSession(data)
       return data
     },

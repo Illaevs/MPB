@@ -39,6 +39,7 @@ from app.schemas.workday import (
     WorkdayStatsResponse,
     WorkSessionResponse,
 )
+from app.services.event_outbox import emit_event_safe
 from app.services.permissions import get_section_acl, is_superuser
 
 
@@ -260,6 +261,20 @@ async def start_workday(
         note_start=note,
     )
     db.add(s)
+    await db.flush()
+    await emit_event_safe(
+        db,
+        event_type="work_session.after_start",
+        entity_type="work_session",
+        entity_id=str(s.id),
+        payload={
+            "id": str(s.id),
+            "user_id": str(user.id),
+            "started_at": now.isoformat() if hasattr(now, "isoformat") else str(now),
+            "note": note,
+        },
+        payload_version=1,
+    )
     await db.commit()
     await db.refresh(s)
     return _to_response(s)
@@ -307,6 +322,29 @@ async def end_workday(
     note = (payload.note_end or "").strip() or None
     if note:
         session.note_end = note
+
+    # Считаем длительность для analytics. ended_at — tz-aware.
+    try:
+        duration_seconds = int((session.ended_at - session.started_at).total_seconds()) if session.ended_at and session.started_at else None
+    except Exception:
+        duration_seconds = None
+    await emit_event_safe(
+        db,
+        event_type="work_session.after_stop",
+        entity_type="work_session",
+        entity_id=str(session.id),
+        payload={
+            "id": str(session.id),
+            "user_id": str(user.id),
+            "started_at": session.started_at.isoformat() if session.started_at else None,
+            "ended_at": session.ended_at.isoformat() if session.ended_at else None,
+            "ended_reason": session.ended_reason,
+            "duration_seconds": duration_seconds,
+            "note_start": session.note_start,
+            "note_end": session.note_end,
+        },
+        payload_version=1,
+    )
 
     await db.commit()
     await db.refresh(session)

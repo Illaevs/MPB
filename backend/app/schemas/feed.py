@@ -12,6 +12,12 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 class FeedAttachment(BaseModel):
     url: str
     name: Optional[str] = None
+    # kind: "image" — inline-галерея, "file" — список «скрепок».
+    # У старых постов поле отсутствует → дефолт "image" (исторический
+    # тип). Это обеспечивает обратную совместимость с уже сохранёнными
+    # attachments в БД до появления произвольных файлов.
+    kind: Optional[str] = "image"
+    size: Optional[int] = None
 
 
 # ---- Author brief ---------------------------------------------------------

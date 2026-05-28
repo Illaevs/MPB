@@ -214,7 +214,7 @@
     </div>
 
     <!-- Bulk Edit Modal -->
-    <div v-if="showBulkModal" class="modal-overlay" @click="closeBulkModal">
+    <div v-if="showBulkModal" class="modal-overlay" v-modal-close="closeBulkModal">
       <div class="modal-glass" @click.stop style="max-width: 620px;">
         <div class="modal-glass-header">
           <h3 class="m-0">
@@ -275,7 +275,7 @@
 
     <!-- Confirm Modal -->
     <Teleport to="body">
-      <div v-if="confirmModalOpen" class="confirm-overlay" @click="confirmModalOpen = false">
+      <div v-if="confirmModalOpen" class="confirm-overlay" v-modal-close="() => confirmModalOpen = false">
         <div class="modal-glass" @click.stop style="max-width: 420px;">
           <div class="modal-glass-header">
             <h3 class="m-0"><i class="fas fa-exclamation-triangle mr-2"></i>{{ confirmModalTitle }}</h3>
@@ -295,7 +295,7 @@
     </Teleport>
 
     <!-- Create/Edit Modal -->
-    <div v-if="showFormModal" class="modal-overlay" @click="closeFormModal">
+    <div v-if="showFormModal" class="modal-overlay" v-modal-close="closeFormModal">
       <div class="modal-glass" @click.stop style="max-width: 600px;">
         <div class="modal-glass-header">
           <h3 class="m-0">
@@ -406,7 +406,7 @@
     </div>
 
     <!-- Link Modal -->
-    <div v-if="showLinkModal" class="modal-overlay" @click="closeLinkModal">
+    <div v-if="showLinkModal" class="modal-overlay" v-modal-close="closeLinkModal">
       <div class="modal-glass link-modal" @click.stop>
         <div class="modal-glass-header">
           <div>

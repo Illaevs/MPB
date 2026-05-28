@@ -157,6 +157,12 @@ export default {
     function setField(field, value) {
       taskFormRef.value[field] = value
       if (typeof s.triggerAutoDraftIfNeeded === 'function') s.triggerAutoDraftIfNeeded()
+      // Status / priority / срок (start_date, due_date, due_time) are discrete
+      // choices — persist immediately (like people rows), not via the
+      // 700ms debounce used for title/description. flushAutoSave + the
+      // request-counter in the composable serialize rapid clicks safely
+      // and no-op for not-yet-created tasks (guarded by isEditing).
+      if (typeof s.flushAutoSave === 'function') s.flushAutoSave()
     }
 
     const statusLabel = computed(() => {

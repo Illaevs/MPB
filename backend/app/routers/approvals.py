@@ -567,6 +567,22 @@ async def create_template(
     await _template_steps_for_save(db, template, payload.steps)
     await db.commit()
     await db.refresh(template)
+
+    # Event Bus v2: новый шаблон — может потребоваться BI/аудит-системе
+    # отследить какие правила согласования действуют.
+    from app.services.event_outbox import emit_event_safe
+    await emit_event_safe(
+        db,
+        event_type="approval_template.after_create",
+        entity_type="approval_template",
+        entity_id=str(template.id),
+        payload={
+            "id": str(template.id),
+            "name": template.name,
+            "entity_type": template.entity_type,
+            "is_active": template.is_active,
+        },
+    )
     return await _serialize_template(db, template)
 
 
@@ -593,6 +609,20 @@ async def update_template(
     await _template_steps_for_save(db, template, payload.steps)
     await db.commit()
     await db.refresh(template)
+
+    from app.services.event_outbox import emit_event_safe
+    await emit_event_safe(
+        db,
+        event_type="approval_template.after_update",
+        entity_type="approval_template",
+        entity_id=str(template.id),
+        payload={
+            "id": str(template.id),
+            "name": template.name,
+            "entity_type": template.entity_type,
+            "is_active": template.is_active,
+        },
+    )
     return await _serialize_template(db, template)
 
 
@@ -766,6 +796,24 @@ async def start_instance(
         await _notify_for_step(db, instance, first_pending_step)
     await db.commit()
     await db.refresh(instance)
+
+    # Event Bus v2: after_start — внешний consumer видит, что
+    # стартовал процесс согласования по сущности (например, бот
+    # уведомляет первого согласующего).
+    from app.services.event_outbox import emit_event_safe
+    await emit_event_safe(
+        db,
+        event_type="approval_instance.after_start",
+        entity_type="approval_instance",
+        entity_id=str(instance.id),
+        payload={
+            "id": str(instance.id),
+            "entity_type": entity_type,
+            "entity_id": str(payload.entity_id),
+            "template_id": str(payload.template_id) if getattr(payload, "template_id", None) else None,
+            "started_by": str(user.id),
+        },
+    )
     return await _serialize_instance(db, instance)
 
 
@@ -945,6 +993,8 @@ async def approve_instance_step(
         raise HTTPException(status_code=400, detail="У согласования нет активного шага.")
     await _ensure_can_act(current_step, user)
 
+    # Запомним ДО изменения — для эмиссии step.after_complete.
+    _step_id = str(current_step.id)
     current_step.status = "approved"
     current_step.acted_by = str(user.id)
     current_step.acted_at = datetime.utcnow()
@@ -981,6 +1031,36 @@ async def approve_instance_step(
         await _apply_entity_final_effect(db, instance)
     await db.commit()
     await db.refresh(instance)
+
+    # Event Bus v2: step-event + (если процесс закрыт) instance-event.
+    # Step нужен для аудита workflow: подписчик видит «шаг X подписан
+    # юзером Y». Это критично для длинных согласований.
+    from app.services.event_outbox import emit_event_safe
+    await emit_event_safe(
+        db,
+        event_type="approval_instance_step.after_complete",
+        entity_type="approval_instance_step",
+        entity_id=_step_id,
+        payload={
+            "id": _step_id,
+            "approval_instance_id": str(instance.id),
+            "completed_by": str(user.id),
+            "comment": current_step.comment,
+        },
+    )
+    if instance.status == "approved":
+        await emit_event_safe(
+            db,
+            event_type="approval_instance.after_complete",
+            entity_type="approval_instance",
+            entity_id=str(instance.id),
+            payload={
+                "id": str(instance.id),
+                "entity_type": instance.entity_type,
+                "entity_id": instance.entity_id,
+                "completed_by": str(user.id),
+            },
+        )
     return await _serialize_instance(db, instance)
 
 
@@ -1007,6 +1087,7 @@ async def reject_instance_step(
     if not _normalize_text(payload.comment):
         raise HTTPException(status_code=400, detail="Для отклонения согласования требуется комментарий.")
 
+    _step_id_r = str(current_step.id)
     current_step.status = "rejected"
     current_step.acted_by = str(user.id)
     current_step.acted_at = datetime.utcnow()
@@ -1027,4 +1108,32 @@ async def reject_instance_step(
     )
     await db.commit()
     await db.refresh(instance)
+
+    # Event Bus v2: step.after_reject + instance.after_reject.
+    from app.services.event_outbox import emit_event_safe
+    await emit_event_safe(
+        db,
+        event_type="approval_instance_step.after_reject",
+        entity_type="approval_instance_step",
+        entity_id=_step_id_r,
+        payload={
+            "id": _step_id_r,
+            "approval_instance_id": str(instance.id),
+            "rejected_by": str(user.id),
+            "reason": current_step.comment,
+        },
+    )
+    await emit_event_safe(
+        db,
+        event_type="approval_instance.after_reject",
+        entity_type="approval_instance",
+        entity_id=str(instance.id),
+        payload={
+            "id": str(instance.id),
+            "entity_type": instance.entity_type,
+            "entity_id": instance.entity_id,
+            "rejected_by": str(user.id),
+            "reason": current_step.comment,
+        },
+    )
     return await _serialize_instance(db, instance)

@@ -441,7 +441,7 @@
       <div
         v-if="versionModalOpen"
         class="ovm-overlay"
-        @click.self="cancelVersion"
+        v-modal-close="cancelVersion"
         @keydown.esc="cancelVersion"
       >
         <div class="ovm" role="dialog" aria-modal="true" aria-labelledby="ovm-title">

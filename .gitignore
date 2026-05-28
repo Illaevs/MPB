@@ -1,51 +1,186 @@
-# secrets
+# ============================================================
+# Secrets / credentials
+# ============================================================
 .env
 .env.*
+!.env.example
+!backend/.env.example
 backend/.env
 backend/.env.*
-.vscode/
-.vscode/sftp.json
+frontend/.env
+frontend/.env.*
+*.pem
+*.key
+credentials.*
 
-# python
+# ============================================================
+# Python
+# ============================================================
 venv/
+.venv/
+.venvs/
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
-# db
+# ============================================================
+# Databases (никогда не должны попадать в публичный репо)
+# ============================================================
 *.db
+*.db-shm
+*.db-wal
+*.db.bak*
 *.sqlite
 *.sqlite3
 test_portal/*.db
+test_portal/*.db-*
+test_portal/*.bak*
+test_portal/*.err
 
-# backups / generated dumps
+# ============================================================
+# Backups / generated dumps
+# ============================================================
 backups/
 _backups*/
 _eb_v2_bak/
 codepatch*/
 storage*.tgz
 *.tgz
+*.tar
+*.tar.gz
+*.zip
 
-# runtime storage
+# ============================================================
+# Runtime storage / uploads / generated static
+# ============================================================
 storage/
-static/
+backend/static/
+backend/storage/
+backend/tmp_uploads/
+backend/uploads/
 tmp_uploads/
 uploads/
 
-# frontend deps/build
+# ============================================================
+# Frontend deps / build
+# ============================================================
 node_modules/
 frontend/dist/
+frontend/dist.*/
 
+# ============================================================
+# test_portal runtime
+# ============================================================
+test_portal/static/
+test_portal/storage/
+test_portal/tmp_uploads/
+test_portal/assets/
+
+# ============================================================
 # OS / IDE
+# ============================================================
 .DS_Store
 .idea/
-test_portal/*.db*
-test_portal/assets/
-test_portal/static/
-test_portal/storage/
-test_portal/tmp_uploads/
+.vscode/
+.vscode/sftp.json
 
-test_portal/static/
-test_portal/storage/
-test_portal/tmp_uploads/
+# ============================================================
+# Dev tooling — Claude / Codex / локальные скрипты разработчика
+# ============================================================
+.claude/
+.codex_deploy/
+_make_*.ps1
+_prod_pull/
+_exports/
+
+# ============================================================
+# Временные / debug-файлы и черновики (только root, чтобы не
+# зацепить legitimate __tmp/ внутри проектов, если такие появятся)
+# ============================================================
+/__tmp_*
+/tmp_*
+/tmp-debug-*
+/_smoke_*.py
+/AUDIT_REPORT.md
+/akt_*.html
+
+# SQL-черновики в корне (миграции лежат в backend/, их не трогаем)
+/alter_*.sql
+/assign_*.sql
+/update_*.sql
+/uuid_*.sql
+
+# Прочие временные документы
+/tmp_*.docx
+/tmp-debug-*.docx
+/tmp-debug-*.xml
+
+# Логи где угодно
+*.log
+logs/
+
+# Локальный runtime storage
+_storage/
+backend/_storage/
+
+# Deploy-конфиги с кредами и серверные конфиги
+*.sftp
+*.conf
+fix_nginx_*.sh
+
+# Локальные backup-файлы любого вида (точка и дефис)
+*.bak
+*.bak_*
+*.bak-*
+*-bak-*
+*-bak_*
+*.dashboard-bak
+
+# Debug-выгрузки фронта
+frontend/debug_*.xml
+frontend/debug_*.json
+
+# Архивы
+*.rar
+*.7z
+
+# Windows-артефакт
+nul
+
+# Одноразовые скрипты и данные в корне репо (не в подпапках —
+# чтобы не зацепить настоящие test_*.py внутри backend/tests/)
+/check_*.py
+/cleanup_*.py
+/create_stress_*.py
+/stress_test.py
+/fix_tasks_table.py
+/test_*.py
+/temp_*.py
+/import_book3_*.py
+
+# Ad-hoc SQL в корне
+/dealprod_*.sql
+/drop_*.sql
+/create_test_task.sql
+/link_*.sql
+/links_query.sql
+/spa_*.sql
+/stage_*.sql
+
+# Excel/CSV и data-импорт в корне
+/book3*
+/lists*.xlsx
+/temp.csv
+/letterhtml.html
+
+# Junk-документы в корне
+/backend_filelist.txt
+/newdocs.txt
+/tmp.docx
+/tmp.pdf
+
+# Локальные старт-скрипты
+/run_frontend.bat
+/run_backend.bat
+frontend/run_*.bat

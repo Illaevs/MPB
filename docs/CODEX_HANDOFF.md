@@ -189,6 +189,35 @@
 - `frontend/src/views/ContractDetail.vue`
   - договорный контур.
 
+#### Корпоративная коммуникация и HR
+
+- `frontend/src/views/Home.vue`
+  - корпоративная лента (Feed) с постами, опросами, реакциями, комментариями, @mentions и attachments + дашборд KPI.
+
+- `frontend/src/views/Reglaments.vue`
+  - нормативная база (СП/ГОСТ/СНиП) с собственным поиском.
+
+- `frontend/src/views/MyProfile.vue`
+  - расширенный профиль сотрудника (Bitrix-стиль, inline-edit).
+
+- `frontend/src/views/Workday.vue`
+  - рабочий день (старт смены, накопительный счётчик за день, грид по всем сотрудникам).
+
+- `frontend/src/views/Absences.vue`
+  - единая таблица отсутствий + таймлайн.
+
+#### Поиск и интеграции
+
+- `frontend/src/views/Search.vue`
+  - страница глобального поиска с фильтрацией по entity_type.
+
+- `frontend/src/components/CommandPalette.vue`
+  - Ctrl+K быстрая палитра поиска.
+
+- `frontend/src/views/IntegrationsOutbox.vue`
+- `frontend/src/views/IntegrationsSubscriptions.vue`
+  - наблюдаемость Event Bus v2 (события и подписки).
+
 #### Администрирование и системные блоки
 
 - `frontend/src/views/Roles.vue`
@@ -197,8 +226,14 @@
 - `frontend/src/views/Users.vue`
   - пользователи.
 
+- `frontend/src/views/OrgStructure.vue`
+  - оргструктура подразделений.
+
 - `frontend/src/views/DataHealth.vue`
   - контроль данных / системные проблемы.
+
+- `frontend/src/views/AuditLogs.vue`
+  - аудит ключевых действий.
 
 #### Shell приложения
 
@@ -207,6 +242,14 @@
 
 - `frontend/src/config/appVariant.js`
   - брендинг, variant-specific значения, компании превью и общий app-identity слой.
+
+- `frontend/src/components/ui/MentionInput.vue`
+  - общий компонент ввода с @-упоминаниями и опциональным auto-grow textarea.
+
+- `frontend/src/components/ui/ProfileDrawer.vue`
+- `frontend/src/components/ui/WorkdayTopbarChip.vue`
+- `frontend/src/components/ui/WorkdayStartModal.vue`
+  - глобальные UI-компоненты для HR-блока (виджеты в шапке и шторка профиля).
 
 ### 4.2 Backend — роутеры, которые нужно знать
 
@@ -246,6 +289,21 @@
 - `backend/app/routers/auth.py`
 - `backend/app/routers/users.py`
 - `backend/app/routers/roles.py`
+- `backend/app/routers/org_structure.py`
+
+#### Корпоративная коммуникация и HR
+
+- `backend/app/routers/feed.py` — корпоративная лента (посты + опросы + реакции + комментарии + attachments).
+- `backend/app/routers/reglaments.py` — нормативная база.
+- `backend/app/routers/profiles.py` — расширенный профиль сотрудника.
+- `backend/app/routers/workday.py` — рабочее время.
+- `backend/app/routers/absences.py` — отсутствия.
+
+#### Поиск и Event Bus
+
+- `backend/app/routers/search.py` — гибридный поиск с per-row ACL.
+- `backend/app/routers/event_bus.py` — outbox + subscriptions + simulate.
+- `backend/app/routers/approvals.py` — согласования.
 
 #### AI и системные расширения
 
@@ -263,7 +321,6 @@
   - gantt/логика по субподрядчикам.
 
 - `backend/app/services/finance_service.py`
-- `backend/app/services/economy_service.py`
   - расчеты финансовых производных.
 
 - `backend/app/services/data_health.py`
@@ -285,7 +342,20 @@
   - справочник полей и логика плейсхолдеров.
 
 - `backend/app/services/permissions.py`
-  - если меняются права и логика видимости.
+  - если меняются права и логика видимости (в т.ч. per-row ACL pattern для child-entity, см. `INTERNAL.md` §9.1).
+
+- `backend/app/services/event_outbox.py`
+- `backend/app/services/event_dispatcher.py`
+- `backend/app/event_handlers/*`
+  - Event Bus v2: транзакционный outbox, `@on` декораторы, `before_*`/`after_*` хуки.
+
+- `backend/app/services/search_indexer.py`
+- `backend/app/services/search_semantic.py`
+  - гибридный поиск: FTS5 extractors per entity type + bge-m3 embeddings + RRF.
+
+- `backend/app/services/reglament_parser.py`
+- `backend/app/services/reglament_indexer.py`
+  - нормативная база (СП/ГОСТ/СНиП) с изолированным поисковым доменом.
 
 - `backend/app/services/ai_service.py`
   - интеграция AI-контуров.

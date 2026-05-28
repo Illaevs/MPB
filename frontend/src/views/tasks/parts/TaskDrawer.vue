@@ -1,6 +1,6 @@
 <template>
   <transition name="task-drawer-slide">
-    <div v-if="showCreateModal" class="task-drawer-overlay" @click.self="closeModal">
+    <div v-if="showCreateModal" class="task-drawer-overlay" v-modal-close="closeModal">
       <aside
         class="task-drawer"
         role="dialog"
@@ -140,18 +140,24 @@
             @drop.prevent="onMainDrop"
           >
             <div class="task-drawer__scroll">
-              <!-- Title -->
-              <input
+              <!-- Title.
+                   Заменили <input type="text"> на textarea, чтобы длинные
+                   названия (до 200 символов) переносились внутри карточки,
+                   а не уезжали за правый край без скролла. rows=1 + CSS
+                   field-sizing + auto-resize через onInput. -->
+              <textarea
                 id="task-drawer-title"
                 ref="titleInput"
                 v-model="taskForm.title"
-                type="text"
+                rows="1"
+                maxlength="200"
                 class="task-drawer__title-input"
                 :class="{ 'is-invalid': taskValidation.title }"
                 placeholder="Без названия"
-                @input="triggerAutoDraftIfNeeded"
+                @input="(e) => { autoResizeTitle(e.target); triggerAutoDraftIfNeeded() }"
+                @keydown.enter.prevent
                 @blur="validateTaskForm"
-              />
+              ></textarea>
               <div v-if="taskValidation.title" class="task-drawer__field-error">
                 <i class="fas fa-circle-exclamation mr-1"></i>{{ taskValidation.title }}
               </div>
@@ -175,6 +181,26 @@
                   @input="onDescriptionInput"
                 ></textarea>
               </div>
+
+              <!-- Subtasks (checklist) — отображается только для уже
+                   созданной задачи (нужен taskForm.id для CRUD). До
+                   первого сохранения пользователь работает с шапкой и
+                   описанием; чек-лист появится после save. -->
+              <!-- Чек-лист: для существующей задачи — обычный CRUD через
+                   API; для новой — local-only режим, pending items
+                   копятся в taskPendingChecklist и батчем создаются
+                   после первого save через flushPendingChecklist. -->
+              <TaskSubtasks
+                v-if="taskForm.id"
+                :task-id="taskForm.id"
+                :users="users"
+              />
+              <TaskSubtasks
+                v-else
+                :users="users"
+                :local-only="true"
+                v-model="taskPendingChecklist"
+              />
 
               <!-- Approval (collapsible) -->
               <CollapsibleSection
@@ -353,6 +379,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import TaskPropertyChips from './TaskPropertyChips.vue'
 import TaskPeopleRows from './TaskPeopleRows.vue'
+import TaskSubtasks from './TaskSubtasks.vue'
 import TaskChat from '../../../components/TaskChat.vue'
 import CollapsibleSection from '../../../components/ui/CollapsibleSection.vue'
 import ApprovalWidget from '../../../components/approvals/ApprovalWidget.vue'
@@ -365,7 +392,7 @@ const MOBILE_BREAKPOINT = 900
 
 export default {
   name: 'TaskDrawer',
-  components: { TaskPropertyChips, TaskPeopleRows, TaskChat, CollapsibleSection, ApprovalWidget, PropertyChip },
+  components: { TaskPropertyChips, TaskPeopleRows, TaskSubtasks, TaskChat, CollapsibleSection, ApprovalWidget, PropertyChip },
   props: { state: { type: Object, required: true } },
   setup(props) {
     const s = props.state
@@ -373,6 +400,15 @@ export default {
     const titleInput = ref(null)
     const descriptionInput = ref(null)
     const activeTab = ref('task')
+    // Локальный input для добавления пунктов pending-чек-листа
+    // (только в create-mode).
+    const newChecklistTitle = ref('')
+    function onAddPendingChecklist() {
+      const t = newChecklistTitle.value
+      if (!t || !t.trim()) return
+      s.appendPendingChecklistItem(t)
+      newChecklistTitle.value = ''
+    }
     const viewportWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1600)
 
     // Layout mode driven by viewport width.
@@ -425,9 +461,17 @@ export default {
     }
 
     // Drawer width (only honored on desktop, full on mobile via CSS).
+    // Прежний `calc(100vw - 80px)` отнимал ровно 80px — на ноуте 1366px
+    // это 1286px (94% экрана), backdrop почти не виден и закрыть кликом
+    // по пустому пространству очень сложно. Особенно при увеличенном
+    // системном масштабе.  Новая формула гарантирует ≥20% свободного
+    // пространства (80vw), но не больше 1440px на широких мониторах.
+    // `max(720px, 80vw)` страхует от слишком узкого drawer на маленьких
+    // ноутбуках (если 80vw < 720, берём 720). На совсем узких экранах
+    // (<900px) layoutMode сам становится 'mobile' и стиль игнорируется.
     const drawerStyle = computed(() => {
       if (layoutMode.value === 'mobile') return null
-      return { width: 'min(1440px, calc(100vw - 80px))' }
+      return { width: 'min(1440px, max(720px, 80vw))' }
     })
 
     // Project chip in the header — bound to the same `deal_id` the form uses.
@@ -651,12 +695,33 @@ export default {
       window.removeEventListener('resize', onResize)
     })
 
+    // Авто-высота textarea заголовка: при вводе/программном изменении
+    // (например, при открытии задачи) сбрасываем height в 'auto' и
+    // ставим scrollHeight. Лимит maxlength=200 на сам элемент, поэтому
+    // textarea не разрастётся бесконечно.
+    function autoResizeTitle(el) {
+      if (!el) return
+      el.style.height = 'auto'
+      el.style.height = `${el.scrollHeight}px`
+    }
+    // При смене задачи в drawer'е (s.taskForm.title подменяется извне)
+    // нужно пересчитать высоту, иначе textarea остаётся в 1 строку
+    // даже на длинном заголовке.
+    watch(
+      () => s.taskForm?.value?.title,
+      () => nextTick(() => autoResizeTitle(titleInput.value)),
+      { immediate: true }
+    )
+
     return {
       ...s,
       state: s,
       titleInput,
+      autoResizeTitle,
       descriptionInput,
       activeTab,
+      newChecklistTitle,
+      onAddPendingChecklist,
       layoutMode,
       taskColumnBasis,
       drawerStyle,
@@ -880,6 +945,13 @@ export default {
   padding: 0;
   line-height: var(--leading-tight);
   outline: none;
+  /* textarea-specific: убираем браузерные дефолты. */
+  resize: none;
+  overflow: hidden;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  font-family: inherit;
+  min-height: calc(var(--text-2xl) * var(--leading-tight, 1.2));
 }
 .task-drawer__title-input::placeholder {
   color: var(--color-text-subtle);
@@ -1327,5 +1399,118 @@ export default {
 :root[data-theme="dark"] .task-drawer__files-empty {
   background: rgba(15, 23, 42, 0.32);
   border-color: var(--glass-border-dark);
+}
+
+/* ── Pending checklist (только для create-mode, до первого save) ───── */
+.task-pending-checklist {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--color-border-subtle, #f1f5f9);
+  border-radius: 8px;
+  background: var(--color-surface-2, #fafafa);
+}
+.task-pending-checklist__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.task-pending-checklist__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text, #0f172a);
+}
+.task-pending-checklist__title i { color: var(--color-text-muted, #64748b); }
+.task-pending-checklist__counter {
+  font-size: 11px;
+  background: var(--color-surface-3, #e2e8f0);
+  color: var(--color-text-muted, #64748b);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+.task-pending-checklist__list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.task-pending-checklist__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+.task-pending-checklist__item:hover { background: var(--color-surface, #fff); }
+.task-pending-checklist__item--done .task-pending-checklist__item-title {
+  text-decoration: line-through;
+  color: var(--color-text-muted, #94a3b8);
+}
+.task-pending-checklist__check { display: inline-flex; align-items: center; cursor: pointer; }
+.task-pending-checklist__check input { display: none; }
+.task-pending-checklist__check-box {
+  width: 16px; height: 16px;
+  border: 1.5px solid var(--color-border, #cbd5e1);
+  border-radius: 3px;
+  display: inline-block;
+  position: relative;
+  transition: all 0.15s;
+}
+.task-pending-checklist__check input:checked + .task-pending-checklist__check-box {
+  background: var(--color-primary, #2563eb);
+  border-color: var(--color-primary, #2563eb);
+}
+.task-pending-checklist__check input:checked + .task-pending-checklist__check-box::after {
+  content: '';
+  position: absolute;
+  left: 4px; top: 0px;
+  width: 5px; height: 9px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.task-pending-checklist__item-title { flex: 1; color: var(--color-text, #0f172a); }
+.task-pending-checklist__remove {
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted, #94a3b8);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+}
+.task-pending-checklist__remove:hover {
+  background: var(--color-danger-soft, #fee2e2);
+  color: var(--color-danger, #dc2626);
+}
+.task-pending-checklist__add { margin-top: 4px; }
+.task-pending-checklist__input {
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 13px;
+  border: 1px dashed var(--color-border, #cbd5e1);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text, #0f172a);
+}
+.task-pending-checklist__input:focus {
+  outline: none;
+  border-style: solid;
+  border-color: var(--color-primary, #2563eb);
+  background: var(--color-surface, #fff);
+}
+.task-pending-checklist__input::placeholder { color: var(--color-text-muted, #94a3b8); }
+.task-pending-checklist__hint {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--color-text-muted, #94a3b8);
+  line-height: 1.4;
 }
 </style>

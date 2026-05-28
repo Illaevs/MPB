@@ -4,7 +4,7 @@
       <div class="list-card__toolbar">
     <section class="projects-toolbar-compact">
       <div class="projects-toolbar-compact__title">
-        <h1>Сделки</h1>
+        <h1>Проекты</h1>
         <span class="projects-toolbar-compact__count">{{ projects.length }} {{ getProjectsCountText(projects.length) }}</span>
       </div>
 
@@ -14,7 +14,7 @@
           v-model="searchQuery"
           type="text"
           class="form-control"
-          placeholder="Поиск по сделке, объекту или адресу..."
+          placeholder="Поиск по проекту, объекту или адресу..."
           @input="debouncedSearch"
         >
       </label>
@@ -24,14 +24,6 @@
         :options="STATUS_OPTIONS"
         placeholder="Все статусы"
         empty-icon="fas fa-circle-half-stroke"
-        @update:model-value="loadProjects"
-      />
-
-      <UiChipFilter
-        v-model="ourCompanyFilter"
-        :options="ourCompanyOptions"
-        placeholder="Наша компания"
-        empty-icon="fas fa-building"
         @update:model-value="loadProjects"
       />
 
@@ -131,7 +123,7 @@
 
       <button class="btn btn-primary projects-toolbar-compact__create" @click="showCreateModal = true">
         <i class="fas fa-plus"></i>
-        <span>Новая сделка</span>
+        <span>Новый проект</span>
       </button>
     </section>
       </div>
@@ -144,8 +136,8 @@
       <!-- Empty State -->
       <div v-else-if="projects.length === 0" class="d-flex flex-column align-center py-5 card">
         <i class="fas fa-folder-open fa-3x text-muted mb-3"></i>
-        <h4 style="margin: 0;">Нет сделок</h4>
-        <p class="text-muted">Создайте первую сделку</p>
+        <h4 style="margin: 0;">Нет проектов</h4>
+        <p class="text-muted">Создайте первый проект</p>
       </div>
 
       <!-- Table View -->
@@ -155,7 +147,6 @@
             <tr>
               <th v-show="colVisible('title')">Название</th>
               <th v-show="colVisible('customer')">{{ customerColumnLabel }}</th>
-              <th v-show="colVisible('ourCompany')">{{ ourCompanyColumnLabel }}</th>
               <th v-show="colVisible('object')">{{ objectColumnLabel }}</th>
               <th v-show="colVisible('address')">Адрес</th>
               <th v-show="colVisible('status')">Статус</th>
@@ -164,7 +155,12 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="project in paginatedProjects" :key="project.id">
+            <tr
+              v-for="project in paginatedProjects"
+              :key="project.id"
+              class="project-row"
+              @click="$router.push(`/projects/${project.id}`)"
+            >
               <td v-show="colVisible('title')" style="font-weight: 500;">
                 <router-link :to="`/projects/${project.id}`" style="color: var(--md-sys-color-primary); text-decoration: none;">
                   {{ project.title }}
@@ -181,7 +177,6 @@
                 </button>
               </td>
               <td v-show="colVisible('customer')" class="text-muted">{{ getProjectCustomerLabel(project) }}</td>
-              <td v-show="colVisible('ourCompany')" class="text-muted">{{ getProjectOurCompanyLabel(project) }}</td>
               <td v-show="colVisible('object')" class="text-muted">{{ project.obj_name || '-' }}</td>
               <td v-show="colVisible('address')" class="text-muted">{{ project.address || '-' }}</td>
               <td v-show="colVisible('status')">
@@ -205,10 +200,10 @@
                   >
                     <i class="fas fa-thumbtack"></i>
                   </button>
-                  <button class="btn btn-sm btn-outline-primary" @click="editProject(project)">
+                  <button class="btn btn-sm btn-outline-primary" @click.stop="editProject(project)">
                     <i class="fas fa-edit"></i>
                   </button>
-                  <button class="btn btn-sm btn-danger" style="background: transparent; color: var(--color-danger); border: 1px solid var(--color-danger);" @click="deleteProject(project)">
+                  <button class="btn btn-sm btn-danger" style="background: transparent; color: var(--color-danger); border: 1px solid var(--color-danger);" @click.stop="deleteProject(project)">
                     <i class="fas fa-trash"></i>
                   </button>
                 </div>
@@ -248,6 +243,9 @@
                :delay-on-touch-only="true"
                :force-fallback="isTouchDevice"
                fallback-on-body
+               ghost-class="kanban-card--ghost"
+               chosen-class="kanban-card--chosen"
+               drag-class="kanban-card--dragging"
                @change="onProjectKanbanChange($event, status.key)"
             >
                <template #item="{ element: project }">
@@ -293,10 +291,10 @@
     </div>
 
     <!-- Модальное окно — компактная компоновка по образцу LeadFormModal -->
-    <div v-if="showCreateModal" class="modal-overlay project-modal-overlay" @click.self="closeModal">
+    <div v-if="showCreateModal" class="modal-overlay project-modal-overlay" v-modal-close="closeModal">
       <div class="project-modal" @click.stop>
         <div class="project-modal__header">
-          <h3 class="project-modal__title m-0">{{ isEditing ? 'Редактировать сделку' : 'Новая сделка' }}</h3>
+          <h3 class="project-modal__title m-0">{{ isEditing ? 'Редактировать проект' : 'Новый проект' }}</h3>
           <button type="button" class="project-modal__icon-btn" @click="closeModal" aria-label="Закрыть"><i class="fas fa-times"></i></button>
         </div>
 
@@ -345,15 +343,6 @@
                 placeholder="Найти заказчика"
               />
             </div>
-            <div class="project-modal__field">
-              <label for="our_company_id">Наша компания</label>
-              <CompanySmartSelect
-                input-id="our_company_id"
-                v-model="projectForm.our_company_id"
-                :options="internalCompanies"
-                placeholder="Найти нашу компанию"
-              />
-            </div>
           </div>
 
           <div class="project-modal__field">
@@ -391,7 +380,6 @@ import { useCompaniesStore } from '../stores/companies'
 const PROJECT_COLUMNS = [
   { key: 'title', label: 'Название' },
   { key: 'customer', label: 'Заказчик' },
-  { key: 'ourCompany', label: 'Наша компания' },
   { key: 'object', label: 'Объект' },
   { key: 'address', label: 'Адрес' },
   { key: 'status', label: 'Статус' },
@@ -432,7 +420,7 @@ export default {
     const togglePinProject = (p) => {
       if (!p?.id) return
       togglePinnedEntity(projectPinPath(p), {
-        label: p.title || 'Сделка',
+        label: p.title || 'Проект',
         icon: 'fa-project-diagram',
         type: 'project',
       })
@@ -476,12 +464,10 @@ export default {
     // Filter variables
     const searchQuery = ref('')
     const statusFilter = ref('')
-    const ourCompanyFilter = ref('')
     const customerFilter = ref('')
     const minContractValue = ref(null)
     const maxContractValue = ref(null)
     const customerColumnLabel = '\u0417\u0430\u043A\u0430\u0437\u0447\u0438\u043A'
-    const ourCompanyColumnLabel = '\u041D\u0430\u0448\u0430 \u043A\u043E\u043C\u043F\u0430\u043D\u0438\u044F'
     const objectColumnLabel = '\u041E\u0431\u044A\u0435\u043A\u0442'
     const pageSize = 10
     const currentPage = ref(1)
@@ -493,21 +479,11 @@ export default {
       object_type: '',
       object_area: null,
       customer_id: '',
-      our_company_id: '',
       total_contract_value: 0,
       status: 'active'
     })
 
-    const internalCompanies = computed(() => companies.value.filter(company => company.type === 'internal'))
     const customerCompanies = computed(() => companies.value.filter(company => company.type === 'customer'))
-
-    // Опции для UiChipFilter (наша компания) — генерируем из справочника.
-    const ourCompanyOptions = computed(() =>
-      internalCompanies.value.map((company) => ({
-        value: company.id,
-        label: company.short_name || company.name,
-      }))
-    )
 
     // Debounce timer
     let searchTimeout = null
@@ -542,9 +518,6 @@ export default {
         if (statusFilter.value) {
           params.append('status', statusFilter.value)
         }
-        if (ourCompanyFilter.value) {
-          params.append('our_company_id', ourCompanyFilter.value)
-        }
         if (customerFilter.value) {
           params.append('customer_id', customerFilter.value)
         }
@@ -565,7 +538,7 @@ export default {
         await loadProjectHealthCounts()
       } catch (error) {
         console.error('Error loading projects:', error)
-        toast.error('Ошибка загрузки сделок')
+        toast.error('Ошибка загрузки проектов')
       } finally {
         loading.value = false
       }
@@ -586,7 +559,6 @@ export default {
     const clearFilters = () => {
       searchQuery.value = ''
       statusFilter.value = ''
-      ourCompanyFilter.value = ''
       customerFilter.value = ''
       minContractValue.value = null
       maxContractValue.value = null
@@ -595,11 +567,11 @@ export default {
 
     const getProjectsCountText = (count) => {
       if (count % 10 === 1 && count % 100 !== 11) {
-        return 'сделку'
+        return 'проект'
       } else if ([2, 3, 4].includes(count % 10) && ![12, 13, 14].includes(count % 100)) {
-        return 'сделки'
+        return 'проекта'
       } else {
-        return 'сделок'
+        return 'проектов'
       }
     }
 
@@ -639,7 +611,7 @@ export default {
 
       console.log('Starting save project...')
       if (!projectForm.value.title.trim()) {
-        toast.error('Название сделки обязательно')
+        toast.error('Название проекта обязательно')
         return
       }
 
@@ -657,7 +629,7 @@ export default {
 
         await loadProjects()
         closeModal()
-        toast.success(wasEditing ? 'Сделка обновлена' : 'Сделка создана')
+        toast.success(wasEditing ? 'Проект обновлён' : 'Проект создан')
       } catch (error) {
         console.error('Error saving project:', error)
         if (error.response) {
@@ -694,22 +666,17 @@ export default {
       return project?.customer_name || project?.customer?.name || getCompanyNameById(project?.customer_id)
     }
 
-    const getProjectOurCompanyLabel = (project) => {
-      return project?.our_company_name || project?.our_company?.name || getCompanyNameById(project?.our_company_id)
-    }
-
     const editProject = (project) => {
       projectForm.value = {
         ...project,
         customer_id: normalizeId(project.customer_id),
-        our_company_id: normalizeId(project.our_company_id)
       }
       isEditing.value = true
       showCreateModal.value = true
     }
 
     const deleteProject = async (project) => {
-      if (!confirm(`Удалить сделку "${project.title}"?`)) {
+      if (!confirm(`Удалить проект "${project.title}"?`)) {
         return
       }
 
@@ -718,7 +685,7 @@ export default {
         await loadProjects()
       } catch (error) {
         console.error('Error deleting project:', error)
-        toast.error('Ошибка удаления сделки')
+        toast.error('Ошибка удаления проекта')
       }
     }
 
@@ -741,7 +708,6 @@ export default {
         object_type: '',
         object_area: null,
         customer_id: '',
-        our_company_id: '',
         total_contract_value: 0,
         status: 'active'
       }
@@ -836,12 +802,10 @@ export default {
       projectForm,
       searchQuery,
       statusFilter,
-      ourCompanyFilter,
       customerFilter,
       minContractValue,
       maxContractValue,
       customerColumnLabel,
-      ourCompanyColumnLabel,
       objectColumnLabel,
       PROJECT_COLUMNS,
       colMenuOpen,
@@ -861,7 +825,6 @@ export default {
       getProjectHealthCount,
       openProjectHealth,
       STATUS_OPTIONS,
-      ourCompanyOptions,
       loadProjects,
       saveProject,
       editProject,
@@ -875,9 +838,7 @@ export default {
       getStatusClass,
       getStatusText,
       getProjectCustomerLabel,
-      getProjectOurCompanyLabel,
       getProjectsCountText,
-      internalCompanies,
       customerCompanies,
       objectTypeOptions,
       viewMode,
@@ -924,19 +885,21 @@ export default {
 .projects-toolbar-compact {
   display: flex;
   align-items: center;
+  /* row-gap нужен, чтобы при wrap-переносе строки не слипались. */
   gap: var(--space-2);
-  flex-wrap: nowrap;
+  row-gap: var(--space-2);
+  /* Раньше было `flex-wrap: nowrap` + @media wrap при 1280px. На
+     промежуточных ширинах и при zoom (например 110-125%) ширина
+     контейнера падает ниже суммы фикс-полей, но wrap ещё не включался —
+     поля выходили за границы и накладывались на действия справа.
+     Делаем wrap по умолчанию: на широких всё в одну строку, на узких/
+     при zoom — аккуратно переносится. */
+  flex-wrap: wrap;
   overflow: visible;
   position: relative;
   z-index: 5;
   width: 100%;
   min-width: 0;
-}
-
-@media (max-width: 1280px) {
-  .projects-toolbar-compact {
-    flex-wrap: wrap;
-  }
 }
 
 .project-health-count {
@@ -1091,14 +1054,26 @@ export default {
 
 .projects-toolbar-compact__field--customer .smart-select {
   width: 170px;
+  max-width: 100%;
 }
 
 .projects-toolbar-compact__field--customer .form-control {
   width: 170px;
+  max-width: 100%;
 }
 
 .projects-toolbar-compact__field--narrow .form-control {
   width: 74px;
+}
+
+/* На совсем узких экранах (планшеты + ноутбуки с большим zoom) делаем
+   поиск минимально 100% — он становится отдельной строкой, чтобы не
+   делил ширину с остальными фильтрами. Без этого `flex: 1 1 0` отнимает
+   у других полей пространство и они получаются неудобно узкими. */
+@media (max-width: 980px) {
+  .projects-toolbar-compact__search {
+    flex: 1 1 100%;
+  }
 }
 
 /* Segmented view-switcher — mirrors Tasks .tb__segmented */
@@ -1321,6 +1296,11 @@ export default {
   font-size: var(--text-base);
   color: var(--color-text);
   flex-shrink: 0;
+  /* Sticky header — название проекта-колонки видно при скролле списка
+     карточек вниз. */
+  position: sticky;
+  top: 0;
+  z-index: 3;
 }
 .kanban-header > .small.text-muted {
   font-size: var(--text-xs);
@@ -1338,7 +1318,20 @@ export default {
   flex-direction: column;
   gap: var(--space-2);
   overflow-y: auto;
-  min-height: 0;
+  /* Drop-zone — на всю оставшуюся высоту колонки. min-height страхует от
+     «мёртвой» зоны под последней карточкой при коротких списках. */
+  flex: 1 1 auto;
+  min-height: 240px;
+  padding: 4px 0 8px;
+}
+
+/* Whole table row navigates to the project; inner buttons stop bubbling. */
+.project-row {
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+.project-row:hover {
+  background-color: var(--color-primary-soft, rgba(99, 102, 241, 0.06));
 }
 
 .kanban-card {
@@ -1357,6 +1350,26 @@ export default {
 }
 
 .kanban-card:active { cursor: grabbing; }
+
+/* DND visual states (vuedraggable / Sortable.js classes).
+   - ghost   — placeholder в новой позиции (рамка-пунктир, видно «куда упадёт»).
+   - chosen  — карточка в исходной позиции, пока её тащат (приглушённая).
+   - dragging — клон, который ездит за курсором (приподнят, чёткая тень). */
+.kanban-card--ghost {
+  background: rgba(33, 150, 243, 0.06) !important;
+  border: 2px dashed rgba(33, 150, 243, 0.55) !important;
+  box-shadow: none !important;
+}
+.kanban-card--ghost > * { visibility: hidden; }
+.kanban-card--chosen {
+  opacity: 0.45;
+}
+.kanban-card--dragging {
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.22) !important;
+  transform: rotate(1.5deg) !important;
+  cursor: grabbing !important;
+  border-color: rgba(33, 150, 243, 0.55) !important;
+}
 
 /* ============================================================
    Create / edit modal — mirrors LeadFormModal.vue compact layout

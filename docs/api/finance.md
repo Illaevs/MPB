@@ -1,13 +1,13 @@
 # Finance & Billing API
 
-Сгенерировано из `docs/API.md` на 2026-02-15 03:22:39 (local time).
+Сгенерировано из `docs/API.md` на 2026-05-29 01:30:41 (local time).
 
 ## Scope
 - Домен: `finance`
-- Описание: Финансы, казначейство, ДДС, экономика, штрафы и договоры.
-- Routers: `5`
-- Endpoints: `87`
-- Список роутеров: `finance`, `income_expense`, `economy`, `penalty_rules`, `contracts`
+- Описание: Финансы, казначейство, ДДС, штрафы и договоры.
+- Routers: `4`
+- Endpoints: `65`
+- Список роутеров: `finance`, `income_expense`, `penalty_rules`, `contracts`
 
 ## Common Rules
 - Общие правила API (base URL, auth headers, коды ошибок) вынесены в `docs/api/INDEX.md`.
@@ -15,7 +15,7 @@
 
 ## Data Contract Catalog (Domain)
 
-Модели, используемые в домене: `45`.
+Модели, используемые в домене: `25`.
 
 ### Model `FinancialPlanCreate`
 
@@ -318,311 +318,6 @@ Source: `backend/app/schemas/income_expense.py`
 | category_code | Optional[str] | no | None | - |
 
 
-### Model `AdvancePaymentCreate`
-
-Source: `backend/app/schemas/advance_payment.py`
-
-
-| Field | Type | Required | Default | Constraints |
-| --- | --- | --- | --- | --- |
-| deal_id | Optional[UUID] | no | None | - |
-| contract_id | Optional[UUID] | no | None | - |
-| amount_total | float | no | 0.0 | - |
-| vat_rate | float | no | 20.0 | - |
-| remaining_total | float | no | 0.0 | - |
-
-
-### Model `AdvancePaymentResponse`
-
-Source: `backend/app/schemas/advance_payment.py`
-
-
-| Field | Type | Required | Default | Constraints |
-| --- | --- | --- | --- | --- |
-| deal_id | Optional[UUID] | no | None | - |
-| contract_id | Optional[UUID] | no | None | - |
-| amount_total | float | no | 0.0 | - |
-| vat_rate | float | no | 20.0 | - |
-| remaining_total | float | no | 0.0 | - |
-| id | UUID | yes | - | - |
-| created_at | Optional[datetime] | no | None | - |
-| updated_at | Optional[datetime] | no | None | - |
-
-
-### Model `AdvancePaymentUpdate`
-
-Source: `backend/app/schemas/advance_payment.py`
-
-
-| Field | Type | Required | Default | Constraints |
-| --- | --- | --- | --- | --- |
-| amount_total | Optional[float] | no | None | - |
-| remaining_total | Optional[float] | no | None | - |
-| vat_rate | Optional[float] | no | None | - |
-
-
-### Model `InflationIndexCreate`
-
-Source: `backend/app/schemas/inflation_index.py`
-
-
-| Field | Type | Required | Default | Constraints |
-| --- | --- | --- | --- | --- |
-| period | str | yes | - | - |
-| value | float | no | 1.0 | - |
-| note | Optional[str] | no | None | - |
-
-
-### Model `InflationIndexResponse`
-
-Source: `backend/app/schemas/inflation_index.py`
-
-
-| Field | Type | Required | Default | Constraints |
-| --- | --- | --- | --- | --- |
-| period | str | yes | - | - |
-| value | float | no | 1.0 | - |
-| note | Optional[str] | no | None | - |
-| id | UUID | yes | - | - |
-| created_at | Optional[datetime] | no | None | - |
-| updated_at | Optional[datetime] | no | None | - |
-
-
-### Model `InflationIndexUpdate`
-
-Source: `backend/app/schemas/inflation_index.py`
-
-
-| Field | Type | Required | Default | Constraints |
-| --- | --- | --- | --- | --- |
-| period | Optional[str] | no | None | - |
-| value | Optional[float] | no | None | - |
-| note | Optional[str] | no | None | - |
-
-
-### Model `OverheadAllocationResponse`
-
-Source: `backend/app/schemas/overhead_allocation.py`
-
-
-| Field | Type | Required | Default | Constraints |
-| --- | --- | --- | --- | --- |
-| id | UUID | yes | - | - |
-| deal_id | UUID | yes | - | - |
-| period | str | yes | - | - |
-| amount | float | yes | - | - |
-| calc_version | int | yes | - | - |
-| created_at | Optional[datetime] | no | None | - |
-| updated_at | Optional[datetime] | no | None | - |
-
-
-### Model `OverheadCreate`
-
-Source: `backend/app/schemas/overhead.py`
-
-
-| Field | Type | Required | Default | Constraints |
-| --- | --- | --- | --- | --- |
-| period | str | yes | - | - |
-| amount | float | no | 0.0 | - |
-| category | Optional[str] | no | None | - |
-| source | Optional[str] | no | 'manual' | - |
-
-
-### Model `OverheadResponse`
-
-Source: `backend/app/schemas/overhead.py`
-
-
-| Field | Type | Required | Default | Constraints |
-| --- | --- | --- | --- | --- |
-| period | str | yes | - | - |
-| amount | float | no | 0.0 | - |
-| category | Optional[str] | no | None | - |
-| source | Optional[str] | no | 'manual' | - |
-| id | UUID | yes | - | - |
-| created_at | Optional[datetime] | no | None | - |
-| updated_at | Optional[datetime] | no | None | - |
-
-
-### Model `OverheadUpdate`
-
-Source: `backend/app/schemas/overhead.py`
-
-
-| Field | Type | Required | Default | Constraints |
-| --- | --- | --- | --- | --- |
-| period | Optional[str] | no | None | - |
-| amount | Optional[float] | no | None | - |
-| category | Optional[str] | no | None | - |
-| source | Optional[str] | no | None | - |
-
-
-### Model `PricingModelCreate`
-
-Source: `backend/app/schemas/pricing_model.py`
-
-
-| Field | Type | Required | Default | Constraints |
-| --- | --- | --- | --- | --- |
-| name | str | yes | - | - |
-| base_margin | float | no | 0.0 | - |
-| risk_reserve | float | no | 0.0 | - |
-| inflation_mode | str | no | 'auto' | - |
-
-
-### Model `PricingModelResponse`
-
-Source: `backend/app/schemas/pricing_model.py`
-
-
-| Field | Type | Required | Default | Constraints |
-| --- | --- | --- | --- | --- |
-| name | str | yes | - | - |
-| base_margin | float | no | 0.0 | - |
-| risk_reserve | float | no | 0.0 | - |
-| inflation_mode | str | no | 'auto' | - |
-| id | UUID | yes | - | - |
-| created_at | Optional[datetime] | no | None | - |
-| updated_at | Optional[datetime] | no | None | - |
-
-
-### Model `PricingModelUpdate`
-
-Source: `backend/app/schemas/pricing_model.py`
-
-
-| Field | Type | Required | Default | Constraints |
-| --- | --- | --- | --- | --- |
-| name | Optional[str] | no | None | - |
-| base_margin | Optional[float] | no | None | - |
-| risk_reserve | Optional[float] | no | None | - |
-| inflation_mode | Optional[str] | no | None | - |
-
-
-### Model `PricingQuoteCreate`
-
-Source: `backend/app/schemas/pricing_quote.py`
-
-
-| Field | Type | Required | Default | Constraints |
-| --- | --- | --- | --- | --- |
-| deal_id | UUID | yes | - | - |
-| model_id | Optional[UUID] | no | None | - |
-| calc_date | Optional[date] | no | None | - |
-| margin | Optional[float] | no | None | - |
-| risk | Optional[float] | no | None | - |
-
-
-### Model `PricingQuoteResponse`
-
-Source: `backend/app/schemas/pricing_quote.py`
-
-
-| Field | Type | Required | Default | Constraints |
-| --- | --- | --- | --- | --- |
-| id | UUID | yes | - | - |
-| deal_id | UUID | yes | - | - |
-| model_id | Optional[UUID] | no | None | - |
-| calc_date | date | yes | - | - |
-| base_cost | float | yes | - | - |
-| overheads | float | yes | - | - |
-| indexed_cost | float | yes | - | - |
-| risk | float | yes | - | - |
-| margin | float | yes | - | - |
-| final_price | float | yes | - | - |
-| created_at | Optional[datetime] | no | None | - |
-| updated_at | Optional[datetime] | no | None | - |
-
-
-### Model `QualityAlertCreate`
-
-Source: `backend/app/schemas/quality_alert.py`
-
-
-| Field | Type | Required | Default | Constraints |
-| --- | --- | --- | --- | --- |
-| deal_id | UUID | yes | - | - |
-| alert_type | str | yes | - | - |
-| severity | str | no | 'info' | - |
-| message | str | yes | - | - |
-
-
-### Model `QualityAlertResponse`
-
-Source: `backend/app/schemas/quality_alert.py`
-
-
-| Field | Type | Required | Default | Constraints |
-| --- | --- | --- | --- | --- |
-| deal_id | UUID | yes | - | - |
-| alert_type | str | yes | - | - |
-| severity | str | no | 'info' | - |
-| message | str | yes | - | - |
-| id | UUID | yes | - | - |
-| created_at | Optional[datetime] | no | None | - |
-| updated_at | Optional[datetime] | no | None | - |
-
-
-### Model `StageClosingCreate`
-
-Source: `backend/app/schemas/stage_closing.py`
-
-
-| Field | Type | Required | Default | Constraints |
-| --- | --- | --- | --- | --- |
-| stage_id | UUID | yes | - | - |
-| deal_id | UUID | yes | - | - |
-| contract_id | Optional[UUID] | no | None | - |
-| closing_date | date | yes | - | - |
-| base_amount | float | yes | - | - |
-
-
-### Model `StageClosingResponse`
-
-Source: `backend/app/schemas/stage_closing.py`
-
-
-| Field | Type | Required | Default | Constraints |
-| --- | --- | --- | --- | --- |
-| stage_id | UUID | yes | - | - |
-| deal_id | UUID | yes | - | - |
-| contract_id | Optional[UUID] | no | None | - |
-| closing_date | date | yes | - | - |
-| base_amount | float | yes | - | - |
-| id | UUID | yes | - | - |
-| vat_rate | float | yes | - | - |
-| vat_amount | float | yes | - | - |
-| total_amount | float | yes | - | - |
-| advance_covered_base | float | yes | - | - |
-| advance_covered_vat | float | yes | - | - |
-| remaining_base | float | yes | - | - |
-| remaining_vat | float | yes | - | - |
-| created_at | Optional[datetime] | no | None | - |
-| updated_at | Optional[datetime] | no | None | - |
-
-
-### Model `WipMonthlyResponse`
-
-Source: `backend/app/schemas/wip_monthly.py`
-
-
-| Field | Type | Required | Default | Constraints |
-| --- | --- | --- | --- | --- |
-| id | UUID | yes | - | - |
-| deal_id | UUID | yes | - | - |
-| stage_id | UUID | yes | - | - |
-| period | str | yes | - | - |
-| base_amount | float | yes | - | - |
-| vat_rate | float | yes | - | - |
-| vat_amount | float | yes | - | - |
-| total_amount | float | yes | - | - |
-| is_forecast | bool | yes | - | - |
-| calc_version | int | yes | - | - |
-| created_at | Optional[datetime] | no | None | - |
-| updated_at | Optional[datetime] | no | None | - |
-
-
 ### Model `PenaltyRuleCreate`
 
 Source: `backend/app/schemas/penalty_rule.py`
@@ -719,11 +414,13 @@ Source: `backend/app/schemas/contract_document.py`
 | doc_type | str | yes | - | - |
 | number_in_contract | int | yes | - | - |
 | status | Optional[str] | no | 'draft' | - |
+| amount | Optional[float] | no | None | - |
 | pdf_file_name | Optional[str] | no | None | - |
 | pdf_storage_path | Optional[str] | no | None | - |
 | edit_file_name | Optional[str] | no | None | - |
 | edit_storage_path | Optional[str] | no | None | - |
 | id | Union[str, UUID] | yes | - | - |
+| linked_products | List[ContractDocumentProductLinkResponse] | no | factory:list | - |
 | created_at | Optional[datetime] | no | None | - |
 | updated_at | Optional[datetime] | no | None | - |
 
@@ -736,6 +433,7 @@ Source: `backend/app/schemas/contract_document.py`
 | Field | Type | Required | Default | Constraints |
 | --- | --- | --- | --- | --- |
 | status | Optional[str] | no | None | - |
+| amount | Optional[float] | no | None | - |
 
 
 ### Model `ContractResponse`
@@ -1162,8 +860,10 @@ Endpoints: `30`
   - Internal calls:
     - `Depends`
     - `db.execute`
-    - `db.commit`
     - `HTTPException`
+    - `db.commit`
+    - `emit_event_safe`
+    - `select`
     - `delete`
   - Side effects: DB write, DB read
 - Error Handling:
@@ -1193,6 +893,7 @@ Endpoints: `30`
     - `TreasuryAllocationResponse.model_validate`
     - `db.execute`
     - `HTTPException`
+    - `emit_event_safe`
     - `db.commit`
     - `db.refresh`
     - `select`
@@ -1416,6 +1117,7 @@ Endpoints: `30`
     - `db.flush`
     - `db.commit`
     - `db.refresh`
+    - `emit_event_safe`
     - `select`
   - Side effects: DB write, DB read
 - Error Handling:
@@ -1480,6 +1182,7 @@ Endpoints: `30`
     - `HTTPException`
     - `db.delete`
     - `db.commit`
+    - `emit_event_safe`
     - `select`
     - `delete`
   - Side effects: DB write, DB read
@@ -1511,6 +1214,7 @@ Endpoints: `30`
     - `HTTPException`
     - `db.commit`
     - `db.refresh`
+    - `emit_event_safe`
     - `TreasuryAllocation`
     - `db.add`
     - `select`
@@ -1574,9 +1278,10 @@ Endpoints: `30`
     - `db.execute`
     - `HTTPException`
     - `IncomeExpenseEntry`
+    - `db.flush`
+    - `emit_event_safe`
     - `db.commit`
     - `db.refresh`
-    - `db.flush`
     - `select`
   - Side effects: DB write, DB read
 - Error Handling:
@@ -1678,14 +1383,14 @@ Source: `backend/app/routers/income_expense.py`
 
 Prefix: `/api/v1/income-expense`
 
-Endpoints: `5`
+Endpoints: `7`
 
 #### `GET /api/v1/income-expense`
 
 - Controller: `backend/app/routers/income_expense.py::list_income_expense_entries`
 - Data Contract:
   - Path params: none
-  - Query params: `skip`: int (optional, default=0, constraints=-); `limit`: int (optional, default=100, constraints=-); `direction`: Optional[str] (optional, default=None, constraints=-); `status`: Optional[str] (optional, default=None, constraints=-); `payer_id`: Optional[str] (optional, default=None, constraints=-); `payee_id`: Optional[str] (optional, default=None, constraints=-); `deal_id`: Optional[str] (optional, default=None, constraints=-); `contract_id`: Optional[str] (optional, default=None, constraints=-); `search`: Optional[str] (optional, default=None, constraints=-)
+  - Query params: `skip`: int (optional, default=0, constraints=-); `limit`: int (optional, default=100, constraints=-); `direction`: Optional[str] (optional, default=None, constraints=-); `status`: Optional[str] (optional, default=None, constraints=-); `exclude_paid`: bool (optional, default=False, constraints=-); `payer_id`: Optional[str] (optional, default=None, constraints=-); `payee_id`: Optional[str] (optional, default=None, constraints=-); `deal_id`: Optional[str] (optional, default=None, constraints=-); `contract_id`: Optional[str] (optional, default=None, constraints=-); `search`: Optional[str] (optional, default=None, constraints=-)
   - Header params: none
   - Form params: none
   - File params: none
@@ -1729,6 +1434,7 @@ Endpoints: `5`
     - `IncomeExpenseEntry`
     - `db.add`
     - `db.refresh`
+    - `emit_event_safe`
     - `db.execute`
     - `HTTPException`
     - `db.commit`
@@ -1740,13 +1446,47 @@ Endpoints: `5`
   - `404`: `Deal not found`; `Contract not found`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
+#### `PATCH /api/v1/income-expense/bulk/update`
+
+- Controller: `backend/app/routers/income_expense.py::bulk_update_income_expense_entries`
+- Data Contract:
+  - Path params: none
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: `payload`: dict
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context; route may enforce role/section checks
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Body`
+    - `Depends`
+    - `HTTPException`
+    - `get_section_permissions`
+    - `db.execute`
+    - `db.commit`
+    - `allowed_deal_ids`
+    - `IncomeExpenseEntry.id.in_`
+    - `select`
+  - Side effects: DB write, DB read
+- Error Handling:
+  - `400`: `No entries selected`; `No fields to update`; `Invalid contract_id`; body schema `{"detail": "..."}`
+  - `403`: `No access to income/expense entries`; `No access to selected entries`; `No access to target deal`; body schema `{"detail": "..."}`
+  - `404`: `Entries not found`; `Deal not found`; `Contract not found`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
 #### `GET /api/v1/income-expense/count`
 
 - Controller: `backend/app/routers/income_expense.py::count_income_expense_entries`
 - Summary: Get total count of income/expense entries with same filters as list.
 - Data Contract:
   - Path params: none
-  - Query params: `direction`: Optional[str] (optional, default=None, constraints=-); `status`: Optional[str] (optional, default=None, constraints=-); `payer_id`: Optional[str] (optional, default=None, constraints=-); `payee_id`: Optional[str] (optional, default=None, constraints=-); `deal_id`: Optional[str] (optional, default=None, constraints=-); `contract_id`: Optional[str] (optional, default=None, constraints=-); `search`: Optional[str] (optional, default=None, constraints=-)
+  - Query params: `direction`: Optional[str] (optional, default=None, constraints=-); `status`: Optional[str] (optional, default=None, constraints=-); `exclude_paid`: bool (optional, default=False, constraints=-); `payer_id`: Optional[str] (optional, default=None, constraints=-); `payee_id`: Optional[str] (optional, default=None, constraints=-); `deal_id`: Optional[str] (optional, default=None, constraints=-); `contract_id`: Optional[str] (optional, default=None, constraints=-); `search`: Optional[str] (optional, default=None, constraints=-)
   - Header params: none
   - Form params: none
   - File params: none
@@ -1786,14 +1526,47 @@ Endpoints: `5`
     - `Depends`
     - `db.execute`
     - `HTTPException`
+    - `ensure_can_edit_record`
     - `get_section_permissions`
     - `db.delete`
     - `db.commit`
+    - `emit_event_safe`
     - `allowed_deal_ids`
     - `select`
     - `delete`
     - `update`
   - Side effects: DB write, DB read
+- Error Handling:
+  - `404`: `Entry not found`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/income-expense/{entry_id}`
+
+- Controller: `backend/app/routers/income_expense.py::get_income_expense_entry`
+- Data Contract:
+  - Path params: `entry_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Response model: `IncomeExpenseEntryResponse`
+  - Response contracts: [`IncomeExpenseEntryResponse`](#model-incomeexpenseentryresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `db.execute`
+    - `HTTPException`
+    - `get_section_permissions`
+    - `allowed_deal_ids`
+    - `select`
+  - Side effects: DB read
 - Error Handling:
   - `404`: `Entry not found`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
@@ -1812,747 +1585,25 @@ Endpoints: `5`
   - Response contracts: [`IncomeExpenseEntryResponse`](#model-incomeexpenseentryresponse)
   - Success status: `200`
 - Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
+  - Access mode: JWT (AuthMiddleware) + current user context
   - Depends/Security:
     - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
 - Logic Flow:
   - Internal calls:
     - `Depends`
     - `db.execute`
     - `HTTPException`
+    - `ensure_can_edit_record`
     - `db.commit`
     - `db.refresh`
+    - `emit_event_safe`
     - `Contract.get_by_id`
     - `select`
   - Side effects: DB write, DB read
 - Error Handling:
   - `400`: `Invalid contract_id`; body schema `{"detail": "..."}`
   - `404`: `Entry not found`; `Payer company not found`; `Payee company not found`; `Deal not found`; `Contract not found`; body schema `{"detail": "..."}`
-  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
-
-
-### Router `economy`
-
-Source: `backend/app/routers/economy.py`
-
-Prefix: `/api/v1/economy`
-
-Endpoints: `26`
-
-#### `GET /api/v1/economy/advances`
-
-- Controller: `backend/app/routers/economy.py::list_advances`
-- Data Contract:
-  - Path params: none
-  - Query params: `deal_id`: Optional[str] (optional, default=None, constraints=-); `contract_id`: Optional[str] (optional, default=None, constraints=-)
-  - Header params: none
-  - Form params: none
-  - File params: none
-  - Body: none
-  - Response model: `List[AdvancePaymentResponse]`
-  - Response contracts: [`AdvancePaymentResponse`](#model-advancepaymentresponse)
-  - Success status: `200`
-- Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
-  - Depends/Security:
-    - `db: Depends(get_db)`
-- Logic Flow:
-  - Internal calls:
-    - `Depends`
-    - `select`
-    - `db.execute`
-    - `AdvancePayment.created_at.desc`
-  - Side effects: DB write, DB read
-- Error Handling:
-  - Explicit `HTTPException` not found in handler body
-  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
-
-#### `POST /api/v1/economy/advances`
-
-- Controller: `backend/app/routers/economy.py::create_advance`
-- Data Contract:
-  - Path params: none
-  - Query params: none
-  - Header params: none
-  - Form params: none
-  - File params: none
-  - Body models: [`AdvancePaymentCreate`](#model-advancepaymentcreate)
-  - Response model: `AdvancePaymentResponse`
-  - Response contracts: [`AdvancePaymentResponse`](#model-advancepaymentresponse)
-  - Success status: `200`
-- Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
-  - Depends/Security:
-    - `db: Depends(get_db)`
-- Logic Flow:
-  - Internal calls:
-    - `Depends`
-    - `AdvancePayment`
-    - `db.add`
-    - `db.commit`
-    - `db.refresh`
-  - Side effects: DB write
-- Error Handling:
-  - Explicit `HTTPException` not found in handler body
-  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
-
-#### `PATCH /api/v1/economy/advances/{item_id}`
-
-- Controller: `backend/app/routers/economy.py::update_advance`
-- Data Contract:
-  - Path params: `item_id`: str (required, default=-, constraints=-)
-  - Query params: none
-  - Header params: none
-  - Form params: none
-  - File params: none
-  - Body models: [`AdvancePaymentUpdate`](#model-advancepaymentupdate)
-  - Response model: `AdvancePaymentResponse`
-  - Response contracts: [`AdvancePaymentResponse`](#model-advancepaymentresponse)
-  - Success status: `200`
-- Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
-  - Depends/Security:
-    - `db: Depends(get_db)`
-- Logic Flow:
-  - Internal calls:
-    - `Depends`
-    - `db.execute`
-    - `HTTPException`
-    - `db.commit`
-    - `db.refresh`
-    - `select`
-  - Side effects: DB write, DB read
-- Error Handling:
-  - `404`: `Advance not found`; body schema `{"detail": "..."}`
-  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
-
-#### `GET /api/v1/economy/alerts`
-
-- Controller: `backend/app/routers/economy.py::list_quality_alerts`
-- Data Contract:
-  - Path params: none
-  - Query params: `deal_id`: Optional[str] (optional, default=None, constraints=-)
-  - Header params: none
-  - Form params: none
-  - File params: none
-  - Body: none
-  - Response model: `List[QualityAlertResponse]`
-  - Response contracts: [`QualityAlertResponse`](#model-qualityalertresponse)
-  - Success status: `200`
-- Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
-  - Depends/Security:
-    - `db: Depends(get_db)`
-- Logic Flow:
-  - Internal calls:
-    - `Depends`
-    - `select`
-    - `db.execute`
-    - `QualityAlert.created_at.desc`
-  - Side effects: DB write, DB read
-- Error Handling:
-  - Explicit `HTTPException` not found in handler body
-  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
-
-#### `POST /api/v1/economy/alerts`
-
-- Controller: `backend/app/routers/economy.py::create_quality_alert`
-- Data Contract:
-  - Path params: none
-  - Query params: none
-  - Header params: none
-  - Form params: none
-  - File params: none
-  - Body models: [`QualityAlertCreate`](#model-qualityalertcreate)
-  - Response model: `QualityAlertResponse`
-  - Response contracts: [`QualityAlertResponse`](#model-qualityalertresponse)
-  - Success status: `200`
-- Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
-  - Depends/Security:
-    - `db: Depends(get_db)`
-- Logic Flow:
-  - Internal calls:
-    - `Depends`
-    - `QualityAlert`
-    - `db.add`
-    - `db.commit`
-    - `db.refresh`
-  - Side effects: DB write
-- Error Handling:
-  - Explicit `HTTPException` not found in handler body
-  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
-
-#### `GET /api/v1/economy/inflation`
-
-- Controller: `backend/app/routers/economy.py::list_inflation`
-- Data Contract:
-  - Path params: none
-  - Query params: none
-  - Header params: none
-  - Form params: none
-  - File params: none
-  - Body: none
-  - Response model: `List[InflationIndexResponse]`
-  - Response contracts: [`InflationIndexResponse`](#model-inflationindexresponse)
-  - Success status: `200`
-- Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
-  - Depends/Security:
-    - `db: Depends(get_db)`
-- Logic Flow:
-  - Internal calls:
-    - `Depends`
-    - `InflationIndex.get_all`
-  - Side effects: No explicit side effects (read/transform path)
-- Error Handling:
-  - Explicit `HTTPException` not found in handler body
-  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
-
-#### `POST /api/v1/economy/inflation`
-
-- Controller: `backend/app/routers/economy.py::create_inflation`
-- Data Contract:
-  - Path params: none
-  - Query params: none
-  - Header params: none
-  - Form params: none
-  - File params: none
-  - Body models: [`InflationIndexCreate`](#model-inflationindexcreate)
-  - Response model: `InflationIndexResponse`
-  - Response contracts: [`InflationIndexResponse`](#model-inflationindexresponse)
-  - Success status: `200`
-- Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
-  - Depends/Security:
-    - `db: Depends(get_db)`
-- Logic Flow:
-  - Internal calls:
-    - `Depends`
-    - `InflationIndex.get_by_period`
-    - `HTTPException`
-    - `InflationIndex.create`
-  - Side effects: DB write
-- Error Handling:
-  - `400`: `Period already exists`; body schema `{"detail": "..."}`
-  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
-
-#### `DELETE /api/v1/economy/inflation/{item_id}`
-
-- Controller: `backend/app/routers/economy.py::delete_inflation`
-- Data Contract:
-  - Path params: `item_id`: str (required, default=-, constraints=-)
-  - Query params: none
-  - Header params: none
-  - Form params: none
-  - File params: none
-  - Body: none
-  - Success status: `200`
-- Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
-  - Depends/Security:
-    - `db: Depends(get_db)`
-- Logic Flow:
-  - Internal calls:
-    - `Depends`
-    - `InflationIndex.delete`
-    - `HTTPException`
-  - Side effects: No explicit side effects (read/transform path)
-- Error Handling:
-  - `404`: `Inflation index not found`; body schema `{"detail": "..."}`
-  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
-
-#### `PUT /api/v1/economy/inflation/{item_id}`
-
-- Controller: `backend/app/routers/economy.py::update_inflation`
-- Data Contract:
-  - Path params: `item_id`: str (required, default=-, constraints=-)
-  - Query params: none
-  - Header params: none
-  - Form params: none
-  - File params: none
-  - Body models: [`InflationIndexUpdate`](#model-inflationindexupdate)
-  - Response model: `InflationIndexResponse`
-  - Response contracts: [`InflationIndexResponse`](#model-inflationindexresponse)
-  - Success status: `200`
-- Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
-  - Depends/Security:
-    - `db: Depends(get_db)`
-- Logic Flow:
-  - Internal calls:
-    - `Depends`
-    - `InflationIndex.get_by_id`
-    - `HTTPException`
-    - `InflationIndex.update`
-  - Side effects: DB write
-- Error Handling:
-  - `404`: `Inflation index not found`; body schema `{"detail": "..."}`
-  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
-
-#### `GET /api/v1/economy/overheads`
-
-- Controller: `backend/app/routers/economy.py::list_overheads`
-- Data Contract:
-  - Path params: none
-  - Query params: none
-  - Header params: none
-  - Form params: none
-  - File params: none
-  - Body: none
-  - Response model: `List[OverheadResponse]`
-  - Response contracts: [`OverheadResponse`](#model-overheadresponse)
-  - Success status: `200`
-- Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
-  - Depends/Security:
-    - `db: Depends(get_db)`
-- Logic Flow:
-  - Internal calls:
-    - `Depends`
-    - `Overhead.get_all`
-  - Side effects: No explicit side effects (read/transform path)
-- Error Handling:
-  - Explicit `HTTPException` not found in handler body
-  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
-
-#### `POST /api/v1/economy/overheads`
-
-- Controller: `backend/app/routers/economy.py::create_overhead`
-- Data Contract:
-  - Path params: none
-  - Query params: none
-  - Header params: none
-  - Form params: none
-  - File params: none
-  - Body models: [`OverheadCreate`](#model-overheadcreate)
-  - Response model: `OverheadResponse`
-  - Response contracts: [`OverheadResponse`](#model-overheadresponse)
-  - Success status: `200`
-- Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
-  - Depends/Security:
-    - `db: Depends(get_db)`
-- Logic Flow:
-  - Internal calls:
-    - `Depends`
-    - `Overhead.create`
-  - Side effects: DB write
-- Error Handling:
-  - Explicit `HTTPException` not found in handler body
-  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
-
-#### `POST /api/v1/economy/overheads/allocate`
-
-- Controller: `backend/app/routers/economy.py::allocate_overheads`
-- Data Contract:
-  - Path params: none
-  - Query params: `period`: str (required, default=-, constraints=-)
-  - Header params: none
-  - Form params: none
-  - File params: none
-  - Body: none
-  - Response model: `List[OverheadAllocationResponse]`
-  - Response contracts: [`OverheadAllocationResponse`](#model-overheadallocationresponse)
-  - Success status: `200`
-- Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
-  - Depends/Security:
-    - `db: Depends(get_db)`
-- Logic Flow:
-  - Internal calls:
-    - `Depends`
-    - `EconomyService.allocate_overheads`
-  - Side effects: No explicit side effects (read/transform path)
-- Error Handling:
-  - Explicit `HTTPException` not found in handler body
-  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
-
-#### `GET /api/v1/economy/overheads/allocations`
-
-- Controller: `backend/app/routers/economy.py::list_overhead_allocations`
-- Data Contract:
-  - Path params: none
-  - Query params: `deal_id`: Optional[str] (optional, default=None, constraints=-); `period`: Optional[str] (optional, default=None, constraints=-)
-  - Header params: none
-  - Form params: none
-  - File params: none
-  - Body: none
-  - Response model: `List[OverheadAllocationResponse]`
-  - Response contracts: [`OverheadAllocationResponse`](#model-overheadallocationresponse)
-  - Success status: `200`
-- Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
-  - Depends/Security:
-    - `db: Depends(get_db)`
-- Logic Flow:
-  - Internal calls:
-    - `Depends`
-    - `select`
-    - `db.execute`
-  - Side effects: DB read
-- Error Handling:
-  - Explicit `HTTPException` not found in handler body
-  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
-
-#### `POST /api/v1/economy/overheads/import-dds`
-
-- Controller: `backend/app/routers/economy.py::import_overheads_from_dds`
-- Data Contract:
-  - Path params: none
-  - Query params: none
-  - Header params: none
-  - Form params: none
-  - File params: none
-  - Body: none
-  - Response model: `List[OverheadResponse]`
-  - Response contracts: [`OverheadResponse`](#model-overheadresponse)
-  - Success status: `200`
-- Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
-  - Depends/Security:
-    - `db: Depends(get_db)`
-- Logic Flow:
-  - Internal calls:
-    - `Depends`
-    - `EconomyService.import_overheads_from_dds`
-  - Side effects: No explicit side effects (read/transform path)
-- Error Handling:
-  - Explicit `HTTPException` not found in handler body
-  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
-
-#### `DELETE /api/v1/economy/overheads/{item_id}`
-
-- Controller: `backend/app/routers/economy.py::delete_overhead`
-- Data Contract:
-  - Path params: `item_id`: str (required, default=-, constraints=-)
-  - Query params: none
-  - Header params: none
-  - Form params: none
-  - File params: none
-  - Body: none
-  - Success status: `200`
-- Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
-  - Depends/Security:
-    - `db: Depends(get_db)`
-- Logic Flow:
-  - Internal calls:
-    - `Depends`
-    - `Overhead.delete`
-    - `HTTPException`
-  - Side effects: No explicit side effects (read/transform path)
-- Error Handling:
-  - `404`: `Overhead not found`; body schema `{"detail": "..."}`
-  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
-
-#### `PUT /api/v1/economy/overheads/{item_id}`
-
-- Controller: `backend/app/routers/economy.py::update_overhead`
-- Data Contract:
-  - Path params: `item_id`: str (required, default=-, constraints=-)
-  - Query params: none
-  - Header params: none
-  - Form params: none
-  - File params: none
-  - Body models: [`OverheadUpdate`](#model-overheadupdate)
-  - Response model: `OverheadResponse`
-  - Response contracts: [`OverheadResponse`](#model-overheadresponse)
-  - Success status: `200`
-- Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
-  - Depends/Security:
-    - `db: Depends(get_db)`
-- Logic Flow:
-  - Internal calls:
-    - `Depends`
-    - `Overhead.get_by_id`
-    - `HTTPException`
-    - `Overhead.update`
-  - Side effects: DB write
-- Error Handling:
-  - `404`: `Overhead not found`; body schema `{"detail": "..."}`
-  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
-
-#### `GET /api/v1/economy/pricing/models`
-
-- Controller: `backend/app/routers/economy.py::list_pricing_models`
-- Data Contract:
-  - Path params: none
-  - Query params: none
-  - Header params: none
-  - Form params: none
-  - File params: none
-  - Body: none
-  - Response model: `List[PricingModelResponse]`
-  - Response contracts: [`PricingModelResponse`](#model-pricingmodelresponse)
-  - Success status: `200`
-- Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
-  - Depends/Security:
-    - `db: Depends(get_db)`
-- Logic Flow:
-  - Internal calls:
-    - `Depends`
-    - `db.execute`
-    - `PricingModel.created_at.desc`
-    - `select`
-  - Side effects: DB write, DB read
-- Error Handling:
-  - Explicit `HTTPException` not found in handler body
-  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
-
-#### `POST /api/v1/economy/pricing/models`
-
-- Controller: `backend/app/routers/economy.py::create_pricing_model`
-- Data Contract:
-  - Path params: none
-  - Query params: none
-  - Header params: none
-  - Form params: none
-  - File params: none
-  - Body models: [`PricingModelCreate`](#model-pricingmodelcreate)
-  - Response model: `PricingModelResponse`
-  - Response contracts: [`PricingModelResponse`](#model-pricingmodelresponse)
-  - Success status: `200`
-- Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
-  - Depends/Security:
-    - `db: Depends(get_db)`
-- Logic Flow:
-  - Internal calls:
-    - `Depends`
-    - `PricingModel`
-    - `db.add`
-    - `db.commit`
-    - `db.refresh`
-  - Side effects: DB write
-- Error Handling:
-  - Explicit `HTTPException` not found in handler body
-  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
-
-#### `DELETE /api/v1/economy/pricing/models/{item_id}`
-
-- Controller: `backend/app/routers/economy.py::delete_pricing_model`
-- Data Contract:
-  - Path params: `item_id`: str (required, default=-, constraints=-)
-  - Query params: none
-  - Header params: none
-  - Form params: none
-  - File params: none
-  - Body: none
-  - Success status: `200`
-- Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
-  - Depends/Security:
-    - `db: Depends(get_db)`
-- Logic Flow:
-  - Internal calls:
-    - `Depends`
-    - `db.execute`
-    - `HTTPException`
-    - `db.delete`
-    - `db.commit`
-    - `select`
-  - Side effects: DB write, DB read
-- Error Handling:
-  - `404`: `Pricing model not found`; body schema `{"detail": "..."}`
-  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
-
-#### `PUT /api/v1/economy/pricing/models/{item_id}`
-
-- Controller: `backend/app/routers/economy.py::update_pricing_model`
-- Data Contract:
-  - Path params: `item_id`: str (required, default=-, constraints=-)
-  - Query params: none
-  - Header params: none
-  - Form params: none
-  - File params: none
-  - Body models: [`PricingModelUpdate`](#model-pricingmodelupdate)
-  - Response model: `PricingModelResponse`
-  - Response contracts: [`PricingModelResponse`](#model-pricingmodelresponse)
-  - Success status: `200`
-- Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
-  - Depends/Security:
-    - `db: Depends(get_db)`
-- Logic Flow:
-  - Internal calls:
-    - `Depends`
-    - `db.execute`
-    - `HTTPException`
-    - `db.commit`
-    - `db.refresh`
-    - `select`
-  - Side effects: DB write, DB read
-- Error Handling:
-  - `404`: `Pricing model not found`; body schema `{"detail": "..."}`
-  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
-
-#### `POST /api/v1/economy/pricing/quote`
-
-- Controller: `backend/app/routers/economy.py::create_pricing_quote`
-- Data Contract:
-  - Path params: none
-  - Query params: none
-  - Header params: none
-  - Form params: none
-  - File params: none
-  - Body models: [`PricingQuoteCreate`](#model-pricingquotecreate)
-  - Response model: `PricingQuoteResponse`
-  - Response contracts: [`PricingQuoteResponse`](#model-pricingquoteresponse)
-  - Success status: `200`
-- Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
-  - Depends/Security:
-    - `db: Depends(get_db)`
-- Logic Flow:
-  - Internal calls:
-    - `Depends`
-    - `EconomyService.calculate_pricing_quote`
-  - Side effects: No explicit side effects (read/transform path)
-- Error Handling:
-  - Explicit `HTTPException` not found in handler body
-  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
-
-#### `GET /api/v1/economy/pricing/quotes`
-
-- Controller: `backend/app/routers/economy.py::list_pricing_quotes`
-- Data Contract:
-  - Path params: none
-  - Query params: `deal_id`: Optional[str] (optional, default=None, constraints=-)
-  - Header params: none
-  - Form params: none
-  - File params: none
-  - Body: none
-  - Response model: `List[PricingQuoteResponse]`
-  - Response contracts: [`PricingQuoteResponse`](#model-pricingquoteresponse)
-  - Success status: `200`
-- Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
-  - Depends/Security:
-    - `db: Depends(get_db)`
-- Logic Flow:
-  - Internal calls:
-    - `Depends`
-    - `select`
-    - `db.execute`
-    - `PricingQuote.calc_date.desc`
-  - Side effects: DB read
-- Error Handling:
-  - Explicit `HTTPException` not found in handler body
-  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
-
-#### `GET /api/v1/economy/stage-closings`
-
-- Controller: `backend/app/routers/economy.py::list_stage_closings`
-- Data Contract:
-  - Path params: none
-  - Query params: `deal_id`: Optional[str] (optional, default=None, constraints=-); `stage_id`: Optional[str] (optional, default=None, constraints=-)
-  - Header params: none
-  - Form params: none
-  - File params: none
-  - Body: none
-  - Response model: `List[StageClosingResponse]`
-  - Response contracts: [`StageClosingResponse`](#model-stageclosingresponse)
-  - Success status: `200`
-- Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
-  - Depends/Security:
-    - `db: Depends(get_db)`
-- Logic Flow:
-  - Internal calls:
-    - `Depends`
-    - `select`
-    - `db.execute`
-  - Side effects: DB read
-- Error Handling:
-  - Explicit `HTTPException` not found in handler body
-  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
-
-#### `POST /api/v1/economy/stage-closings`
-
-- Controller: `backend/app/routers/economy.py::create_stage_closing`
-- Data Contract:
-  - Path params: none
-  - Query params: none
-  - Header params: none
-  - Form params: none
-  - File params: none
-  - Body models: [`StageClosingCreate`](#model-stageclosingcreate)
-  - Response model: `StageClosingResponse`
-  - Response contracts: [`StageClosingResponse`](#model-stageclosingresponse)
-  - Success status: `200`
-- Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
-  - Depends/Security:
-    - `db: Depends(get_db)`
-- Logic Flow:
-  - Internal calls:
-    - `Depends`
-    - `EconomyService.vat_rate_for_date`
-    - `StageClosing`
-    - `db.add`
-    - `db.execute`
-    - `db.commit`
-    - `db.refresh`
-    - `select`
-  - Side effects: DB write, DB read
-- Error Handling:
-  - Explicit `HTTPException` not found in handler body
-  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
-
-#### `GET /api/v1/economy/wip`
-
-- Controller: `backend/app/routers/economy.py::list_wip`
-- Data Contract:
-  - Path params: none
-  - Query params: `deal_id`: Optional[str] (optional, default=None, constraints=-)
-  - Header params: none
-  - Form params: none
-  - File params: none
-  - Body: none
-  - Response model: `List[WipMonthlyResponse]`
-  - Response contracts: [`WipMonthlyResponse`](#model-wipmonthlyresponse)
-  - Success status: `200`
-- Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
-  - Depends/Security:
-    - `db: Depends(get_db)`
-- Logic Flow:
-  - Internal calls:
-    - `Depends`
-    - `db.execute`
-    - `select`
-  - Side effects: DB read
-- Error Handling:
-  - Explicit `HTTPException` not found in handler body
-  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
-
-#### `POST /api/v1/economy/wip/rebuild`
-
-- Controller: `backend/app/routers/economy.py::rebuild_wip`
-- Data Contract:
-  - Path params: none
-  - Query params: `deal_id`: str (required, default=-, constraints=-)
-  - Header params: none
-  - Form params: none
-  - File params: none
-  - Body: none
-  - Response model: `List[WipMonthlyResponse]`
-  - Response contracts: [`WipMonthlyResponse`](#model-wipmonthlyresponse)
-  - Success status: `200`
-- Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
-  - Depends/Security:
-    - `db: Depends(get_db)`
-- Logic Flow:
-  - Internal calls:
-    - `Depends`
-    - `EconomyService.rebuild_wip_for_deal`
-  - Side effects: No explicit side effects (read/transform path)
-- Error Handling:
-  - Explicit `HTTPException` not found in handler body
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 
@@ -2735,7 +1786,7 @@ Source: `backend/app/routers/contracts.py`
 
 Prefix: `/api/v1/contracts`
 
-Endpoints: `20`
+Endpoints: `22`
 
 #### `GET /api/v1/contracts`
 
@@ -2743,7 +1794,7 @@ Endpoints: `20`
 - Summary: List contracts with pagination, search and filters
 - Data Contract:
   - Path params: none
-  - Query params: `skip`: int (optional, default=0, constraints=-); `limit`: int (optional, default=100, constraints=-); `search`: Optional[str] (optional, default=None, constraints=-); `contract_type`: Optional[str] (optional, default=None, constraints=-); `status`: Optional[str] (optional, default=None, constraints=-); `customer_id`: Optional[str] (optional, default=None, constraints=-); `executor_id`: Optional[str] (optional, default=None, constraints=-); `deal_id`: Optional[str] (optional, default=None, constraints=-); `subcontractor_card_id`: Optional[str] (optional, default=None, constraints=-)
+  - Query params: `skip`: int (optional, default=0, constraints=-); `limit`: int (optional, default=100, constraints=-); `search`: Optional[str] (optional, default=None, constraints=-); `contract_type`: Optional[str] (optional, default=None, constraints=-); `status`: Optional[str] (optional, default=None, constraints=-); `customer_id`: Optional[str] (optional, default=None, constraints=-); `executor_id`: Optional[str] (optional, default=None, constraints=-); `deal_id`: Optional[str] (optional, default=None, constraints=-); `subcontractor_card_id`: Optional[str] (optional, default=None, constraints=-); `sort_by`: Optional[str] (optional, default='contract_date', constraints=-); `sort_dir`: Optional[str] (optional, default='desc', constraints=-)
   - Header params: none
   - Form params: none
   - File params: none
@@ -2760,6 +1811,7 @@ Endpoints: `20`
     - `Depends`
     - `get_section_permissions`
     - `Contract.search_all`
+    - `_apply_service_paid_amounts`
     - `Contract.count_by_status`
     - `allowed_deal_ids`
     - `Contract.get_by_deal_id`
@@ -2784,17 +1836,24 @@ Endpoints: `20`
   - Response contracts: [`ContractResponse`](#model-contractresponse)
   - Success status: `200`
 - Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
+  - Access mode: JWT (AuthMiddleware) + current user context
   - Depends/Security:
     - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
 - Logic Flow:
   - Internal calls:
     - `Depends`
     - `HTTPException`
     - `Contract.create`
+    - `_apply_service_paid_amounts`
+    - `safe_refresh_deal_health_issues`
+    - `emit_event_safe`
+    - `db.commit`
     - `Deal.get_by_id`
     - `SubcontractorCard.get_by_id`
-  - Side effects: DB write
+    - `safe_refresh_orphan_health_issues`
+    - `log_event`
+  - Side effects: DB write, Audit/Event logging
 - Error Handling:
   - `400`: `Unsupported contract_type`; `Contract must be linked to deal or subcontractor, not both`; body schema `{"detail": "..."}`
   - `404`: `Deal not found`; `Subcontractor not found`; body schema `{"detail": "..."}`
@@ -2824,6 +1883,7 @@ Endpoints: `20`
     - `Depends`
     - `get_section_permissions`
     - `Contract.get_by_deal_id`
+    - `_apply_service_paid_amounts`
     - `allowed_deal_ids`
   - Side effects: No explicit side effects (read/transform path)
 - Error Handling:
@@ -2850,8 +1910,11 @@ Endpoints: `20`
     - `Depends`
     - `ContractDocument.get_by_id`
     - `HTTPException`
+    - `db.execute`
+    - `db.commit`
     - `ContractDocument.delete`
-  - Side effects: No explicit side effects (read/transform path)
+    - `delete`
+  - Side effects: DB write, DB read
 - Error Handling:
   - `404`: `Document not found`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
@@ -2877,6 +1940,7 @@ Endpoints: `20`
   - Internal calls:
     - `Depends`
     - `HTTPException`
+    - `ContractDocument.get_by_id`
     - `ContractDocument.update`
   - Side effects: DB write
 - Error Handling:
@@ -2919,6 +1983,65 @@ Endpoints: `20`
   - `404`: `Document not found`; `File not found`; `File not found in storage`; body schema `{"detail": "..."}`
   - `500`: `Storage is not configured`; body schema `{"detail": "..."}`
   - `502`: `Failed to resolve storage download link`; `Failed to download file from storage`; `Failed to download file`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `DELETE /api/v1/contracts/documents/{document_id}/file`
+
+- Controller: `backend/app/routers/contracts.py::delete_contract_document_file`
+- Data Contract:
+  - Path params: `document_id`: str (required, default=-, constraints=-)
+  - Query params: `file_kind`: str (required, default=-, constraints=-)
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Response model: `ContractDocumentResponse`
+  - Response contracts: [`ContractDocumentResponse`](#model-contractdocumentresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware)
+  - Depends/Security:
+    - `db: Depends(get_db)`
+- Logic Flow:
+  - Internal calls:
+    - `Query`
+    - `Depends`
+    - `HTTPException`
+    - `ContractDocument.get_by_id`
+    - `ContractDocument.update`
+    - `delete_path`
+  - Side effects: DB write
+- Error Handling:
+  - `400`: `Invalid file_kind`; body schema `{"detail": "..."}`
+  - `404`: `Document not found`; `File not found`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `PATCH /api/v1/contracts/documents/{document_id}/products`
+
+- Controller: `backend/app/routers/contracts.py::update_contract_document_products`
+- Data Contract:
+  - Path params: `document_id`: str (required, default=-, constraints=-)
+  - Query params: `payload`: DocumentProductLinksUpdate (required, default=-, constraints=-)
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Response model: `ContractDocumentResponse`
+  - Response contracts: [`ContractDocumentResponse`](#model-contractdocumentresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware)
+  - Depends/Security:
+    - `db: Depends(get_db)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `ContractDocument.get_by_id`
+    - `HTTPException`
+  - Side effects: No explicit side effects (read/transform path)
+- Error Handling:
+  - `400`: `Product links are available only for invoices`; body schema `{"detail": "..."}`
+  - `404`: `Document not found`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 #### `POST /api/v1/contracts/documents/{document_id}/upload`
@@ -2980,6 +2103,7 @@ Endpoints: `20`
     - `Depends`
     - `get_section_permissions`
     - `Contract.get_by_subcontractor_card_id`
+    - `_apply_service_paid_amounts`
     - `allowed_deal_ids`
   - Side effects: No explicit side effects (read/transform path)
 - Error Handling:
@@ -2999,15 +2123,22 @@ Endpoints: `20`
   - Body: none
   - Success status: `200`
 - Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
+  - Access mode: JWT (AuthMiddleware) + current user context
   - Depends/Security:
     - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
 - Logic Flow:
   - Internal calls:
     - `Depends`
-    - `Contract.delete`
+    - `Contract.get_by_id`
     - `HTTPException`
-  - Side effects: No explicit side effects (read/transform path)
+    - `ensure_can_edit_record`
+    - `Contract.delete`
+    - `safe_refresh_deal_health_issues`
+    - `emit_event_safe`
+    - `safe_refresh_orphan_health_issues`
+    - `log_event`
+  - Side effects: Audit/Event logging
 - Error Handling:
   - `404`: `Contract not found`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
@@ -3037,6 +2168,7 @@ Endpoints: `20`
     - `Contract.get_by_id`
     - `HTTPException`
     - `get_section_permissions`
+    - `_apply_service_paid_amounts`
     - `allowed_deal_ids`
   - Side effects: No explicit side effects (read/transform path)
 - Error Handling:
@@ -3058,20 +2190,27 @@ Endpoints: `20`
   - Response contracts: [`ContractResponse`](#model-contractresponse)
   - Success status: `200`
 - Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
+  - Access mode: JWT (AuthMiddleware) + current user context
   - Depends/Security:
     - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
 - Logic Flow:
   - Internal calls:
     - `Depends`
     - `HTTPException`
     - `Contract.get_by_id`
+    - `ensure_can_edit_record`
     - `Contract.update`
+    - `_apply_service_paid_amounts`
+    - `safe_refresh_deal_health_issues`
+    - `emit_event_safe`
     - `Deal.get_by_id`
     - `SubcontractorCard.get_by_id`
-  - Side effects: DB write
+    - `safe_refresh_orphan_health_issues`
+    - `logger.exception`
+  - Side effects: DB write, Audit/Event logging
 - Error Handling:
-  - `400`: `Unsupported contract_type`; `Contract must be linked to deal or subcontractor, not both`; body schema `{"detail": "..."}`
+  - `400`: `Unsupported contract_type`; `Contract must be linked to deal or subcontractor, not both`; `result.reason`; body schema `{"detail": "..."}`
   - `404`: `Contract not found`; `Deal not found`; `Subcontractor not found`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
@@ -3100,12 +2239,12 @@ Endpoints: `20`
     - `HTTPException`
     - `ContractDocument.get_by_contract`
     - `db.execute`
+    - `set_committed_value`
     - `Deal.get_by_id`
     - `SubcontractorCard.get_by_id`
     - `ContractPaymentSummary`
     - `IncomeExpenseEntry.plan_date.desc`
     - `ContractStageSummary`
-    - `Stage.get_by_deal_id`
   - Side effects: DB read
 - Error Handling:
   - `404`: `Contract not found`; body schema `{"detail": "..."}`
@@ -3147,30 +2286,32 @@ Endpoints: `20`
   - Path params: `contract_id`: str (required, default=-, constraints=-)
   - Query params: none
   - Header params: none
-  - Form params: `doc_type`: str (required, default=-, constraints=-); `file_kind`: str (required, default=-, constraints=-); `status`: Optional[str] (optional, default='draft', constraints=-)
+  - Form params: `doc_type`: str (required, default=-, constraints=-); `file_kind`: str (required, default=-, constraints=-); `status`: Optional[str] (optional, default='draft', constraints=-); `amount`: Optional[float] (optional, default=None, constraints=-); `product_ids`: Optional[str] (optional, default=None, constraints=-)
   - File params: `file`: UploadFile (required, default=-, constraints=-)
   - Body: none
   - Response model: `ContractDocumentResponse`
   - Response contracts: [`ContractDocumentResponse`](#model-contractdocumentresponse)
   - Success status: `200`
 - Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
+  - Access mode: JWT (AuthMiddleware) + current user context
   - Depends/Security:
     - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
 - Logic Flow:
   - Internal calls:
     - `Form`
     - `File`
     - `Depends`
-    - `clean_name`
     - `HTTPException`
     - `Contract.get_by_id`
+    - `sequence_lock`
+    - `clean_name`
     - `ContractDocument.get_by_contract_and_type`
     - `ensure_path`
     - `upload_bytes_with_safe_extension`
     - `ContractDocument.create`
     - `(settings.STORAGE_LOCAL_ROOT or '').rstrip`
-  - Side effects: DB write, File/storage operation
+  - Side effects: DB write, Audit/Event logging, File/storage operation
 - Error Handling:
   - `400`: `Invalid doc_type`; `Invalid file_kind`; `Invalid status`; body schema `{"detail": "..."}`
   - `404`: `Contract not found`; body schema `{"detail": "..."}`
@@ -3342,18 +2483,23 @@ Endpoints: `20`
   - Body: none
   - Success status: `200`
 - Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
+  - Access mode: JWT (AuthMiddleware) + current user context
   - Depends/Security:
     - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
 - Logic Flow:
   - Internal calls:
     - `Depends`
     - `Contract.get_by_id`
     - `HTTPException`
+    - `ensure_can_edit_record`
     - `Contract.update`
+    - `safe_refresh_deal_health_issues`
     - `Deal.get_by_id`
     - `SubcontractorCard.get_by_id`
-  - Side effects: DB write
+    - `safe_refresh_orphan_health_issues`
+    - `log_event`
+  - Side effects: DB write, Audit/Event logging
 - Error Handling:
   - `400`: `Contract must be linked to deal or subcontractor, not both`; body schema `{"detail": "..."}`
   - `404`: `Contract not found`; `Deal not found`; `Subcontractor not found`; body schema `{"detail": "..."}`

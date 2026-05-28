@@ -37,6 +37,7 @@ from app.schemas.stage_product_subtask import (
     StageProductSubtaskResponse,
 )
 from app.services.data_health import safe_refresh_deal_health_issues
+from app.services.event_outbox import emit_event_safe
 
 
 router = APIRouter()
@@ -554,6 +555,21 @@ async def create_assignment(
 
     assignment = await StageProductAssignment.create(db, **item_data)
     await safe_refresh_deal_health_issues(db, assignment.deal_id)
+    await emit_event_safe(
+        db,
+        event_type="stage_product_assignment.after_create",
+        entity_type="stage_product_assignment",
+        entity_id=str(assignment.id),
+        payload={
+            "id": str(assignment.id),
+            "deal_id": str(assignment.deal_id) if assignment.deal_id else None,
+            "stage_id": str(assignment.stage_id) if assignment.stage_id else None,
+            "product_id": str(assignment.product_id) if assignment.product_id else None,
+            "subcontractor_card_id": str(assignment.subcontractor_card_id) if assignment.subcontractor_card_id else None,
+            "contract_id": str(assignment.contract_id) if assignment.contract_id else None,
+        },
+        payload_version=1,
+    )
     return assignment
 
 
@@ -563,10 +579,24 @@ async def update_assignment(
     payload: StageProductAssignmentUpdate,
     db: AsyncSession = Depends(get_db),
 ):
-    assignment = await StageProductAssignment.update(db, assignment_id, **payload.dict(exclude_unset=True))
+    update_payload = payload.dict(exclude_unset=True)
+    assignment = await StageProductAssignment.update(db, assignment_id, **update_payload)
     if not assignment:
         raise HTTPException(status_code=404, detail="Assignment not found")
     await safe_refresh_deal_health_issues(db, assignment.deal_id)
+    await emit_event_safe(
+        db,
+        event_type="stage_product_assignment.after_update",
+        entity_type="stage_product_assignment",
+        entity_id=str(assignment.id),
+        payload={
+            "id": str(assignment.id),
+            "deal_id": str(assignment.deal_id) if assignment.deal_id else None,
+            "stage_id": str(assignment.stage_id) if assignment.stage_id else None,
+            "changed_fields": list(update_payload.keys()),
+        },
+        payload_version=1,
+    )
     return assignment
 
 
@@ -576,10 +606,24 @@ async def delete_assignment(
     db: AsyncSession = Depends(get_db),
 ):
     assignment = await StageProductAssignment.get_by_id(db, assignment_id)
+    deal_id = str(assignment.deal_id) if assignment and assignment.deal_id else None
+    stage_id = str(assignment.stage_id) if assignment and assignment.stage_id else None
     success = await StageProductAssignment.delete(db, assignment_id)
     if not success:
         raise HTTPException(status_code=404, detail="Assignment not found")
     await safe_refresh_deal_health_issues(db, assignment.deal_id if assignment else None)
+    await emit_event_safe(
+        db,
+        event_type="stage_product_assignment.after_delete",
+        entity_type="stage_product_assignment",
+        entity_id=str(assignment_id),
+        payload={
+            "id": str(assignment_id),
+            "deal_id": deal_id,
+            "stage_id": stage_id,
+        },
+        payload_version=1,
+    )
     return {"message": "Assignment deleted"}
 
 

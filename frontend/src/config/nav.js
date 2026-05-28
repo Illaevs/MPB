@@ -20,12 +20,12 @@ export const navSections = [
     key: 'work',
     title: 'Работа',
     items: [
-      { to: '/projects',             icon: 'fa-project-diagram',    label: 'Сделки',            access: 'projects' },
+      { to: '/projects',             icon: 'fa-project-diagram',    label: 'Проекты',           access: 'projects' },
       { to: '/leads',                icon: 'fa-bullhorn',           label: 'Лиды',              access: 'leads' },
       { to: '/tasks',                icon: 'fa-tasks',              label: 'Задачи',            access: 'tasks' },
       { to: '/my-approvals',         icon: 'fa-clipboard-check',    label: 'Мои согласования',  access: null },
       { to: '/calendar',             icon: 'fa-calendar-days',      label: 'Календарь',         access: 'calendar' },
-      { to: '/data-health',          icon: 'fa-triangle-exclamation', label: 'Контроль данных', access: 'projects' },
+      { to: '/data-health',          icon: 'fa-triangle-exclamation', label: 'Контроль данных', access: 'data_health' },
       { to: '/work-results-reviews', icon: 'fa-clipboard-check',    label: 'Согласования РР',   access: 'work_results_reviews' },
     ],
   },
@@ -63,6 +63,9 @@ export const navSections = [
       { to: '/contracts',         icon: 'fa-file-contract', label: 'Договоры',      access: 'contracts' },
       { to: '/document-registry', icon: 'fa-folder-open',   label: 'Документация',  access: 'document_registry' },
       { to: '/files-catalog',     icon: 'fa-hdd',           label: 'Файлы',         access: 'files_catalog' },
+      // Нормативная база (СНиП/ГОСТ/СП/ФЗ) — общесправочник. Доступ
+      // любому авторизованному (access: null) — секции в системе нет.
+      { to: '/reglaments',        icon: 'fa-book',          label: 'Нормативная база', access: null },
     ],
   },
   {
@@ -88,14 +91,26 @@ export const navSections = [
   {
     key: 'admin',
     title: 'Админ',
-    requireAny: ['users', 'roles', 'document_templates', 'org_structure'],
+    requireAny: ['users', 'roles', 'document_templates', 'org_structure', 'workday_admin', 'absences'],
     items: [
       { to: '/users',              icon: 'fa-user-cog',         label: 'Пользователи',       access: 'users' },
       { to: '/roles',              icon: 'fa-shield-alt',       label: 'Роли и права',       access: 'roles' },
       { to: '/org-structure',      icon: 'fa-sitemap',          label: 'Структура организации', access: 'org_structure' },
       { to: '/approvals',          icon: 'fa-diagram-project',  label: 'Согласования',       access: 'roles' },
       { to: '/audit-logs',         icon: 'fa-clipboard-list',   label: 'Журнал действий',    access: 'roles' },
+      { to: '/workday',            icon: 'fa-business-time',    label: 'Учёт времени',       access: 'workday_admin' },
+      // «Отсутствия» — доступен любому, у кого включён раздел `absences`
+      // (как минимум edit_assigned, чтобы создавать свои); просмотр чужих
+      // расписаний управляется `absences.read_all` на бэке.
+      { to: '/absences',           icon: 'fa-umbrella-beach',   label: 'Отсутствия',         access: 'absences' },
       { to: '/document-templates', icon: 'fa-file-word',        label: 'Шаблоны документов', access: 'document_templates' },
+      // Event bus UI. На локалке доступна суперюзеру для observability
+      // outbox-пайплайна (counts, DLQ, retry, causation chains). На проде
+      // ВЫКЛЮЧАЕТСЯ временно через комментирование — пока миграции
+      // V1.5 (event_delivery_dedup, event_outbox.causation_chain)
+      // + worker не выкачены полным деплоем.
+      { to: '/integrations/subscriptions', icon: 'fa-plug',       label: 'Интеграции: подписки', access: 'roles' },
+      { to: '/integrations/outbox',        icon: 'fa-paper-plane', label: 'Интеграции: outbox',  access: 'roles' },
     ],
   },
 ]

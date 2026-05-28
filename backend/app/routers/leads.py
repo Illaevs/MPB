@@ -148,6 +148,23 @@ async def create_lead(
         )
     except Exception:
         pass
+
+    # Event Bus v2: outbox-эмиссия для внешних подписчиков (Telegram,
+    # CRM-bridge, BI и т.п.).
+    from app.services.event_outbox import emit_event_safe
+    await emit_event_safe(
+        db,
+        event_type="lead.after_create",
+        entity_type="lead",
+        entity_id=str(item.id),
+        payload={
+            "id": str(item.id),
+            "title": item.title,
+            "status": item.status,
+            "responsible_user_id": str(item.responsible_user_id) if item.responsible_user_id else None,
+            "source": getattr(item, "source", None),
+        },
+    )
     return item
 
 
@@ -201,6 +218,35 @@ async def update_lead(
             )
         except Exception:
             pass
+
+    # Event Bus v2: эмитим два события — общий after_update + специальный
+    # after_status_change (если статус действительно поменялся). Разные
+    # подписчики могут хотеть слышать только одно из них.
+    from app.services.event_outbox import emit_event_safe
+    await emit_event_safe(
+        db,
+        event_type="lead.after_update",
+        entity_type="lead",
+        entity_id=str(lead.id),
+        payload={
+            "id": str(lead.id),
+            "title": lead.title,
+            "status": lead.status,
+            "responsible_user_id": str(lead.responsible_user_id) if lead.responsible_user_id else None,
+        },
+    )
+    if prev_status and new_status and prev_status != new_status:
+        await emit_event_safe(
+            db,
+            event_type="lead.after_status_change",
+            entity_type="lead",
+            entity_id=str(lead.id),
+            payload={
+                "id": str(lead.id),
+                "status_before": prev_status,
+                "status_after": new_status,
+            },
+        )
     return lead
 
 
@@ -218,6 +264,19 @@ async def delete_lead(
     success = await Lead.delete(db, lead_id)
     if not success:
         raise HTTPException(status_code=404, detail="Lead not found")
+
+    # Event Bus v2: after_delete для синхронизации внешних реестров.
+    from app.services.event_outbox import emit_event_safe
+    await emit_event_safe(
+        db,
+        event_type="lead.after_delete",
+        entity_type="lead",
+        entity_id=str(lead.id),
+        payload={
+            "id": str(lead.id),
+            "title": lead.title,
+        },
+    )
     return {"message": "Lead deleted"}
 
 
@@ -233,6 +292,28 @@ async def convert_lead(
 
     if lead.deal_id:
         return {"deal_id": str(lead.deal_id)}
+
+    # Event Bus v2: before_convert_to_deal — даём шанс отменить
+    # конверсию (например, лид в плохом статусе / не указано имя).
+    from app.services.event_dispatcher import (
+        Cancel as _EBCancel,
+        EventContext as _EBCtx,
+        dispatch_before,
+    )
+    pre_ctx = _EBCtx(
+        event_key="lead.before_convert_to_deal",
+        entity_type="lead",
+        entity_id=str(lead.id),
+        payload={
+            "id": str(lead.id),
+            "title": lead.title,
+            "status": lead.status,
+        },
+        user_id=str(getattr(user, "id", "")) or None,
+    )
+    pre_result = await dispatch_before("lead.before_convert_to_deal", pre_ctx)
+    if isinstance(pre_result, _EBCancel):
+        raise HTTPException(status_code=400, detail=pre_result.reason)
 
     deal_data = {
         "title": lead.title,
@@ -283,6 +364,21 @@ async def convert_lead(
         )
     except Exception:
         pass
+
+    # Event Bus v2: after_convert_to_deal — внешний consumer узнает
+    # о связке lead↔deal, может перетащить история коммуникаций.
+    from app.services.event_outbox import emit_event_safe
+    await emit_event_safe(
+        db,
+        event_type="lead.after_convert_to_deal",
+        entity_type="lead",
+        entity_id=str(lead.id),
+        payload={
+            "lead_id": str(lead.id),
+            "deal_id": str(deal.id),
+            "deal_title": deal.title,
+        },
+    )
     return {"deal_id": str(deal.id)}
 
 

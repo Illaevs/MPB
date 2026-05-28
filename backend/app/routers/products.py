@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.session import get_db
 from app.models import ProductCategory, Product, DealProduct, Deal, Lead, LeadProduct, ContractDocument, ContractDocumentProductLink
 from app.schemas.product_category import ProductCategoryCreate, ProductCategoryUpdate, ProductCategoryResponse
+from app.services.event_outbox import emit_event_safe
 from app.schemas.product import ProductCreate, ProductUpdate, ProductResponse
 from app.schemas.deal_product import DealProductCreate, DealProductUpdate, DealProductResponse
 from app.schemas.lead_product import LeadProductCreate, LeadProductUpdate, LeadProductResponse
@@ -89,7 +90,20 @@ async def create_product_category(
     db: AsyncSession = Depends(get_db)
 ):
     try:
-        return await ProductCategory.create(db, **category.dict())
+        created = await ProductCategory.create(db, **category.dict())
+        await emit_event_safe(
+            db,
+            event_type="product_category.after_create",
+            entity_type="product_category",
+            entity_id=str(created.id),
+            payload={
+                "id": str(created.id),
+                "name": getattr(created, "name", None),
+                "parent_id": str(getattr(created, "parent_id", None)) if getattr(created, "parent_id", None) else None,
+            },
+            payload_version=1,
+        )
+        return created
     except Exception as exc:
         print(f"Error creating product category: {exc}")
         raise HTTPException(status_code=400, detail="Failed to create category")
@@ -111,9 +125,23 @@ async def update_product_category(
     db: AsyncSession = Depends(get_db)
 ):
     try:
-        category = await ProductCategory.update(db, category_id, **category_update.dict(exclude_unset=True))
+        update_payload = category_update.dict(exclude_unset=True)
+        category = await ProductCategory.update(db, category_id, **update_payload)
         if not category:
             raise HTTPException(status_code=404, detail="Category not found")
+        await emit_event_safe(
+            db,
+            event_type="product_category.after_update",
+            entity_type="product_category",
+            entity_id=str(category.id),
+            payload={
+                "id": str(category.id),
+                "name": getattr(category, "name", None),
+                "parent_id": str(getattr(category, "parent_id", None)) if getattr(category, "parent_id", None) else None,
+                "changed_fields": list(update_payload.keys()),
+            },
+            payload_version=1,
+        )
         return category
     except Exception as exc:
         print(f"Error updating product category {category_id}: {exc}")
@@ -124,9 +152,22 @@ async def delete_product_category(
     category_id: str,
     db: AsyncSession = Depends(get_db)
 ):
+    cat = await ProductCategory.get_by_id(db, category_id)
+    snapshot = {
+        "id": str(category_id),
+        "name": getattr(cat, "name", None) if cat else None,
+    }
     success = await ProductCategory.delete(db, category_id)
     if not success:
         raise HTTPException(status_code=404, detail="Category not found")
+    await emit_event_safe(
+        db,
+        event_type="product_category.after_delete",
+        entity_type="product_category",
+        entity_id=str(category_id),
+        payload=snapshot,
+        payload_version=1,
+    )
     return {"message": "Category deleted"}
 
 # Products
@@ -154,7 +195,23 @@ async def create_product(
     db: AsyncSession = Depends(get_db)
 ):
     try:
-        return await Product.create(db, **product.dict())
+        created = await Product.create(db, **product.dict())
+        # Event Bus v2: новая позиция каталога — 1С синхронизирует справочник.
+        from app.services.event_outbox import emit_event_safe
+        await emit_event_safe(
+            db,
+            event_type="product.after_create",
+            entity_type="product",
+            entity_id=str(created.id),
+            payload={
+                "id": str(created.id),
+                "name": created.name,
+                "category_id": str(created.category_id) if getattr(created, "category_id", None) else None,
+                "unit": getattr(created, "unit", None),
+                "base_price": float(getattr(created, "base_price", 0) or 0),
+            },
+        )
+        return created
     except Exception as exc:
         print(f"Error creating product: {exc}")
         raise HTTPException(status_code=400, detail="Failed to create product")
@@ -176,10 +233,46 @@ async def update_product(
     db: AsyncSession = Depends(get_db)
 ):
     try:
+        # Запомним пред-значение base_price для эмиссии price_change.
+        pre = await Product.get_by_id(db, product_id)
+        prev_price = float(getattr(pre, "base_price", 0) or 0) if pre else 0.0
+
         product = await Product.update(db, product_id, **product_update.dict(exclude_unset=True))
         if not product:
             raise HTTPException(status_code=404, detail="Product not found")
+
+        from app.services.event_outbox import emit_event_safe
+        await emit_event_safe(
+            db,
+            event_type="product.after_update",
+            entity_type="product",
+            entity_id=str(product.id),
+            payload={
+                "id": str(product.id),
+                "name": product.name,
+                "category_id": str(product.category_id) if getattr(product, "category_id", None) else None,
+                "base_price": float(getattr(product, "base_price", 0) or 0),
+            },
+        )
+        # Доменное after_price_change — удобно для подписчиков мониторить
+        # только изменения цен (без шума от переименований и т.п.).
+        next_price = float(getattr(product, "base_price", 0) or 0)
+        if abs(next_price - prev_price) > 1e-9:
+            await emit_event_safe(
+                db,
+                event_type="product.after_price_change",
+                entity_type="product",
+                entity_id=str(product.id),
+                payload={
+                    "id": str(product.id),
+                    "name": product.name,
+                    "price_before": prev_price,
+                    "price_after": next_price,
+                },
+            )
         return product
+    except HTTPException:
+        raise
     except Exception as exc:
         print(f"Error updating product {product_id}: {exc}")
         raise HTTPException(status_code=400, detail="Failed to update product")
@@ -189,9 +282,22 @@ async def delete_product(
     product_id: str,
     db: AsyncSession = Depends(get_db)
 ):
+    pre = await Product.get_by_id(db, product_id)
     success = await Product.delete(db, product_id)
     if not success:
         raise HTTPException(status_code=404, detail="Product not found")
+
+    from app.services.event_outbox import emit_event_safe
+    await emit_event_safe(
+        db,
+        event_type="product.after_delete",
+        entity_type="product",
+        entity_id=str(product_id),
+        payload={
+            "id": str(product_id),
+            "name": pre.name if pre else None,
+        },
+    )
     return {"message": "Product deleted"}
 
 # Deal products

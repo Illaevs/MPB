@@ -21,6 +21,7 @@ from app.schemas.subcontractor_stage import (
     SubcontractorStageUpdate,
     SubcontractorStageResponse
 )
+from app.services.event_outbox import emit_event_safe
 from app.services.subcontractor_gantt_service import SubcontractorGanttService
 
 router = APIRouter()
@@ -238,6 +239,20 @@ async def create_stage(
         # Keep DDS in sync for payment stages.
         await _sync_payment_entry(db_stage, db)
 
+        await emit_event_safe(
+            db,
+            event_type="subcontractor_stage.after_create",
+            entity_type="subcontractor_stage",
+            entity_id=str(db_stage.id),
+            payload={
+                "id": str(db_stage.id),
+                "card_id": str(getattr(db_stage, "card_id", None)) if getattr(db_stage, "card_id", None) else None,
+                "name": getattr(db_stage, "name", None),
+                "stage_type": getattr(db_stage, "stage_type", None),
+                "status": getattr(db_stage, "status", None),
+            },
+            payload_version=1,
+        )
         return db_stage
     except Exception as e:
         print(f"Error creating subcontractor stage: {e}")
@@ -271,6 +286,7 @@ async def update_stage(
         old_duration = old_stage.duration
         old_term_type = old_stage.term_type
         old_effective_end = _effective_stage_end(old_stage)
+        old_status = getattr(old_stage, "status", None)
 
         # Lock stage_type after creation
         update_data = stage_update.dict(exclude_unset=True)
@@ -296,7 +312,22 @@ async def update_stage(
 
         # Sync cash flow entry if payment stage.
         await _sync_payment_entry(stage, db)
-        
+        new_status = getattr(stage, "status", None)
+        if old_status != new_status:
+            await emit_event_safe(
+                db,
+                event_type="subcontractor_stage.after_status_change",
+                entity_type="subcontractor_stage",
+                entity_id=str(stage.id),
+                payload={
+                    "id": str(stage.id),
+                    "card_id": str(getattr(stage, "card_id", None)) if getattr(stage, "card_id", None) else None,
+                    "name": getattr(stage, "name", None),
+                    "status_before": old_status,
+                    "status_after": new_status,
+                },
+                payload_version=1,
+            )
         return stage
     except Exception as e:
         print(f"Error updating subcontractor stage {stage_id}: {e}")

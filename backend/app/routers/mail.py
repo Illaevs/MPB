@@ -30,6 +30,7 @@ from app.schemas.mail import (
     MailSendRequest,
     MailSendResponse,
 )
+from app.services.event_outbox import emit_event_safe
 from app.services.mail_smtp import MailSendAuthenticationError, MailSendTransportError, send_message
 from app.services.mail_sync import ensure_valid_token, sync_mailbox
 from app.services.mail_imap import fetch_message_attachment, fetch_message_body, move_message_to_folder, normalize_snippet_text
@@ -596,6 +597,24 @@ async def send_mail(
     except Exception as exc:
         logger.warning("SMTP send failed for %s: %s", mailbox.email, exc)
         raise HTTPException(status_code=500, detail="Не удалось отправить письмо.")
+    # Эмитим после успешной отправки — нужно для BI (трекинг исходящих)
+    # и для FTS-индекса (если решим индексировать исходящие).
+    await emit_event_safe(
+        db,
+        event_type="mail_message.after_send",
+        entity_type="mail_message",
+        entity_id=str(mailbox.id),
+        payload={
+            "mailbox_id": str(mailbox.id),
+            "from": mailbox.email,
+            "to": payload.to,
+            "cc": payload.cc,
+            "bcc": payload.bcc,
+            "subject": payload.subject,
+            "sender_user_id": str(user.id),
+        },
+        payload_version=1,
+    )
     return MailSendResponse(message="ok")
 
 

@@ -1,7 +1,7 @@
 <template>
   <teleport to="body">
     <transition name="nc-overlay">
-      <div v-if="visible" class="nc-overlay" @click.self="close">
+      <div v-if="visible" class="nc-overlay" v-modal-close="close">
         <transition name="nc-panel">
           <div v-if="visible" class="nc-panel">
             <!-- Header -->
@@ -60,7 +60,8 @@
               </div>
             </div>
 
-            <div class="nc-telegram" :class="{ 'nc-telegram--loading': telegramLoading }">
+            <!-- Telegram quick-status block: подключение бота временно скрыто (см. Notifications.vue) -->
+            <div v-if="false" class="nc-telegram" :class="{ 'nc-telegram--loading': telegramLoading }">
               <div class="nc-telegram__content">
                 <div class="nc-telegram__title-row">
                   <div class="nc-telegram__title">Telegram</div>
@@ -173,6 +174,7 @@ import { ref, computed, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import * as notificationsApi from '../../services/api/notifications'
 import { useNotificationsStore } from '@/stores/notifications'
+import { parseServerDate, formatMskDateTime, serverNow } from '../../composables/useServerClock'
 
 export default {
   name: 'NotificationCenter',
@@ -294,16 +296,17 @@ export default {
     }
 
     const formatDateTime = (value) => {
-      if (!value) return ''
-      const d = new Date(value)
-      const now = new Date()
-      const diff = now - d
+      // Серверное время: трактуем «голый» ISO без TZ как Europe/Moscow
+      // и считаем «сколько назад» относительно serverNow() (не локальных
+      // часов устройства). Иначе у юзеров с расходящимися/чужими TZ
+      // прилетают «3 часа назад» там, где должно быть «только что».
+      const d = parseServerDate(value)
+      if (!d) return ''
+      const diff = serverNow() - d.getTime()
       if (diff < 60000) return 'только что'
       if (diff < 3600000) return `${Math.floor(diff / 60000)} мин. назад`
       if (diff < 86400000) return `${Math.floor(diff / 3600000)} ч. назад`
-      return d.toLocaleString('ru-RU', {
-        day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
-      })
+      return formatMskDateTime(d)
     }
 
     const loadNotifications = async (append) => {

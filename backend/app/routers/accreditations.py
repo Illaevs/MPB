@@ -8,6 +8,7 @@ from sqlalchemy import select, and_
 
 from app.database.session import get_db
 from app.models import CompanyAccreditation, CompanyDocument
+from app.services.event_outbox import emit_event_safe
 from app.services.storage import clean_name, ensure_path, upload_bytes_with_safe_extension, get_download_href, storage_available
 from app.core.config import settings
 from app.schemas.accreditation import (
@@ -210,8 +211,36 @@ async def update_accreditation(
     if update_data.get("status") == "rejected" and not update_data.get("comment"):
         raise HTTPException(status_code=400, detail="Comment is required for rejection")
 
+    old_status = acc.status
     for key, value in update_data.items():
         setattr(acc, key, value)
+
+    # Эмитим специализированные события grant/revoke — Диадок и audit-system
+    # ждут переходы по статусу, не общий update.
+    new_status = acc.status
+    if "status" in update_data and old_status != new_status:
+        if new_status == "approved":
+            ev = "company_accreditation.after_grant"
+        elif new_status == "rejected":
+            ev = "company_accreditation.after_revoke"
+        else:
+            ev = None
+        if ev:
+            await emit_event_safe(
+                db,
+                event_type=ev,
+                entity_type="company_accreditation",
+                entity_id=str(acc.id),
+                payload={
+                    "id": str(acc.id),
+                    "company_id": str(acc.company_id) if acc.company_id else None,
+                    "direction_id": str(acc.direction_id) if acc.direction_id else None,
+                    "status_before": old_status,
+                    "status_after": new_status,
+                    "comment": acc.comment,
+                },
+                payload_version=1,
+            )
 
     await db.commit()
     await db.refresh(acc)

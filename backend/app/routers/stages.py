@@ -15,6 +15,7 @@ from app.models.stage_dependency import normalize_dependency_type
 from app.schemas.stage import StageCreate, StageUpdate, StageResponse
 from app.services.data_health import safe_refresh_deal_health_issues
 from app.services.event_log import log_event
+from app.services.event_outbox import emit_event_safe
 from app.services.gantt_service import GanttService
 
 router = APIRouter()
@@ -480,6 +481,28 @@ async def set_stage_dependency(
         pass
 
     await safe_refresh_deal_health_issues(db, stage.deal_id)
+    # Эмитим событие смены зависимостей — критично для SOD/Gantt-консьюмеров:
+    # они хотят знать структуру DAG, не только даты этапов.
+    await emit_event_safe(
+        db,
+        event_type="stage_dependency.after_change",
+        entity_type="stage",
+        entity_id=str(stage.id),
+        payload={
+            "stage_id": str(stage.id),
+            "deal_id": str(stage.deal_id) if stage.deal_id else None,
+            "predecessor_ids": [str(item.predecessor_id) for item in created_dependencies],
+            "dependencies": [
+                {
+                    "predecessor_id": str(item.predecessor_id),
+                    "dependency_type": normalize_dependency_type(item.dependency_type),
+                    "lag": item.lag,
+                }
+                for item in created_dependencies
+            ],
+        },
+        payload_version=1,
+    )
     return {
         "id": str(primary_dependency.id),
         "stage_id": str(stage.id),
@@ -532,6 +555,23 @@ async def create_stage(
         except Exception:
             pass
         await safe_refresh_deal_health_issues(db, db_stage.deal_id)
+        await emit_event_safe(
+            db,
+            event_type="stage.after_create",
+            entity_type="stage",
+            entity_id=str(db_stage.id),
+            payload={
+                "id": str(db_stage.id),
+                "deal_id": str(db_stage.deal_id) if db_stage.deal_id else None,
+                "name": db_stage.name,
+                "stage_type": db_stage.stage_type,
+                "date_start": db_stage.date_start.isoformat() if db_stage.date_start else None,
+                "date_end": db_stage.date_end.isoformat() if db_stage.date_end else None,
+                "planned_cost": float(db_stage.planned_cost or 0),
+                "status": getattr(db_stage, "status", None),
+            },
+            payload_version=1,
+        )
         return db_stage
     except Exception as e:
         print(f"Error creating stage: {e}")
@@ -736,6 +776,40 @@ async def update_stage(
         except Exception:
             pass
         await safe_refresh_deal_health_issues(db, stage.deal_id)
+        # Emit общее update-событие.  Если статус (`status` поле) поменялся —
+        # эмитим дополнительно `stage.after_status_change` для удобства
+        # SOD-консьюмеров (им важно реагировать только на переходы).
+        old_status = before_snapshot.get("status") if isinstance(before_snapshot, dict) else None
+        new_status = getattr(stage, "status", None)
+        await emit_event_safe(
+            db,
+            event_type="stage.after_update",
+            entity_type="stage",
+            entity_id=str(stage.id),
+            payload={
+                "id": str(stage.id),
+                "deal_id": str(stage.deal_id) if stage.deal_id else None,
+                "name": stage.name,
+                "changed_fields": list(update_data.keys()),
+                "status": new_status,
+            },
+            payload_version=1,
+        )
+        if old_status != new_status:
+            await emit_event_safe(
+                db,
+                event_type="stage.after_status_change",
+                entity_type="stage",
+                entity_id=str(stage.id),
+                payload={
+                    "id": str(stage.id),
+                    "deal_id": str(stage.deal_id) if stage.deal_id else None,
+                    "name": stage.name,
+                    "status_before": old_status,
+                    "status_after": new_status,
+                },
+                payload_version=1,
+            )
         return stage
     except Exception as e:
         print(f"Error updating stage {stage_id}: {e}")
@@ -802,6 +876,19 @@ async def delete_stage(
     except Exception:
         pass
     await safe_refresh_deal_health_issues(db, stage.deal_id)
+    await emit_event_safe(
+        db,
+        event_type="stage.after_delete",
+        entity_type="stage",
+        entity_id=str(stage_id),
+        payload={
+            "id": str(stage_id),
+            "deal_id": str(stage.deal_id) if stage.deal_id else None,
+            "name": stage_snapshot.get("name") or stage.name,
+            "stage_type": stage.stage_type,
+        },
+        payload_version=1,
+    )
     return {"message": "Этап удален"}
 
 @router.post("/{stage_id}/propagate")
