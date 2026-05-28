@@ -1,13 +1,13 @@
 # Communications & Notifications API
 
-Сгенерировано из `docs/API.md` на 2026-02-15 03:22:39 (local time).
+Сгенерировано из `docs/API.md` на 2026-05-19 01:30:03 (local time).
 
 ## Scope
 - Домен: `communications`
-- Описание: Почта, чаты, уведомления и пользовательские предпочтения уведомлений.
-- Routers: `7`
-- Endpoints: `32`
-- Список роутеров: `mail`, `task_messages`, `global_chat`, `notifications`, `notification_rules`, `notification_preferences`, `notification_subscriptions`
+- Описание: Почта, чаты, тех. поддержка, уведомления и пользовательские предпочтения уведомлений.
+- Routers: `8`
+- Endpoints: `53`
+- Список роутеров: `mail`, `task_messages`, `global_chat`, `support`, `notifications`, `notification_rules`, `notification_preferences`, `notification_subscriptions`
 
 ## Common Rules
 - Общие правила API (base URL, auth headers, коды ошибок) вынесены в `docs/api/INDEX.md`.
@@ -15,7 +15,21 @@
 
 ## Data Contract Catalog (Domain)
 
-Модели, используемые в домене: `20`.
+Модели, используемые в домене: `34`.
+
+### Model `MailFolderResponse`
+
+Source: `backend/app/schemas/mail.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| id | str | yes | - | - |
+| label | str | yes | - | - |
+| count | int | no | 0 | - |
+| unread_count | int | no | 0 | - |
+| icon | str | no | '' | - |
+
 
 ### Model `MailMessageList`
 
@@ -25,6 +39,43 @@ Source: `backend/app/schemas/mail.py`
 | Field | Type | Required | Default | Constraints |
 | --- | --- | --- | --- | --- |
 | items | List[MailMessageResponse] | yes | - | - |
+| total | int | no | 0 | - |
+| limit | int | no | 50 | - |
+| offset | int | no | 0 | - |
+| has_more | bool | no | False | - |
+| folder | str | no | 'inbox' | - |
+
+
+### Model `MailMessageMoveRequest`
+
+Source: `backend/app/schemas/mail.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| target | str | yes | - | - |
+
+
+### Model `MailMessageResponse`
+
+Source: `backend/app/schemas/mail.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| id | str | yes | - | - |
+| mailbox_id | str | yes | - | - |
+| uid | str | yes | - | - |
+| folder | str | no | 'inbox' | - |
+| subject | Optional[str] | no | None | - |
+| from_addr | Optional[str] | no | None | - |
+| to_addr | Optional[str] | no | None | - |
+| cc_addr | Optional[str] | no | None | - |
+| date | Optional[datetime] | no | None | - |
+| snippet | Optional[str] | no | None | - |
+| is_read | bool | no | True | - |
+| has_attachments | bool | no | False | - |
+| attachments_count | int | no | 0 | - |
 
 
 ### Model `MailSendRequest`
@@ -128,6 +179,70 @@ Source: `backend/app/schemas/task_message.py`
 | body | Optional[str] | no | None | - |
 
 
+### Model `ChatConversationCreate`
+
+Source: `backend/app/schemas/chat.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| type | Literal['group', 'channel'] | yes | - | enum='group', 'channel' |
+| title | str | yes | - | - |
+| description | Optional[str] | no | None | - |
+| member_ids | List[str] | no | factory:list | - |
+
+
+### Model `ChatConversationDirectCreate`
+
+Source: `backend/app/schemas/chat.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| user_id | str | yes | - | - |
+
+
+### Model `ChatConversationMemberAdd`
+
+Source: `backend/app/schemas/chat.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| user_ids | List[str] | no | factory:list | - |
+
+
+### Model `ChatConversationResponse`
+
+Source: `backend/app/schemas/chat.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| id | str | yes | - | - |
+| type | str | yes | - | - |
+| title | str | yes | - | - |
+| description | Optional[str] | no | None | - |
+| member_count | int | no | 0 | - |
+| can_manage_members | bool | no | False | - |
+| members | List[ChatConversationMemberResponse] | no | factory:list | - |
+| last_message | Optional[ChatMessageReferenceResponse] | no | None | - |
+| pinned_message | Optional[ChatMessageReferenceResponse] | no | None | - |
+| created_at | Optional[datetime] | no | None | - |
+| updated_at | Optional[datetime] | no | None | - |
+
+
+### Model `ChatConversationUpdate`
+
+Source: `backend/app/schemas/chat.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| title | Optional[str] | no | None | - |
+| description | Optional[str] | no | None | - |
+
+
 ### Model `GlobalChatMessageResponse`
 
 Source: `backend/app/schemas/global_chat_message.py`
@@ -138,10 +253,16 @@ Source: `backend/app/schemas/global_chat_message.py`
 | id | str | yes | - | - |
 | user_id | str | yes | - | - |
 | user_name | Optional[str] | no | None | - |
+| conversation_id | Optional[str] | no | None | - |
 | body | Optional[str] | no | None | - |
-| attachments | List[Dict[str, Any]] | no | [] | - |
-| mentions | List[str] | no | [] | - |
+| attachments | List[Dict[str, Any]] | no | factory:list | - |
+| mentions | List[str] | no | factory:list | - |
 | is_deleted | bool | no | False | - |
+| is_pinned | bool | no | False | - |
+| pinned_at | Optional[datetime] | no | None | - |
+| pinned_by_user_id | Optional[str] | no | None | - |
+| reply_to_message | Optional[ChatMessageReferenceResponse] | no | None | - |
+| forwarded_from_message | Optional[ChatMessageReferenceResponse] | no | None | - |
 | created_at | Optional[datetime] | no | None | - |
 | updated_at | Optional[datetime] | no | None | - |
 | edited_at | Optional[datetime] | no | None | - |
@@ -156,6 +277,123 @@ Source: `backend/app/schemas/global_chat_message.py`
 | Field | Type | Required | Default | Constraints |
 | --- | --- | --- | --- | --- |
 | body | Optional[str] | no | None | - |
+
+
+### Model `CreateTaskFromTicket`
+
+Source: `backend/app/schemas/support.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| title | str | yes | - | - |
+| description | Optional[str] | no | None | - |
+| assigned_to_user_id | Optional[str] | no | None | - |
+| priority | Optional[str] | no | 'normal' | - |
+| start_date | Optional[date] | no | None | - |
+| due_date | Optional[date] | no | None | - |
+
+
+### Model `SupportMessageResponse`
+
+Source: `backend/app/schemas/support.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| id | str | yes | - | - |
+| ticket_id | str | yes | - | - |
+| user_id | str | yes | - | - |
+| user_name | Optional[str] | no | None | - |
+| body | Optional[str] | no | None | - |
+| attachments | List[Dict[str, Any]] | no | [] | - |
+| is_internal | bool | no | False | - |
+| is_deleted | bool | no | False | - |
+| created_at | Optional[datetime] | no | None | - |
+| updated_at | Optional[datetime] | no | None | - |
+| edited_at | Optional[datetime] | no | None | - |
+| deleted_at | Optional[datetime] | no | None | - |
+
+
+### Model `SupportMessageUpdate`
+
+Source: `backend/app/schemas/support.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| body | Optional[str] | no | None | - |
+
+
+### Model `SupportTicketDetail`
+
+Source: `backend/app/schemas/support.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| id | str | yes | - | - |
+| number | Optional[int] | no | None | - |
+| subject | str | yes | - | - |
+| description | Optional[str] | no | None | - |
+| category | str | no | 'other' | - |
+| status | str | no | 'new' | - |
+| created_by_id | str | yes | - | - |
+| created_by_name | Optional[str] | no | None | - |
+| created_by_avatar | Optional[str] | no | None | - |
+| assignee_id | Optional[str] | no | None | - |
+| assignee_name | Optional[str] | no | None | - |
+| linked_task_id | Optional[str] | no | None | - |
+| linked_task_number | Optional[int] | no | None | - |
+| attachments | List[Dict[str, Any]] | no | [] | - |
+| message_count | int | no | 0 | - |
+| last_message_at | Optional[datetime] | no | None | - |
+| last_message_by | Optional[str] | no | None | - |
+| created_at | Optional[datetime] | no | None | - |
+| updated_at | Optional[datetime] | no | None | - |
+| resolved_at | Optional[datetime] | no | None | - |
+| messages | List[SupportMessageResponse] | no | [] | - |
+
+
+### Model `SupportTicketResponse`
+
+Source: `backend/app/schemas/support.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| id | str | yes | - | - |
+| number | Optional[int] | no | None | - |
+| subject | str | yes | - | - |
+| description | Optional[str] | no | None | - |
+| category | str | no | 'other' | - |
+| status | str | no | 'new' | - |
+| created_by_id | str | yes | - | - |
+| created_by_name | Optional[str] | no | None | - |
+| created_by_avatar | Optional[str] | no | None | - |
+| assignee_id | Optional[str] | no | None | - |
+| assignee_name | Optional[str] | no | None | - |
+| linked_task_id | Optional[str] | no | None | - |
+| linked_task_number | Optional[int] | no | None | - |
+| attachments | List[Dict[str, Any]] | no | [] | - |
+| message_count | int | no | 0 | - |
+| last_message_at | Optional[datetime] | no | None | - |
+| last_message_by | Optional[str] | no | None | - |
+| created_at | Optional[datetime] | no | None | - |
+| updated_at | Optional[datetime] | no | None | - |
+| resolved_at | Optional[datetime] | no | None | - |
+
+
+### Model `SupportTicketUpdate`
+
+Source: `backend/app/schemas/support.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| status | Optional[str] | no | None | - |
+| category | Optional[str] | no | None | - |
+| assignee_id | Optional[str] | no | None | - |
 
 
 ### Model `NotificationResponse`
@@ -199,6 +437,7 @@ Source: `backend/app/schemas/notification_rules.py`
 | conditions | Optional[Dict[str, Any]] | no | None | - |
 | quiet_policy | Optional[str] | no | 'respect' | - |
 | deliver_in_app | Optional[bool] | no | True | - |
+| deliver_telegram | Optional[bool] | no | False | - |
 | throttle_minutes | Optional[int] | no | 0 | - |
 | title_template | Optional[str] | no | None | - |
 | message_template | Optional[str] | no | None | - |
@@ -223,6 +462,7 @@ Source: `backend/app/schemas/notification_rules.py`
 | conditions | Optional[Dict[str, Any]] | no | None | - |
 | quiet_policy | Optional[str] | no | 'respect' | - |
 | deliver_in_app | Optional[bool] | no | True | - |
+| deliver_telegram | Optional[bool] | no | False | - |
 | throttle_minutes | Optional[int] | no | 0 | - |
 | title_template | Optional[str] | no | None | - |
 | message_template | Optional[str] | no | None | - |
@@ -251,6 +491,7 @@ Source: `backend/app/schemas/notification_rules.py`
 | conditions | Optional[Dict[str, Any]] | no | None | - |
 | quiet_policy | Optional[str] | no | None | - |
 | deliver_in_app | Optional[bool] | no | None | - |
+| deliver_telegram | Optional[bool] | no | None | - |
 | throttle_minutes | Optional[int] | no | None | - |
 | title_template | Optional[str] | no | None | - |
 | message_template | Optional[str] | no | None | - |
@@ -272,6 +513,7 @@ Source: `backend/app/schemas/notification_rules.py`
 | digest_enabled | bool | yes | - | - |
 | digest_time | str | yes | - | - |
 | deliver_in_app | bool | yes | - | - |
+| deliver_telegram | bool | yes | - | - |
 | digest_last_sent_at | Optional[datetime] | no | None | - |
 
 
@@ -288,6 +530,7 @@ Source: `backend/app/schemas/notification_rules.py`
 | digest_enabled | Optional[bool] | no | None | - |
 | digest_time | Optional[str] | no | None | - |
 | deliver_in_app | Optional[bool] | no | None | - |
+| deliver_telegram | Optional[bool] | no | None | - |
 
 
 ### Model `NotificationSubscriptionCreate`
@@ -336,7 +579,7 @@ Source: `backend/app/routers/mail.py`
 
 Prefix: `/api/v1/mail`
 
-Endpoints: `10`
+Endpoints: `13`
 
 #### `GET /api/v1/mail/mailboxes`
 
@@ -429,7 +672,7 @@ Endpoints: `10`
     - `delete`
   - Side effects: DB write, DB read
 - Error Handling:
-  - `404`: `Mailbox not found`; body schema `{"detail": "..."}`
+  - `404`: `Почтовый ящик не найден.`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 #### `POST /api/v1/mail/mailboxes/{mailbox_id}/connect`
@@ -460,7 +703,7 @@ Endpoints: `10`
     - `HTTPException`
   - Side effects: Mail integration
 - Error Handling:
-  - `400`: `OAuth is not configured`; body schema `{"detail": "..."}`
+  - `400`: `OAuth для почты не настроен.`; body schema `{"detail": "..."}`
   - `404`: `Mailbox not found`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
@@ -490,10 +733,11 @@ Endpoints: `10`
     - `db.commit`
     - `db.refresh`
     - `sync_mailbox`
+    - `logger.warning`
   - Side effects: DB write, Mail integration
 - Error Handling:
-  - `400`: `App password required`; body schema `{"detail": "..."}`
-  - `404`: `Mailbox not found`; body schema `{"detail": "..."}`
+  - `400`: `Нужно указать пароль приложения.`; body schema `{"detail": "..."}`
+  - `404`: `Почтовый ящик не найден.`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 #### `GET /api/v1/mail/mailboxes/{mailbox_id}/export`
@@ -528,7 +772,44 @@ Endpoints: `10`
     - `select`
   - Side effects: DB read, Mail integration
 - Error Handling:
-  - `404`: `Mailbox not found`; body schema `{"detail": "..."}`
+  - `404`: `Почтовый ящик не найден.`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/mail/mailboxes/{mailbox_id}/folders`
+
+- Controller: `backend/app/routers/mail.py::list_folders`
+- Data Contract:
+  - Path params: `mailbox_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Response model: `List[MailFolderResponse]`
+  - Response contracts: [`MailFolderResponse`](#model-mailfolderresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `db.get`
+    - `HTTPException`
+    - `db.execute`
+    - `MailFolderResponse`
+    - `select(MailMessage.folder, func.count(MailMessage.id), func.sum(case((func.coalesce(MailMessage.flags, '').not_like('%\\Seen%'), 1), else_=0))).where(MailMessage.mailbox_id == mailbox.id).group_by`
+    - `MailMessage.flags.like`
+    - `select`
+    - `func.count`
+    - `func.sum`
+    - `case`
+    - `func.coalesce(MailMessage.flags, '').not_like`
+  - Side effects: DB read, Mail integration
+- Error Handling:
+  - `404`: `Почтовый ящик не найден.`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 #### `GET /api/v1/mail/mailboxes/{mailbox_id}/messages`
@@ -536,7 +817,7 @@ Endpoints: `10`
 - Controller: `backend/app/routers/mail.py::list_messages`
 - Data Contract:
   - Path params: `mailbox_id`: str (required, default=-, constraints=-)
-  - Query params: `limit`: int (optional, default=50, constraints=-); `refresh`: int (optional, default=0, constraints=-)
+  - Query params: `limit`: int (optional, default=50, constraints=-); `offset`: int (optional, default=0, constraints=-); `folder`: str (optional, default='inbox', constraints=-); `refresh`: int (optional, default=0, constraints=-)
   - Header params: none
   - Form params: none
   - File params: none
@@ -556,16 +837,17 @@ Endpoints: `10`
     - `db.get`
     - `HTTPException`
     - `db.execute`
-    - `select(MailMessage).where(MailMessage.mailbox_id == mailbox.id).order_by(MailMessage.date.desc().nullslast()).limit`
+    - `logger.warning`
+    - `MailMessage.flags.like`
     - `sync_mailbox`
     - `db.commit`
-    - `MailMessageResponse`
-    - `select(MailMessage).where(MailMessage.mailbox_id == mailbox.id).order_by`
+    - `select`
+    - `func.count`
     - `MailMessage.date.desc().nullslast`
-    - `MailMessage.date.desc`
   - Side effects: DB write, DB read, Mail integration
 - Error Handling:
-  - `404`: `Mailbox not found`; body schema `{"detail": "..."}`
+  - `400`: `Неизвестная папка.`; body schema `{"detail": "..."}`
+  - `404`: `Почтовый ящик не найден.`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 #### `POST /api/v1/mail/mailboxes/{mailbox_id}/send`
@@ -594,11 +876,13 @@ Endpoints: `10`
     - `HTTPException`
     - `ensure_valid_token`
     - `asyncio.to_thread`
+    - `logger.warning`
   - Side effects: No explicit side effects (read/transform path)
 - Error Handling:
-  - `400`: `Mailbox not authorized`; body schema `{"detail": "..."}`
-  - `404`: `Mailbox not found`; body schema `{"detail": "..."}`
-  - `500`: `f'SMTP error: {exc}`; body schema `{"detail": "..."}`
+  - `400`: `Почтовый ящик не авторизован.`; `SMTP авторизация не прошла. Проверьте пароль приложения или переподключите почтовый ящик.`; body schema `{"detail": "..."}`
+  - `404`: `Почтовый ящик не найден.`; body schema `{"detail": "..."}`
+  - `500`: `Не удалось отправить письмо.`; body schema `{"detail": "..."}`
+  - `503`: `SMTP недоступен с сервера. Вероятно, на VPS заблокированы исходящие порты 465/587. Нужно разблокировать SMTP у провайдера или настроить внешний SMTP relay.`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 #### `GET /api/v1/mail/messages/{message_id}`
@@ -625,11 +909,87 @@ Endpoints: `10`
     - `ensure_valid_token`
     - `normalize_snippet_text`
     - `asyncio.to_thread`
-  - Side effects: No explicit side effects (read/transform path)
+    - `logger.warning`
+    - `db.commit`
+    - `_message_imap_uid`
+  - Side effects: DB write, Mail integration
 - Error Handling:
-  - `400`: `Mailbox not authorized`; body schema `{"detail": "..."}`
-  - `404`: `Message not found`; `Mailbox not found`; body schema `{"detail": "..."}`
-  - `500`: `Message body load failed`; body schema `{"detail": "..."}`
+  - `400`: `Почтовый ящик не авторизован.`; body schema `{"detail": "..."}`
+  - `404`: `Письмо не найдено.`; `Почтовый ящик не найден.`; body schema `{"detail": "..."}`
+  - `500`: `Не удалось загрузить тело письма.`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/mail/messages/{message_id}/attachments/{attachment_id}`
+
+- Controller: `backend/app/routers/mail.py::download_message_attachment`
+- Data Contract:
+  - Path params: `message_id`: str (required, default=-, constraints=-); `attachment_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context; route may enforce role/section checks
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `Response`
+    - `db.get`
+    - `HTTPException`
+    - `ensure_valid_token`
+    - `asyncio.to_thread`
+    - `logger.warning`
+    - `_message_imap_uid`
+    - `quote`
+  - Side effects: Mail integration
+- Error Handling:
+  - `400`: `Почтовый ящик не авторизован.`; `Не удалось загрузить вложение.`; `Некорректный идентификатор вложения.`; body schema `{"detail": "..."}`
+  - `403`: `str(exc) or 'Вложение заблокировано политикой безопасности.`; body schema `{"detail": "..."}`
+  - `404`: `Письмо не найдено.`; `Почтовый ящик не найден.`; `Вложение не найдено.`; body schema `{"detail": "..."}`
+  - `413`: `Вложение превышает допустимый размер.`; body schema `{"detail": "..."}`
+  - `500`: `Не удалось загрузить вложение.`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/mail/messages/{message_id}/move`
+
+- Controller: `backend/app/routers/mail.py::move_mail_message`
+- Data Contract:
+  - Path params: `message_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body models: [`MailMessageMoveRequest`](#model-mailmessagemoverequest)
+  - Response model: `MailMessageResponse`
+  - Response contracts: [`MailMessageResponse`](#model-mailmessageresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `_message_imap_uid`
+    - `_storage_uid`
+    - `HTTPException`
+    - `db.get`
+    - `ensure_valid_token`
+    - `db.commit`
+    - `db.refresh`
+    - `asyncio.to_thread`
+    - `logger.warning`
+  - Side effects: DB write, Mail integration, File/storage operation
+- Error Handling:
+  - `400`: `Неверная целевая папка.`; `Почтовый ящик не авторизован.`; body schema `{"detail": "..."}`
+  - `404`: `Письмо не найдено.`; `Почтовый ящик не найден.`; body schema `{"detail": "..."}`
+  - `500`: `Не удалось переместить письмо.`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 #### `GET /api/v1/mail/oauth/yandex/callback`
@@ -654,14 +1014,15 @@ Endpoints: `10`
     - `RedirectResponse`
     - `HTTPException`
     - `db.get`
+    - `logger.warning`
     - `db.commit`
     - `db.refresh`
     - `exchange_code`
     - `sync_mailbox`
   - Side effects: DB write, Mail integration
 - Error Handling:
-  - `400`: `Invalid state`; body schema `{"detail": "..."}`
-  - `404`: `Mailbox not found`; body schema `{"detail": "..."}`
+  - `400`: `Некорректный OAuth state.`; body schema `{"detail": "..."}`
+  - `404`: `Почтовый ящик не найден.`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 
@@ -815,7 +1176,254 @@ Source: `backend/app/routers/global_chat.py`
 
 Prefix: `/api/v1/chat`
 
-Endpoints: `4`
+Endpoints: `14`
+
+#### `GET /api/v1/chat/conversations`
+
+- Controller: `backend/app/routers/global_chat.py::list_conversations`
+- Data Contract:
+  - Path params: none
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Response model: `List[ChatConversationResponse]`
+  - Response contracts: [`ChatConversationResponse`](#model-chatconversationresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+  - Side effects: No explicit side effects (read/transform path)
+- Error Handling:
+  - Explicit `HTTPException` not found in handler body
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/chat/conversations`
+
+- Controller: `backend/app/routers/global_chat.py::create_conversation`
+- Data Contract:
+  - Path params: none
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body models: [`ChatConversationCreate`](#model-chatconversationcreate)
+  - Response model: `ChatConversationResponse`
+  - Response contracts: [`ChatConversationResponse`](#model-chatconversationresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `ChatConversation`
+    - `db.add`
+    - `HTTPException`
+    - `db.flush`
+    - `db.execute`
+    - `ChatConversationMember`
+    - `db.commit`
+    - `User.id.in_`
+    - `select`
+  - Side effects: DB write, DB read
+- Error Handling:
+  - `400`: `Title is required`; body schema `{"detail": "..."}`
+  - `500`: `Unable to create conversation`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/chat/conversations/direct`
+
+- Controller: `backend/app/routers/global_chat.py::create_or_open_direct_conversation`
+- Data Contract:
+  - Path params: none
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body models: [`ChatConversationDirectCreate`](#model-chatconversationdirectcreate)
+  - Response model: `ChatConversationResponse`
+  - Response contracts: [`ChatConversationResponse`](#model-chatconversationresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `ChatConversation`
+    - `db.add`
+    - `HTTPException`
+    - `db.get`
+    - `db.flush`
+    - `ChatConversationMember`
+    - `db.commit`
+  - Side effects: DB write
+- Error Handling:
+  - `400`: `Cannot create direct chat with yourself`; body schema `{"detail": "..."}`
+  - `404`: `User not found`; body schema `{"detail": "..."}`
+  - `500`: `Unable to create conversation`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `PATCH /api/v1/chat/conversations/{conversation_id}`
+
+- Controller: `backend/app/routers/global_chat.py::update_conversation`
+- Data Contract:
+  - Path params: `conversation_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body models: [`ChatConversationUpdate`](#model-chatconversationupdate)
+  - Response model: `ChatConversationResponse`
+  - Response contracts: [`ChatConversationResponse`](#model-chatconversationresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context; route may enforce role/section checks
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `HTTPException`
+    - `db.commit`
+  - Side effects: DB write
+- Error Handling:
+  - `400`: `Title is required`; body schema `{"detail": "..."}`
+  - `403`: `Not enough permissions`; body schema `{"detail": "..."}`
+  - `404`: `Conversation not found`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/chat/conversations/{conversation_id}/members`
+
+- Controller: `backend/app/routers/global_chat.py::add_conversation_members`
+- Data Contract:
+  - Path params: `conversation_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body models: [`ChatConversationMemberAdd`](#model-chatconversationmemberadd)
+  - Response model: `ChatConversationResponse`
+  - Response contracts: [`ChatConversationResponse`](#model-chatconversationresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context; route may enforce role/section checks
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `HTTPException`
+    - `db.execute`
+    - `db.add`
+    - `db.commit`
+    - `ChatConversationMember`
+    - `User.id.in_`
+    - `select`
+  - Side effects: DB write, DB read
+- Error Handling:
+  - `400`: `Member management is not available for this chat type`; body schema `{"detail": "..."}`
+  - `403`: `Not enough permissions`; body schema `{"detail": "..."}`
+  - `404`: `Conversation not found`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `DELETE /api/v1/chat/conversations/{conversation_id}/members/{member_user_id}`
+
+- Controller: `backend/app/routers/global_chat.py::remove_conversation_member`
+- Data Contract:
+  - Path params: `conversation_id`: str (required, default=-, constraints=-); `member_user_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Response model: `ChatConversationResponse`
+  - Response contracts: [`ChatConversationResponse`](#model-chatconversationresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context; route may enforce role/section checks
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `HTTPException`
+    - `db.delete`
+    - `db.commit`
+  - Side effects: DB write
+- Error Handling:
+  - `400`: `Member management is not available for this chat type`; body schema `{"detail": "..."}`
+  - `403`: `Not enough permissions`; body schema `{"detail": "..."}`
+  - `404`: `Conversation not found`; `Member not found`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/chat/conversations/{conversation_id}/messages`
+
+- Controller: `backend/app/routers/global_chat.py::list_conversation_messages`
+- Data Contract:
+  - Path params: `conversation_id`: str (required, default=-, constraints=-)
+  - Query params: `skip`: int (optional, default=0, constraints=-); `limit`: int (optional, default=500, constraints=-)
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Response model: `List[GlobalChatMessageResponse]`
+  - Response contracts: [`GlobalChatMessageResponse`](#model-globalchatmessageresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `HTTPException`
+  - Side effects: No explicit side effects (read/transform path)
+- Error Handling:
+  - `404`: `Conversation not found`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/chat/conversations/{conversation_id}/messages`
+
+- Controller: `backend/app/routers/global_chat.py::create_conversation_message`
+- Data Contract:
+  - Path params: `conversation_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Response model: `GlobalChatMessageResponse`
+  - Response contracts: [`GlobalChatMessageResponse`](#model-globalchatmessageresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `HTTPException`
+  - Side effects: No explicit side effects (read/transform path)
+- Error Handling:
+  - `404`: `Conversation not found`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 #### `GET /api/v1/chat/messages`
 
@@ -838,11 +1446,7 @@ Endpoints: `4`
 - Logic Flow:
   - Internal calls:
     - `Depends`
-    - `db.execute`
-    - `GlobalChatMessage.created_at.asc`
-    - `joinedload`
-    - `select`
-  - Side effects: DB write, DB read
+  - Side effects: No explicit side effects (read/transform path)
 - Error Handling:
   - Explicit `HTTPException` not found in handler body
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
@@ -854,8 +1458,8 @@ Endpoints: `4`
   - Path params: none
   - Query params: none
   - Header params: none
-  - Form params: `body`: Optional[str] (optional, default=None, constraints=-); `mentions`: Optional[str] (optional, default=None, constraints=-)
-  - File params: `files`: Union[UploadFile, List[UploadFile], None] (optional, default=None, constraints=-)
+  - Form params: none
+  - File params: none
   - Body: none
   - Response model: `GlobalChatMessageResponse`
   - Response contracts: [`GlobalChatMessageResponse`](#model-globalchatmessageresponse)
@@ -867,28 +1471,15 @@ Endpoints: `4`
     - `user: Depends(CurrentUser)`
 - Logic Flow:
   - Internal calls:
-    - `Form`
-    - `File`
     - `Depends`
-    - `GlobalChatMessage`
-    - `db.add`
-    - `HTTPException`
-    - `db.commit`
-    - `db.refresh`
-    - `db.execute`
-    - `storage_available`
-    - `ensure_path`
-    - `clean_name`
-  - Side effects: DB write, DB read, Notification dispatch, File/storage operation
+  - Side effects: No explicit side effects (read/transform path)
 - Error Handling:
-  - `400`: `Message or files are required`; body schema `{"detail": "..."}`
-  - `413`: `File too large`; body schema `{"detail": "..."}`
-  - `500`: `Storage is not configured`; body schema `{"detail": "..."}`
+  - Explicit `HTTPException` not found in handler body
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 #### `DELETE /api/v1/chat/messages/{message_id}`
 
-- Controller: `backend/app/routers/global_chat.py::delete_global_message`
+- Controller: `backend/app/routers/global_chat.py::delete_message`
 - Data Contract:
   - Path params: `message_id`: str (required, default=-, constraints=-)
   - Query params: none
@@ -905,18 +1496,17 @@ Endpoints: `4`
 - Logic Flow:
   - Internal calls:
     - `Depends`
-    - `db.get`
     - `HTTPException`
     - `db.commit`
   - Side effects: DB write
 - Error Handling:
   - `403`: `Not enough permissions`; body schema `{"detail": "..."}`
-  - `404`: `Message not found`; body schema `{"detail": "..."}`
+  - `404`: `Message not found`; `Conversation not found`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 #### `PATCH /api/v1/chat/messages/{message_id}`
 
-- Controller: `backend/app/routers/global_chat.py::update_global_message`
+- Controller: `backend/app/routers/global_chat.py::update_message`
 - Data Contract:
   - Path params: `message_id`: str (required, default=-, constraints=-)
   - Query params: none
@@ -935,6 +1525,132 @@ Endpoints: `4`
 - Logic Flow:
   - Internal calls:
     - `Depends`
+    - `HTTPException`
+    - `db.commit`
+  - Side effects: DB write
+- Error Handling:
+  - `400`: `Message deleted`; `Message cannot be empty`; body schema `{"detail": "..."}`
+  - `403`: `Not enough permissions`; body schema `{"detail": "..."}`
+  - `404`: `Message not found`; `Conversation not found`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `DELETE /api/v1/chat/messages/{message_id}/pin`
+
+- Controller: `backend/app/routers/global_chat.py::unpin_message`
+- Data Contract:
+  - Path params: `message_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Response model: `GlobalChatMessageResponse`
+  - Response contracts: [`GlobalChatMessageResponse`](#model-globalchatmessageresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `HTTPException`
+    - `db.commit`
+  - Side effects: DB write
+- Error Handling:
+  - `404`: `Message not found`; `Conversation not found`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/chat/messages/{message_id}/pin`
+
+- Controller: `backend/app/routers/global_chat.py::pin_message`
+- Data Contract:
+  - Path params: `message_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Response model: `GlobalChatMessageResponse`
+  - Response contracts: [`GlobalChatMessageResponse`](#model-globalchatmessageresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `HTTPException`
+    - `db.execute`
+    - `db.commit`
+    - `select`
+  - Side effects: DB write, DB read
+- Error Handling:
+  - `400`: `Message deleted`; body schema `{"detail": "..."}`
+  - `404`: `Message not found`; `Conversation not found`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+
+### Router `support`
+
+Source: `backend/app/routers/support.py`
+
+Prefix: `/api/v1/support`
+
+Endpoints: `8`
+
+#### `DELETE /api/v1/support/messages/{message_id}`
+
+- Controller: `backend/app/routers/support.py::delete_message`
+- Data Contract:
+  - Path params: `message_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context; route may enforce role/section checks
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `db.get`
+    - `HTTPException`
+    - `db.commit`
+  - Side effects: DB write
+- Error Handling:
+  - `403`: `Недостаточно прав`; body schema `{"detail": "..."}`
+  - `404`: `Сообщение не найдено`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `PATCH /api/v1/support/messages/{message_id}`
+
+- Controller: `backend/app/routers/support.py::update_message`
+- Data Contract:
+  - Path params: `message_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body models: [`SupportMessageUpdate`](#model-supportmessageupdate)
+  - Response model: `SupportMessageResponse`
+  - Response contracts: [`SupportMessageResponse`](#model-supportmessageresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context; route may enforce role/section checks
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
     - `db.get`
     - `HTTPException`
     - `db.commit`
@@ -942,9 +1658,217 @@ Endpoints: `4`
     - `joinedload`
   - Side effects: DB write
 - Error Handling:
-  - `400`: `Message deleted`; `Message cannot be empty`; body schema `{"detail": "..."}`
-  - `403`: `Not enough permissions`; body schema `{"detail": "..."}`
-  - `404`: `Message not found`; body schema `{"detail": "..."}`
+  - `400`: `Сообщение удалено`; `Сообщение не может быть пустым`; body schema `{"detail": "..."}`
+  - `403`: `Недостаточно прав`; body schema `{"detail": "..."}`
+  - `404`: `Сообщение не найдено`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/support/tickets`
+
+- Controller: `backend/app/routers/support.py::list_tickets`
+- Data Contract:
+  - Path params: none
+  - Query params: `status`: Optional[str] (optional, default=None, constraints=-); `category`: Optional[str] (optional, default=None, constraints=-); `assignee_id`: Optional[str] (optional, default=None, constraints=-); `q`: Optional[str] (optional, default=None, constraints=-)
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Response model: `List[SupportTicketResponse]`
+  - Response contracts: [`SupportTicketResponse`](#model-supportticketresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `SupportTicket.created_at.desc`
+    - `db.execute`
+    - `SupportMessage.created_at.asc`
+    - `joinedload`
+    - `select`
+    - `SupportMessage.ticket_id.in_`
+    - `func.count`
+  - Side effects: DB write, DB read
+- Error Handling:
+  - Explicit `HTTPException` not found in handler body
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/support/tickets`
+
+- Controller: `backend/app/routers/support.py::create_ticket`
+- Data Contract:
+  - Path params: none
+  - Query params: none
+  - Header params: none
+  - Form params: `subject`: str (required, default=-, constraints=-); `description`: Optional[str] (optional, default=None, constraints=-); `category`: Optional[str] (optional, default='other', constraints=-)
+  - File params: `files`: Union[UploadFile, List[UploadFile], None] (optional, default=None, constraints=-)
+  - Body: none
+  - Response model: `SupportTicketResponse`
+  - Response contracts: [`SupportTicketResponse`](#model-supportticketresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Form`
+    - `File`
+    - `Depends`
+    - `HTTPException`
+    - `SupportTicket`
+    - `db.add`
+    - `db.refresh`
+    - `db.commit`
+    - `db.rollback`
+  - Side effects: DB write, File/storage operation
+- Error Handling:
+  - `400`: `Укажите тему обращения`; body schema `{"detail": "..."}`
+  - `500`: `Не удалось создать тикет`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/support/tickets/{ticket_id}`
+
+- Controller: `backend/app/routers/support.py::get_ticket`
+- Data Contract:
+  - Path params: `ticket_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Response model: `SupportTicketDetail`
+  - Response contracts: [`SupportTicketDetail`](#model-supportticketdetail)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context; route may enforce role/section checks
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `SupportTicketDetail`
+    - `HTTPException`
+    - `SupportMessage.created_at.asc`
+    - `db.execute`
+    - `joinedload`
+    - `select`
+  - Side effects: DB write, DB read
+- Error Handling:
+  - `403`: `Нет доступа к тикету`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `PATCH /api/v1/support/tickets/{ticket_id}`
+
+- Controller: `backend/app/routers/support.py::update_ticket`
+- Data Contract:
+  - Path params: `ticket_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body models: [`SupportTicketUpdate`](#model-supportticketupdate)
+  - Response model: `SupportTicketResponse`
+  - Response contracts: [`SupportTicketResponse`](#model-supportticketresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context; route may enforce role/section checks
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `HTTPException`
+    - `db.commit`
+    - `db.refresh`
+    - `db.execute`
+    - `create_notification`
+    - `joinedload`
+    - `select`
+  - Side effects: DB write, DB read, Notification dispatch
+- Error Handling:
+  - `400`: `Недопустимый статус`; body schema `{"detail": "..."}`
+  - `403`: `Только тех. поддержка`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/support/tickets/{ticket_id}/create-task`
+
+- Controller: `backend/app/routers/support.py::create_task_from_ticket`
+- Data Contract:
+  - Path params: `ticket_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body models: [`CreateTaskFromTicket`](#model-createtaskfromticket)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context; route may enforce role/section checks
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `SupportMessage`
+    - `db.add`
+    - `HTTPException`
+    - `Task`
+    - `db.refresh`
+    - `db.commit`
+    - `User.get_by_id`
+    - `create_notification`
+    - `db.rollback`
+  - Side effects: DB write, Notification dispatch
+- Error Handling:
+  - `400`: `Укажите название задачи`; body schema `{"detail": "..."}`
+  - `403`: `Только тех. поддержка`; body schema `{"detail": "..."}`
+  - `404`: `Исполнитель не найден`; body schema `{"detail": "..."}`
+  - `500`: `Не удалось создать задачу`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/support/tickets/{ticket_id}/messages`
+
+- Controller: `backend/app/routers/support.py::add_message`
+- Data Contract:
+  - Path params: `ticket_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: `body`: Optional[str] (optional, default=None, constraints=-); `is_internal`: Optional[bool] (optional, default=False, constraints=-)
+  - File params: `files`: Union[UploadFile, List[UploadFile], None] (optional, default=None, constraints=-)
+  - Body: none
+  - Response model: `SupportMessageResponse`
+  - Response contracts: [`SupportMessageResponse`](#model-supportmessageresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context; route may enforce role/section checks
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Form`
+    - `File`
+    - `Depends`
+    - `SupportMessage`
+    - `db.add`
+    - `HTTPException`
+    - `db.commit`
+    - `db.refresh`
+    - `db.execute`
+    - `joinedload`
+    - `create_notification`
+    - `select`
+  - Side effects: DB write, DB read, Notification dispatch, File/storage operation
+- Error Handling:
+  - `400`: `Пустое сообщение`; body schema `{"detail": "..."}`
+  - `403`: `Нет доступа к тикету`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 

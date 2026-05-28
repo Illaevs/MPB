@@ -380,6 +380,9 @@ class FinanceService:
         skipped_count = 0
         rules_applied_count = 0
         errors = []
+        # Список импортированных транзакций для batch-эмиссии в Event Bus.
+        # Заполняется в success-ветке; используется после commit.
+        imported_items: list = []
 
         for tx_data in transactions_data:
             try:
@@ -446,11 +449,37 @@ class FinanceService:
                         rules_applied_count += 1
 
                     imported_count += 1
+                    imported_items.append({
+                        "id": str(transaction.id),
+                        "doc_num": transaction.doc_num,
+                        "amount": float(transaction.amount or 0),
+                        "transaction_date": transaction.transaction_date.isoformat() if transaction.transaction_date else None,
+                        "category_code": transaction.category_code,
+                    })
 
             except Exception as e:
                 errors.append(f"Error importing transaction {tx_data.get('doc_num', 'unknown')}: {str(e)}")
 
         await db.commit()
+
+        # Event Bus v2: ОДНО batch-событие на всю пачку — внешний
+        # consumer (BI, 1С) получит её атомарно, а не N webhook'ов.
+        # Считаем total_amount по импортированным (skipped не входят).
+        if imported_items:
+            from app.services.event_outbox import emit_batch_event_safe
+            await emit_batch_event_safe(
+                db,
+                event_type="treasury_transaction.batch_imported",
+                entity_type="treasury_transaction",
+                items=imported_items,
+                summary={
+                    "imported_count": imported_count,
+                    "skipped_count": skipped_count,
+                    "rules_applied_count": rules_applied_count,
+                    "total_amount": sum(i["amount"] for i in imported_items),
+                    "errors_count": len(errors),
+                },
+            )
 
         return {
             "imported_count": imported_count,

@@ -1219,7 +1219,16 @@ export default {
   font-size: 14px;
   font-weight: 500;
   line-height: 21px;
+  /* word-break — дополнительно к overflow-wrap, чтобы переноситься
+     даже на одно длинное «слово» (URL, кириллица без пробелов).
+     line-clamp: 3 — не давать высоте карточки расти бесконечно
+     при title 200 символов (~140-150 символов влезает в 3 строки). */
   overflow-wrap: anywhere;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
 }
 
 .task-list-line__title-wrap p {
@@ -1334,19 +1343,38 @@ export default {
 .task-kanban-column {
   width: 360px;
   min-height: 100%;
-  padding: 20px;
+  /* Убрали padding-top, чтобы sticky-header мог прилипать к верху
+     scroll-области без отступа сверху (top:0 относительно overflow-auto
+     родителя `.task-list-container`). Padding возвращён внутри header
+     через padding-top, визуальный отступ сохранён. */
+  padding: 0 20px 20px;
   background: #fff;
   border: 1px solid #e4e4e4;
   border-radius: 8px;
   box-shadow: none;
   transition: border-color 0.18s ease, background 0.18s ease;
+  /* flex-direction column — обязательно для того, чтобы `.task-kanban-column__list`
+     с flex: 1 растягивался на всю оставшуюся высоту колонки и drop-zone
+     накрывал пустое место под карточками. */
+  display: flex;
+  flex-direction: column;
 }
 
 .task-kanban-column--over {
-  border-color: #000;
-  background: #fcfcfc;
+  /* Раньше менялся весь border + background — выглядело как «столбец
+     выделен», пользователь воспринимал колонку как сам перетаскиваемый
+     объект. Делаем тоньше: лёгкая «подсветка» внутреннего фона
+     `.task-kanban-column__list` через CSS-переменную; рамка не трогается. */
+  border-color: #e4e4e4;
+  background: #fff;
   transform: none;
   box-shadow: none;
+}
+.task-kanban-column--over .task-kanban-column__list {
+  background: rgba(33, 150, 243, 0.06);
+  outline: 2px dashed rgba(33, 150, 243, 0.45);
+  outline-offset: -4px;
+  border-radius: 8px;
 }
 
 .task-kanban-column__header {
@@ -1354,6 +1382,18 @@ export default {
   flex-direction: column;
   gap: 16px;
   margin-bottom: 16px;
+  /* Sticky-header: при скролле длинного списка задач название колонки
+     остаётся видимым у верха scroll-области (.task-list-container).
+     `top: 0` — прилипает к верху overflow-auto родителя. padding-top
+     возвращает визуальный отступ, который сняли с `.task-kanban-column`.
+     `background: #fff` нужен, иначе карточки задач просвечивают сквозь
+     прилипший header при скролле вниз. */
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: #fff;
+  padding-top: 20px;
+  padding-bottom: 12px;
 }
 
 .task-kanban-column__title-wrap {
@@ -1401,6 +1441,13 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  /* Drop-zone — на всю оставшуюся высоту колонки, не только на высоту
+     карточек. Раньше при 1-2 задачах под списком пустое место было
+     «мёртвым» — задача роняется только в зону самих карточек. */
+  flex: 1 1 auto;
+  min-height: 240px;
+  padding: 4px 0 8px;
+  transition: background var(--dur-fast) ease, outline-color var(--dur-fast) ease;
 }
 
 .task-kanban-column__empty {
@@ -2777,7 +2824,9 @@ export default {
   box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
   cursor: grab;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 28px;
+  /* `auto` вместо фиксированных 28px — иначе stack из 2+ аватарок
+     (каждая 26px с overlap -8px → 44/62/80px на 2/3/4) обрезается. */
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
   align-items: center;
   transition: transform 0.16s ease, border-color 0.16s ease, opacity 0.16s ease;

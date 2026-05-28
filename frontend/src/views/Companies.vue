@@ -54,7 +54,7 @@
           </transition>
         </div>
 
-        <div class="quick-add" title="Быстрое создание контрагента: введите ИНН и нажмите Enter — данные подтянутся из ЕГРЮЛ">
+        <div v-if="canEditCompanies" class="quick-add" title="Быстрое создание контрагента: введите ИНН и нажмите Enter — данные подтянутся из ЕГРЮЛ">
           <i class="fas fa-bolt"></i>
           <span class="quick-add__label">Создать по ИНН</span>
           <input
@@ -67,7 +67,7 @@
           />
           <i v-if="quickAdding" class="fas fa-spinner fa-spin"></i>
         </div>
-        <UiButton size="sm" icon-left="fas fa-plus" @click="openCreate">Создать</UiButton>
+        <UiButton v-if="canEditCompanies" size="sm" icon-left="fas fa-plus" @click="openCreate">Создать</UiButton>
       </div>
 
       <div v-if="hasActiveFilters" class="filter-pills">
@@ -102,7 +102,7 @@
             <UiButton v-if="hasActiveFilters" variant="secondary" size="sm" icon-left="fas fa-rotate-left" @click="clearAllFilters">
               Сбросить фильтры
             </UiButton>
-            <UiButton size="sm" icon-left="fas fa-plus" @click="openCreate">
+            <UiButton v-if="canEditCompanies" size="sm" icon-left="fas fa-plus" @click="openCreate">
               Создать контрагента
             </UiButton>
           </div>
@@ -143,7 +143,14 @@
             >
               <td class="companies-inn">{{ company.inn || '—' }}</td>
               <td class="companies-name">
-                <div class="companies-name__primary">{{ company.name || '—' }}</div>
+                <div class="companies-name__primary">
+                  <i
+                    v-if="company.is_default"
+                    class="fas fa-star companies-name__default-star"
+                    title="Основная «наша компания» — используется по умолчанию"
+                  ></i>
+                  {{ company.name || '—' }}
+                </div>
                 <span class="companies-name__secondary">{{ company.full_name || company.short_name || '' }}</span>
               </td>
               <td @click.stop>
@@ -263,17 +270,25 @@
                   />
                   <transition name="pop">
                     <div v-if="openRowMenuId === company.id" class="more-menu" v-click-outside="() => openRowMenuId = null">
-                      <button type="button" class="more-menu-item" @click="editCompany(company)">
+                      <button v-if="canEditCompanies" type="button" class="more-menu-item" @click="editCompany(company)">
                         <i class="fas fa-pen mr-2"></i> Редактировать
                       </button>
-                      <button type="button" class="more-menu-item" @click="duplicateCompany(company)">
+                      <button v-if="canEditCompanies" type="button" class="more-menu-item" @click="duplicateCompany(company)">
                         <i class="fas fa-copy mr-2"></i> Дублировать
                       </button>
                       <button type="button" class="more-menu-item" @click="openRelatedDeals(company)">
                         <i class="fas fa-link mr-2"></i> Связанные сделки
                       </button>
-                      <div class="more-menu-divider"></div>
-                      <button type="button" class="more-menu-item more-menu-item--danger" @click="deleteCompany(company)">
+                      <button
+                        v-if="canEditCompanies && company.type === 'internal' && !company.is_default"
+                        type="button"
+                        class="more-menu-item"
+                        @click="promoteAsDefaultOurCompany(company)"
+                      >
+                        <i class="fas fa-star mr-2"></i> Сделать основной «нашей»
+                      </button>
+                      <div v-if="canEditCompanies" class="more-menu-divider"></div>
+                      <button v-if="canEditCompanies" type="button" class="more-menu-item more-menu-item--danger" @click="deleteCompany(company)">
                         <i class="fas fa-trash mr-2"></i> Удалить
                       </button>
                     </div>
@@ -291,7 +306,7 @@
       :model-value="showCreateModal"
       size="xl"
       :closable="false"
-      :close-on-overlay="false"
+      :close-on-overlay="true"
       :close-on-esc="false"
       @update:modelValue="(value) => { if (!value) onDrawerBackdropClick() }"
     >
@@ -452,12 +467,6 @@
               <i class="fas fa-file-alt"></i>
               <h4>Документы</h4>
               <div class="doc-upload">
-                <select v-model="companyDocumentForm.our_company_id" class="doc-upload__select">
-                  <option value="">Наша компания…</option>
-                  <option v-for="company in ourCompanyOptions" :key="company.id" :value="company.id">
-                    {{ company.short_name || company.name }}
-                  </option>
-                </select>
                 <input ref="companyDocumentFileInput" type="file" class="d-none" multiple @change="uploadCompanyDocuments" />
                 <UiButton
                   type="button"
@@ -465,7 +474,7 @@
                   size="sm"
                   icon-left="fas fa-plus"
                   :loading="companyDocumentUploading"
-                  :disabled="companyDocumentUploading || !companyDocumentForm.our_company_id"
+                  :disabled="companyDocumentUploading"
                   @click="triggerCompanyDocumentUpload"
                 >
                   Файл
@@ -483,7 +492,7 @@
                   </span>
                   <span class="doc-row__copy">
                     <strong>{{ doc.file_name || 'Файл' }}</strong>
-                    <small class="text-muted">{{ doc.our_company_name || '—' }} · {{ formatFileSize(doc.file_size) }} · {{ formatDocumentDate(doc.created_at) }}</small>
+                    <small class="text-muted">{{ formatFileSize(doc.file_size) }} · {{ formatDocumentDate(doc.created_at) }}</small>
                   </span>
                 </button>
                 <UiIconButton icon="fas fa-trash" label="Удалить" variant="danger" @click="deleteCompanyDocument(doc)" />
@@ -539,14 +548,16 @@
 
       <template #footer>
         <UiButton type="button" variant="secondary" size="sm" @click="onDrawerBackdropClick">Отмена</UiButton>
-        <UiButton type="button" size="sm" icon-left="fas fa-check" :loading="saving" @click="saveCompany">
+        <UiButton v-if="canEditCompanies" type="button" size="sm" icon-left="fas fa-check" :loading="saving" @click="saveCompany">
           {{ isEditing ? 'Сохранить' : 'Создать' }}
         </UiButton>
       </template>
     </UiDrawer>
 
-    <!-- Leader/Employee pickers -->
-    <div v-if="showLeaderDialog" class="picker-overlay" @click="closeLeaderDialog">
+    <Teleport to="body">
+    <!-- Leader/Employee pickers (teleported so they sit above the
+         body-level teleported UiDrawer instead of behind it) -->
+    <div v-if="showLeaderDialog" class="picker-overlay" v-modal-close="closeLeaderDialog">
       <div class="picker" @click.stop>
         <header class="picker__head">
           <h4>Выбор руководителя</h4>
@@ -568,7 +579,7 @@
       </div>
     </div>
 
-    <div v-if="showEmployeeDialog" class="picker-overlay" @click="closeEmployeeDialog">
+    <div v-if="showEmployeeDialog" class="picker-overlay" v-modal-close="closeEmployeeDialog">
       <div class="picker" @click.stop>
         <header class="picker__head">
           <h4>Выбор сотрудника</h4>
@@ -591,7 +602,7 @@
     </div>
 
     <!-- Related deals modal -->
-    <div v-if="relatedDealsOpen" class="picker-overlay" @click.self="closeRelatedDeals">
+    <div v-if="relatedDealsOpen" class="picker-overlay" v-modal-close="closeRelatedDeals">
       <div class="picker" @click.stop style="max-width: 560px;">
         <header class="picker__head">
           <h4>Сделки контрагента <span class="text-muted small">— {{ relatedDealsCompany?.name }}</span></h4>
@@ -619,7 +630,7 @@
       </div>
     </div>
 
-    <div v-if="directionsCompany" class="picker-overlay" @click.self="closeDirections">
+    <div v-if="directionsCompany" class="picker-overlay" v-modal-close="closeDirections">
       <div class="picker" @click.stop style="max-width: 520px;">
         <header class="picker__head">
           <h4>Направление работ <span class="text-muted small">— {{ directionsCompany?.name }}</span></h4>
@@ -657,6 +668,7 @@
         </footer>
       </div>
     </div>
+    </Teleport>
   </div>
 </template>
 
@@ -681,6 +693,7 @@ import StarRating from '../components/ui/StarRating.vue'
 import { useToast } from '../composables/useToast'
 import { useConfirm } from '../composables/useConfirm'
 import { downloadFromHref } from '../utils/download'
+import { canEditSection } from '../utils/permissions'
 import { api } from '../services/api'
 import { useCompaniesStore } from '../stores/companies'
 import { useCategoriesStore } from '../stores/categories'
@@ -719,14 +732,21 @@ const normalizeBankAccounts = (accounts) => {
   }))
 }
 
-const normalizeContacts = (contacts) => {
-  if (!Array.isArray(contacts)) return []
-  return contacts.map((c) => ({
-    name: c?.name || '',
-    position: c?.position || '',
-    phone: c?.phone || '',
-    email: c?.email || ''
-  }))
+const normalizeContacts = (contacts, fallbackName = '') => {
+  const list = Array.isArray(contacts)
+    ? contacts.map((c) => ({
+        name: c?.name || '',
+        position: c?.position || '',
+        phone: c?.phone || '',
+        email: c?.email || ''
+      }))
+    : []
+  // Legacy single `contact_person` (shown in the list column) but no
+  // structured contacts → seed one so the drawer matches the list.
+  if (!list.length && fallbackName) {
+    list.push({ name: fallbackName, position: '', phone: '', email: '' })
+  }
+  return list
 }
 
 /**
@@ -795,6 +815,9 @@ export default {
   setup() {
     const toast = useToast()
     const { confirm } = useConfirm()
+    // Write actions (create/edit/duplicate/delete) are hidden for users
+    // without `companies` edit rights — they'd only get a backend 403.
+    const canEditCompanies = computed(() => canEditSection('companies'))
     const router = useRouter()
     const companiesStore = useCompaniesStore()
     const usersStore = useUsersStore()
@@ -832,9 +855,8 @@ export default {
     const companyDocumentsLoading = ref(false)
     const companyDocumentUploading = ref(false)
     const companyDocumentFileInput = ref(null)
-    const companyDocumentForm = ref({
-      our_company_id: localStorage.getItem('companies-default-our-id') || ''
-    })
+    // companyDocumentForm previously held our_company_id picked by the user;
+    // backend now resolves it from the system default, so no input is needed.
 
     const innLookupBusy = ref(false)
     const innValidation = reactive({ valid: false, error: '' })
@@ -1040,7 +1062,7 @@ export default {
         ...company,
         phones: Array.isArray(company.phones) ? [...company.phones] : (company.phone ? [company.phone] : []),
         emails: Array.isArray(company.emails) ? [...company.emails] : (company.email ? [company.email] : []),
-        contacts: normalizeContacts(company.contacts),
+        contacts: normalizeContacts(company.contacts, company.contact_person),
         bank_accounts: normalizeBankAccounts(company.bank_accounts),
         leader_user_ids: [],
         employee_user_ids: []
@@ -1072,7 +1094,7 @@ export default {
         name: company.name ? `${company.name} (копия)` : '',
         phones: Array.isArray(company.phones) ? [...company.phones] : [],
         emails: Array.isArray(company.emails) ? [...company.emails] : [],
-        contacts: normalizeContacts(company.contacts),
+        contacts: normalizeContacts(company.contacts, company.contact_person),
         bank_accounts: normalizeBankAccounts(company.bank_accounts),
         leader_user_ids: [],
         employee_user_ids: []
@@ -1142,6 +1164,19 @@ export default {
           variant: 'warning'
         })
         if (!ok) return
+      }
+      if (!isEditing.value) {
+        const innTrim = (companyForm.value.inn || '').trim()
+        if (innTrim) {
+          try {
+            const dup = await api.companies.findByInn(innTrim)
+            const existing = (dup || []).find(c => String(c.inn || '').trim() === innTrim)
+            if (existing) {
+              toast.error(`Контрагент с ИНН ${innTrim} уже создан: «${existing.name}».`)
+              return
+            }
+          } catch (e) { /* сеть подвисла — отдаём бэкенду, который тоже проверяет */ }
+        }
       }
       saving.value = true
       try {
@@ -1214,7 +1249,12 @@ export default {
 
       quickAdding.value = true
       try {
-        const dadataResp = await axios.post('/api/v1/dadata/party', { query: inn }).catch(() => null)
+        let dadataResp = null
+        try {
+          dadataResp = await axios.post('/api/v1/dadata/party', { query: inn })
+        } catch (e) {
+          toast.error(e?.response?.data?.detail || 'DaData недоступна — заполните данные вручную.')
+        }
         const data = dadataResp?.data || {}
 
         if (!data.short_name && !data.full_name) {
@@ -1312,12 +1352,7 @@ export default {
         const internal = await api.companies.list({
           limit: 1000, company_type: 'internal', sort_by: 'name', sort_dir: 'asc'
         })
-        const list = Array.isArray(internal) ? internal : []
-        ourCompanyOptions.value = list
-        const remembered = companyDocumentForm.value.our_company_id
-        if (!list.find(c => c.id === remembered) && list.length) {
-          companyDocumentForm.value.our_company_id = list[0].id
-        }
+        ourCompanyOptions.value = Array.isArray(internal) ? internal : []
       } catch (e) { ourCompanyOptions.value = [] }
     }
 
@@ -1333,20 +1368,17 @@ export default {
     }
 
     const triggerCompanyDocumentUpload = () => {
-      if (!companyDocumentForm.value.our_company_id) { toast.warning('Выберите нашу компанию'); return }
-      localStorage.setItem('companies-default-our-id', companyDocumentForm.value.our_company_id)
+      // our_company_id is resolved server-side from the default — no need to pick.
       companyDocumentFileInput.value?.click()
     }
 
     const uploadCompanyDocuments = async (event) => {
       const files = Array.from(event.target.files || [])
       if (!files.length || !companyForm.value.id) return
-      if (!companyDocumentForm.value.our_company_id) { toast.warning('Выберите нашу компанию'); return }
       companyDocumentUploading.value = true
       try {
         for (const file of files) {
           const formData = new FormData()
-          formData.append('our_company_id', companyDocumentForm.value.our_company_id)
           formData.append('file', file)
           await api.companies.uploadDocument(companyForm.value.id, formData)
         }
@@ -1399,6 +1431,7 @@ export default {
         toast.success('Данные загружены из ЕГРЮЛ')
       } catch (e) {
         console.warn('Dadata party lookup failed:', e)
+        toast.error(e?.response?.data?.detail || 'Не удалось получить данные из ЕГРЮЛ (DaData).')
       } finally {
         innLookupBusy.value = false
       }
@@ -1518,6 +1551,22 @@ export default {
     const goToDeal = (deal) => {
       closeRelatedDeals()
       router.push({ path: '/deals', query: { deal_id: deal.id } })
+    }
+
+    // Promote an internal company to the system-wide default "наша компания".
+    // After this, all create-endpoints (leads/deals/documents/etc.) will
+    // auto-fill our_company_id with this id when the frontend doesn't send one.
+    const promoteAsDefaultOurCompany = async (company) => {
+      openRowMenuId.value = null
+      if (!company?.id) return
+      try {
+        await api.companies.setDefaultOurCompany(company.id)
+        toast.success(`«${company.short_name || company.name}» — теперь основная «наша»`)
+        // Refresh both the row list and the cached options
+        await Promise.all([loadCompanies(), loadOurCompanyOptions()])
+      } catch (e) {
+        toast.error(e?.response?.data?.detail || 'Не удалось назначить основной')
+      }
     }
     const dealRoleLabel = (role) => ({ customer: 'Заказчик', our: 'Наша компания', contractor: 'Генподрядчик', other: '—' }[role] || '—')
     const dealStatusText = (status) => status || '—'
@@ -1698,13 +1747,14 @@ export default {
       leaderUsers, employeeUsers, showLeaderDialog, showEmployeeDialog,
       leaderSearch, employeeSearch, filteredLeaderUsers, filteredEmployeeUsers,
       ourCompanyOptions, companyDocuments, companyDocumentsLoading, companyDocumentUploading,
-      companyDocumentFileInput, companyDocumentForm,
+      companyDocumentFileInput,
       relatedDealsOpen, relatedDealsLoading, relatedDealsCompany, relatedDeals,
       // helpers
       initials, avatarColor, getPhoneList, getEmailList, primaryContactName, getTypeText,
       // actions
       loadCompanies, triggerSearch, selectType, clearAllFilters, onLimitChange, onPagerChange,
       nextPage, prevPage, toggleSort,
+      canEditCompanies,
       openCreate, editCompany, duplicateCompany, onDrawerBackdropClick, closeModal, saveCompany, deleteCompany,
       onRefreshClick, toggleRowMenu,
       addContact, removeContact, addBankAccount, removeBankAccount, rsCheck,
@@ -1714,6 +1764,7 @@ export default {
       openEmployeeDialog, closeEmployeeDialog, addEmployee, removeEmployee,
       triggerCompanyDocumentUpload, uploadCompanyDocuments, downloadCompanyDocument, deleteCompanyDocument,
       openRelatedDeals, closeRelatedDeals, goToDeal, dealRoleLabel, dealStatusText,
+      promoteAsDefaultOurCompany,
       getCompanyDocumentIcon, getCompanyDocumentIconClass, formatFileSize, formatDocumentDate
     }
   }
@@ -1977,6 +2028,11 @@ export default {
 .actions-th { width: 56px; padding: 10px 8px !important; }
 .row-actions { width: 56px; padding-left: 4px !important; padding-right: 8px !important; }
 .companies-name__primary { font-weight: 600; color: var(--color-text); }
+.companies-name__default-star {
+  color: #f59e0b; /* amber-500 — выделяет основную «нашу» в общем списке */
+  margin-right: 4px;
+  font-size: 0.78rem;
+}
 .companies-name__secondary {
   display: block;
   font-size: 0.75rem;

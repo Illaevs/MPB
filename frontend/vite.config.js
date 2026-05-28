@@ -6,7 +6,11 @@ import { fileURLToPath, URL } from 'node:url'
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const devPort = Number(env.VITE_DEV_PORT || 3000)
-  const proxyTarget = env.VITE_API_PROXY_TARGET || 'http://localhost:8000'
+  // Явный 127.0.0.1 (не localhost): на Windows `localhost` резолвится
+  // в ::1 (IPv6), а наш uvicorn по умолчанию слушает только IPv4
+  // (0.0.0.0:8000) — vite-прокси не дотянется и отдаст 500. С 127.0.0.1
+  // прокси гарантированно идёт через IPv4-loopback.
+  const proxyTarget = env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8000'
 
   return {
     plugins: [vue()],

@@ -4,6 +4,7 @@ import { getActiveUser, hasSectionAccess } from '../utils/permissions'
 import { useToast } from './useToast'
 import { useUsersStore } from '../stores/users'
 import { downloadFromApi } from '../utils/download'
+import { formatDateTime as fmtDateTime, formatTime as fmtTime } from '../utils/format'
 
 const LAST_SEEN_KEY_PREFIX = 'messenger_last_seen_'
 const MAX_FILE_BYTES = 1024 * 1024 * 1024
@@ -182,10 +183,10 @@ export function useMessenger() {
     return isOwn(message)
   }
 
-  const formatDateTime = (value, locale = 'ru-RU') => {
+  const formatDateTime = (value) => {
     if (!value) return ''
     try {
-      return new Date(value).toLocaleString(locale, {
+      return fmtDateTime(value, {
         hour: '2-digit',
         minute: '2-digit',
         day: '2-digit',
@@ -196,10 +197,10 @@ export function useMessenger() {
     }
   }
 
-  const formatMessageTime = (value, locale = 'ru-RU') => {
+  const formatMessageTime = (value) => {
     if (!value) return ''
     try {
-      return new Date(value).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
+      return fmtTime(value)
     } catch (error) {
       return value
     }

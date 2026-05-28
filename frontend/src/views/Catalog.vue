@@ -48,7 +48,7 @@
                <i class="fas fa-folder text-primary opacity-75"></i>
                <span class="text-truncate">{{ category.name }}</span>
              </div>
-             <button class="btn btn-sm btn-icon opacity-0 hover-opacity-100" @click.stop="editCategory(category)">
+             <button v-if="canEditCatalog" class="btn btn-sm btn-icon opacity-0 hover-opacity-100" @click.stop="editCategory(category)">
                <i class="fas fa-edit small"></i>
              </button>
            </div>
@@ -56,7 +56,7 @@
       </div>
 
       <!-- Bottom Actions -->
-      <div class="p-3 border-top mt-auto">
+      <div v-if="canEditCatalog" class="p-3 border-top mt-auto">
          <button class="btn btn-secondary w-100 mb-2" @click="showCreateCategoryModal = true">
             <i class="fas fa-folder-plus mr-2"></i> Категория
          </button>
@@ -76,7 +76,7 @@
                <option value="">Проект для добавления</option>
                <option v-for="deal in deals" :key="deal.id" :value="deal.id">{{ deal.title }}</option>
             </select>
-            <button class="btn btn-primary" @click="showCreateProductModal = true">
+            <button v-if="canEditCatalog" class="btn btn-primary" @click="showCreateProductModal = true">
                <i class="fas fa-plus mr-2"></i> Товар
             </button>
          </div>
@@ -111,13 +111,13 @@
                   </td>
                   <td class="text-right pr-4">
                      <div class="d-flex justify-end gap-2">
-                        <button class="btn btn-icon btn-sm" @click="editProduct(product)" title="Изменить">
+                        <button v-if="canEditCatalog" class="btn btn-icon btn-sm" @click="editProduct(product)" title="Изменить">
                            <i class="fas fa-pen text-muted"></i>
                         </button>
-                        <button v-if="selectedDealId" class="btn btn-icon btn-sm text-success" @click="quickAddToDeal(product)" title="Добавить в проект">
+                        <button v-if="selectedDealId && canEditProjects" class="btn btn-icon btn-sm text-success" @click="quickAddToDeal(product)" title="Добавить в проект">
                            <i class="fas fa-plus-circle fa-lg"></i>
                         </button>
-                        <button class="btn btn-icon btn-sm text-danger" @click="deleteProduct(product)" title="Удалить">
+                        <button v-if="canEditCatalog" class="btn btn-icon btn-sm text-danger" @click="deleteProduct(product)" title="Удалить">
                            <i class="fas fa-trash"></i>
                         </button>
                      </div>
@@ -130,7 +130,7 @@
 
     <!-- Modals (Keep existing ones) -->
     <!-- Create Category Modal -->
-    <div v-if="showCreateCategoryModal" class="modal-overlay" @click="closeModal">
+    <div v-if="showCreateCategoryModal && canEditCatalog" class="modal-overlay" v-modal-close="closeModal">
       <div class="modal-content" @click.stop>
         <div class="modal-header">
           <h3 class="m-0">{{ isEditingCategory ? 'Редактировать категорию' : 'Новая категория' }}</h3>
@@ -161,7 +161,7 @@
     </div>
 
     <!-- Create Product Modal -->
-    <div v-if="showCreateProductModal" class="modal-overlay" @click="closeModal">
+    <div v-if="showCreateProductModal && canEditCatalog" class="modal-overlay" v-modal-close="closeModal">
       <div class="modal-content" @click.stop>
         <div class="modal-header">
           <h3 class="m-0">{{ isEditingProduct ? 'Редактировать товар' : 'Новый товар' }}</h3>
@@ -192,7 +192,7 @@
     </div>
 
     <!-- Quick Add Modal -->
-    <div v-if="showQuickAddModal" class="modal-overlay" @click="closeModal">
+    <div v-if="showQuickAddModal" class="modal-overlay" v-modal-close="closeModal">
       <div class="modal-content" @click.stop>
         <div class="modal-header">
            <h3 class="m-0">Добавить в проект</h3>
@@ -235,6 +235,7 @@ import { api } from '../services/api'
 import SkeletonLoader from '../components/ui/SkeletonLoader.vue'
 import { useCategoriesStore } from '../stores/categories'
 import { useProductsStore } from '../stores/products'
+import { canEditSection } from '../utils/permissions'
 
 export default {
   name: 'Catalog',
@@ -252,6 +253,13 @@ export default {
     const searchQuery = ref('')
 
     const searchTimeout = ref(null)
+
+    // Section-level write gates (backend enforces the include-level
+    // require_any_section_access; this only hides controls). Catalog
+    // master-data CRUD needs catalog edit; "quick add to deal" is a
+    // project-line mutation, so it follows projects edit.
+    const canEditCatalog = computed(() => canEditSection('catalog'))
+    const canEditProjects = computed(() => canEditSection('projects'))
 
     const selectedCategoryName = computed(() => {
        if (!selectedCategoryId.value) return 'Все категории'
@@ -624,7 +632,9 @@ export default {
       getStatusClass,
       getStatusClass,
       getStatusText,
-      selectedCategoryName
+      selectedCategoryName,
+      canEditCatalog,
+      canEditProjects
     }
   }
 }

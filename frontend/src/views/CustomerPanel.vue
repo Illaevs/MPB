@@ -53,10 +53,6 @@
                 <div class="customer-meta-label">Заказчик</div>
                 <div class="customer-meta-value">{{ detail.deal.customer_name || 'Не указан' }}</div>
               </div>
-              <div class="customer-meta-card">
-                <div class="customer-meta-label">Наша компания</div>
-                <div class="customer-meta-value">{{ detail.deal.our_company_name || 'Не указана' }}</div>
-              </div>
             </div>
             <section class="customer-view-tabs customer-view-tabs--hero">
               <button
@@ -238,7 +234,6 @@
                   <th>Дата</th>
                   <th>Исх. №</th>
                   <th>Тема</th>
-                  <th>Наша компания</th>
                   <th></th>
                 </tr>
               </thead>
@@ -247,7 +242,6 @@
                   <td>{{ formatDate(letter.letter_date) }}</td>
                   <td>{{ letter.outgoing_number }}</td>
                   <td>{{ letter.subject }}</td>
-                  <td>{{ letter.our_company_label }}</td>
                   <td class="customer-table-action">
                     <button class="customer-link-btn" @click="downloadLetter(letter)">
                       Скачать PDF
@@ -255,7 +249,7 @@
                   </td>
                 </tr>
                 <tr v-if="!paginatedLetters.length">
-                  <td colspan="5">
+                  <td colspan="4">
                     <div class="customer-empty customer-empty--inline customer-empty--summary">
                       <span>Писем пока нет</span>
                     </div>

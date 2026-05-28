@@ -8,9 +8,14 @@
 - `README.md` (корень) - общий enterprise-level обзор.
 - `docs/README.md` - индекс документации.
 - `docs/API.md` - входная точка API-документации.
-- `docs/api/INDEX.md` - модульный индекс API по бизнес-доменам.
+- `docs/api/INDEX.md` - модульный индекс API по бизнес-доменам (генерируется).
 - `docs/PROJECT_OVERVIEW.md` - бизнес-обзор подсистем.
+- `docs/DEVELOPER_ARCHITECTURE.md` - архитектура процессов для разработчика.
+- `docs/MODULE_RELATIONS.md` - Mermaid-карта связей модулей.
+- `docs/ADMIN_VISUAL_SYSTEM_MAP.md` - визуальная карта системы для администратора.
+- `docs/OPERATIONS.md` - эксплуатационный runbook.
 - `docs/DEPLOYMENT.md` - деплой/эксплуатация.
+- `docs/TECHNICAL_SPECIFICATION.md` / `docs/WORK_SCHEDULE.md` - ТЗ и график внедрения.
 - `docs/OUTGOING_REGISTRY.md` - специализированный документ по исходящим.
 - `docs/TREASURY_AUTORULES_PROPOSALS.md` - аналитические предложения по казначейству.
 
@@ -26,9 +31,9 @@
 | --- | --- |
 | `core/` | Settings, JWT/security, auth middleware |
 | `database/` | Async/sync engine, DI session factory, declarative base |
-| `models/` | SQLAlchemy ORM (69 файлов) |
-| `schemas/` | Pydantic контракт API (54 файла) |
-| `routers/` | REST API (42 файла, ~350 endpoint'ов) |
+| `models/` | SQLAlchemy ORM (73 файла) |
+| `schemas/` | Pydantic контракт API (47 файлов) |
+| `routers/` | REST API (48 файлов, ~466 endpoint'ов) |
 | `services/` | Доменная логика и инфраструктурные сервисы |
 | `utils/` | локальные utility-функции |
 
@@ -36,7 +41,7 @@
 
 | Папка | Ответственность |
 | --- | --- |
-| `views/` | экранные модули (35 файлов) |
+| `views/` | экранные модули (~42 страницы + модульные `parts/`) |
 | `router/` | маршрутизация, guard'ы, section-based доступ |
 | `stores/` | auth/session + upload queue |
 | `services/` | HTTP interceptors, guided tour |
@@ -116,8 +121,9 @@ sequenceDiagram
 - Delivery/Contracting: `contracts`, `subcontractors*`, `task_auctions`, `tenders`, `accreditations`.
 - Finance: `finance`, `income_expense`, `economy`, `penalty_rules`.
 - Documents: `outgoing_registry`, `document_registry`, `files_catalog`, `storage`, `uploads`.
-- Collaboration: `mail`, `task_messages`, `global_chat`.
-- Governance/ops: `roles`, `users`, `notifications*`, `dashboard`, `audit_logs`.
+- Collaboration: `mail`, `task_messages`, `global_chat`, `support` (тикет-система Тех. поддержки, гейтится секцией `support`; чат тикета переиспользует механику чата задач).
+- Governance/ops: `roles`, `users`, `notifications*`, `dashboard`, `audit_logs`, `org_structure`.
+- Пользовательские UI-настройки: `GET`/`PATCH /api/v1/users/me/ui-preferences` (JSON `user.ui_preferences`, лимит 64 КБ, deep-merge) — единый гибрид localStorage + бэкенд для темы/обоев/плотности/закреплённой навигации/представлений таблиц.
 
 ## 5.3 Services
 - Financial engines: `finance_service.py`, `economy_service.py`.

@@ -53,6 +53,7 @@ from app.schemas.feed import (
     FeedReactRequest,
     FeedVoteRequest,
 )
+from app.services.event_outbox import emit_event_safe
 from app.services.permissions import get_section_acl, is_superuser
 
 
@@ -83,11 +84,40 @@ _ALLOWED_IMAGE_TYPES = {
 }
 _MAX_IMAGE_BYTES = 8 * 1024 * 1024  # 8 МБ
 
+# Обычные файлы поста — allow-list по расширению.
+# Исполняемые и скриптовые расширения сюда сознательно не добавлены,
+# чтобы пост не превращался в способ доставки малвари другим юзерам.
+_ALLOWED_FILE_EXTS = {
+    # документы
+    ".pdf", ".doc", ".docx", ".rtf", ".odt", ".txt", ".md",
+    # таблицы
+    ".xls", ".xlsx", ".csv", ".ods", ".tsv",
+    # презентации
+    ".ppt", ".pptx", ".odp", ".key",
+    # архивы
+    ".zip", ".rar", ".7z", ".tar", ".gz", ".tgz",
+    # медиа (не картинки — те идут через upload-image)
+    ".mp3", ".wav", ".ogg", ".m4a", ".mp4", ".webm", ".mov", ".avi", ".mkv",
+    # CAD / проектные форматы — встречаются в строительной переписке
+    ".dwg", ".dxf", ".step", ".stp", ".iges", ".igs",
+}
+_MAX_FILE_BYTES = 50 * 1024 * 1024  # 50 МБ — потолок для любого файла поста
+
 
 def _feed_images_dir() -> Path:
     """Каталог для картинок ленты. Создаётся при первом обращении."""
     from app.services.user_avatar_bootstrap import avatars_root
     d = avatars_root().parent / "feed"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _feed_files_dir() -> Path:
+    """Каталог для произвольных файлов ленты. Отделён от изображений,
+    чтобы /api/v1/feed/image/<...> не отдавал документы напрямую — это
+    сужает доступ к storage и упрощает аудит."""
+    from app.services.user_avatar_bootstrap import avatars_root
+    d = avatars_root().parent / "feed-files"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -393,6 +423,25 @@ async def create_post(
     db.add(p)
     await db.commit()
     await db.refresh(p)
+
+    # Эмитим для BI (engagement metrics) и Telegram (echo в общий канал
+    # компании, если включён) — после commit'а, чтобы p.id был.
+    await emit_event_safe(
+        db,
+        event_type="feed_post.after_create",
+        entity_type="feed_post",
+        entity_id=str(p.id),
+        payload={
+            "id": str(p.id),
+            "author_id": str(user.id),
+            "post_type": payload.post_type,
+            "has_attachments": bool(payload.attachments),
+            "has_poll": bool(poll),
+            "body_length": len(body),
+        },
+        payload_version=1,
+    )
+    await db.commit()
 
     # Уведомить упомянутых в тексте.
     mentioned = _extract_mention_ids(body)
@@ -704,6 +753,75 @@ async def get_feed_image(filename: str):
     if not target.exists():
         raise HTTPException(status_code=404, detail="Not found")
     return FileResponse(str(target))
+
+
+@router.post("/upload-file")
+async def upload_feed_file(
+    request: Request,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(CurrentUser),
+):
+    """Загрузить произвольный файл к посту (документ/архив/CAD/медиа).
+    Возвращает `{url, name, size, kind: "file"}`.
+
+    Картинки — отдельным эндпоинтом `/upload-image` (там идёт inline-
+    галерея, тут — список «скрепок»). Разнесли по двум каталогам, чтобы
+    /image/<filename> не превратился в раздачу любых файлов.
+
+    ACL: только `feed.edit_all` — как у `upload-image` и публикации поста.
+    """
+    if not await _can_post(db, request, user):
+        raise HTTPException(status_code=403, detail="Нет прав на загрузку файлов в ленту")
+
+    orig_name = (file.filename or "file").strip() or "file"
+    ext = Path(orig_name).suffix.lower()
+    if ext not in _ALLOWED_FILE_EXTS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Этот тип файла не поддержан. Разрешены: документы, таблицы, "
+                   f"архивы, аудио/видео, CAD-проекты"
+        )
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Файл пустой")
+    if len(content) > _MAX_FILE_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Максимальный размер файла {_MAX_FILE_BYTES // (1024 * 1024)} МБ"
+        )
+
+    filename = f"{_uuid.uuid4().hex}{ext}"
+    (_feed_files_dir() / filename).write_bytes(content)
+    return {
+        "url": f"/api/v1/feed/file/{filename}",
+        "name": orig_name,
+        "size": len(content),
+        "kind": "file",
+    }
+
+
+@router.get("/file/{filename}")
+async def get_feed_file(filename: str, name: Optional[str] = Query(None)):
+    """Отдать файл поста с оригинальным именем для скачивания.
+    `name` — это исходное имя файла из attachment'а (для Content-Disposition);
+    физически на диске мы храним под UUID-именем."""
+    safe = Path(filename).name
+    target = _feed_files_dir() / safe
+    try:
+        target.resolve().relative_to(_feed_files_dir().resolve())
+    except (ValueError, OSError):
+        raise HTTPException(status_code=404, detail="Not found")
+    if not target.exists():
+        raise HTTPException(status_code=404, detail="Not found")
+    # Передаём оригинальное имя в Content-Disposition, чтобы юзер
+    # скачал файл с тем именем, под которым он был загружен.
+    display = (name or safe).strip() or safe
+    return FileResponse(
+        str(target),
+        filename=display,
+        media_type="application/octet-stream",
+    )
 
 
 @router.delete("/comments/{comment_id}")

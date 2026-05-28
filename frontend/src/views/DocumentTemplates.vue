@@ -206,7 +206,7 @@
       </div>
     </section>
 
-    <div v-if="showModal" class="dt-modal-overlay" @click="closeModal">
+    <div v-if="showModal" class="dt-modal-overlay" v-modal-close="closeModal">
       <form class="dt-modal" @submit.prevent="saveTemplate" @click.stop>
         <div class="dt-modal-head">
           <div>

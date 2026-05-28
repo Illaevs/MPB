@@ -4332,6 +4332,23 @@ async def create_outgoing_document(
     await safe_refresh_deal_health_issues(db, document.deal_id)
     if not document.deal_id:
         await safe_refresh_orphan_health_issues(db)
+
+    # Event Bus v2: outbox-эмиссия для внешних подписчиков (Диадок,
+    # архив документов, BI). После create — общий стандартный event.
+    from app.services.event_outbox import emit_event_safe
+    await emit_event_safe(
+        db,
+        event_type="outgoing_document.after_create",
+        entity_type="outgoing_document",
+        entity_id=str(document.id),
+        payload={
+            "id": str(document.id),
+            "outgoing_number": document.outgoing_number,
+            "deal_id": str(document.deal_id) if document.deal_id else None,
+            "document_kind": getattr(document, "document_kind", None),
+            "status": getattr(document, "status", None),
+        },
+    )
     return await _serialize_document(db, document, include_details=True)
 
 
@@ -4443,6 +4460,23 @@ async def update_outgoing_document(
         await safe_refresh_deal_health_issues(db, previous_deal_id)
     if not updated.deal_id:
         await safe_refresh_orphan_health_issues(db)
+
+    # Event Bus v2: общее обновление документа. status-change события
+    # эмитим отдельно в местах смены статуса (отдельным PR).
+    from app.services.event_outbox import emit_event_safe
+    await emit_event_safe(
+        db,
+        event_type="outgoing_document.after_update",
+        entity_type="outgoing_document",
+        entity_id=str(updated.id),
+        payload={
+            "id": str(updated.id),
+            "outgoing_number": updated.outgoing_number,
+            "deal_id": str(updated.deal_id) if updated.deal_id else None,
+            "document_kind": getattr(updated, "document_kind", None),
+            "status": getattr(updated, "status", None),
+        },
+    )
     return await _serialize_document(db, updated, include_details=True)
 
 
@@ -4480,6 +4514,20 @@ async def delete_outgoing_document(
     await safe_refresh_deal_health_issues(db, document.deal_id)
     if not document.deal_id:
         await safe_refresh_orphan_health_issues(db)
+
+    # Event Bus v2: after_delete для уведомления внешних реестров.
+    from app.services.event_outbox import emit_event_safe
+    await emit_event_safe(
+        db,
+        event_type="outgoing_document.after_delete",
+        entity_type="outgoing_document",
+        entity_id=str(document.id),
+        payload={
+            "id": str(document.id),
+            "outgoing_number": document.outgoing_number,
+            "deal_id": str(document.deal_id) if document.deal_id else None,
+        },
+    )
     return {"message": "Document deleted"}
 
 

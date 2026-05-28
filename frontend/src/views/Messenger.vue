@@ -617,7 +617,7 @@
     </div>
 
     <Teleport to="body">
-      <div v-if="confirmModalOpen" class="messenger-confirm-overlay" @click.self="closeConfirm">
+      <div v-if="confirmModalOpen" class="messenger-confirm-overlay" v-modal-close="closeConfirm">
         <div class="messenger-confirm">
           <div class="messenger-confirm__header">
             <h3>{{ confirmTitle }}</h3>
@@ -631,7 +631,7 @@
         </div>
       </div>
 
-      <div v-if="showConversationModal" class="messenger-dialog-overlay" @click.self="closeConversationModal">
+      <div v-if="showConversationModal" class="messenger-dialog-overlay" v-modal-close="closeConversationModal">
         <div class="messenger-dialog">
           <div class="messenger-dialog__header">
             <h3>{{ renameMode ? 'Переименовать чат' : 'Новый чат' }}</h3>
@@ -689,7 +689,7 @@
         </div>
       </div>
 
-      <div v-if="addMembersModalOpen" class="messenger-dialog-overlay" @click.self="addMembersModalOpen = false">
+      <div v-if="addMembersModalOpen" class="messenger-dialog-overlay" v-modal-close="() => addMembersModalOpen = false">
         <div class="messenger-dialog">
           <div class="messenger-dialog__header">
             <h3>Добавить участников</h3>
@@ -710,7 +710,7 @@
         </div>
       </div>
 
-      <div v-if="forwardModalOpen" class="messenger-dialog-overlay" @click.self="closeForwardModal">
+      <div v-if="forwardModalOpen" class="messenger-dialog-overlay" v-modal-close="closeForwardModal">
         <div class="messenger-dialog">
           <div class="messenger-dialog__header">
             <h3>Переслать сообщение</h3>

@@ -65,6 +65,7 @@ from app.services.auth_security_store import (
     mark_two_factor_challenge_failure,
     register_two_factor_challenge,
 )
+from app.services.event_outbox import emit_event_safe
 
 router = APIRouter()
 
@@ -170,6 +171,33 @@ async def _build_session_response(
         user=user,
         permissions=await _permissions_map(db, user.role_id),
         is_superuser=_superuser_flag(role),
+    )
+
+
+async def _emit_login_event(
+    db: AsyncSession,
+    user: User,
+    *,
+    flow: str,
+    request: Optional[Request] = None,
+) -> None:
+    """Эмитим `user.after_login` после успешной выдачи токенов.
+    `flow` — web/web_2fa/mobile/mobile_2fa, нужно для аналитики BI.
+    Намеренно не эмитим на /refresh — это технологический хук, не login."""
+    await emit_event_safe(
+        db,
+        event_type="user.after_login",
+        entity_type="user",
+        entity_id=str(user.id),
+        payload={
+            "id": str(user.id),
+            "email": user.email,
+            "role_id": str(user.role_id) if user.role_id else None,
+            "flow": flow,
+            "ip": client_ip(request) if request else None,
+            "two_factor_used": flow.endswith("2fa"),
+        },
+        payload_version=1,
     )
 
 
@@ -380,6 +408,7 @@ async def login(
     )
     session_response, access_token, refresh_token = token_response
     _set_auth_cookies(response, access_token=access_token, refresh_token=refresh_token, request=request)
+    await _emit_login_event(db, user, flow="web", request=request)
     return LoginResponse(
         **session_response.model_dump(),
         requires_2fa=False,
@@ -442,6 +471,7 @@ async def verify_two_factor(
     role = await Role.get_by_id(db, user.role_id) if user.role_id else None
     session_response, access_token, refresh_token = await _issue_tokens(user, role, db)
     _set_auth_cookies(response, access_token=access_token, refresh_token=refresh_token, request=request)
+    await _emit_login_event(db, user, flow="web_2fa", request=request)
     return session_response
 
 
@@ -479,6 +509,7 @@ async def mobile_login(
         two_factor_enabled=bool(user.two_factor_enabled) if settings.REQUIRE_TWO_FACTOR else False,
         two_factor_verified=False if settings.REQUIRE_TWO_FACTOR else False,
     )
+    await _emit_login_event(db, user, flow="mobile", request=request)
     return _login_response_with_tokens(
         session_response,
         access_token,
@@ -538,6 +569,7 @@ async def mobile_verify_two_factor(
     await _clear_challenge_redis(challenge_id)
     role = await Role.get_by_id(db, user.role_id) if user.role_id else None
     session_response, access_token, refresh_token = await _issue_tokens(user, role, db)
+    await _emit_login_event(db, user, flow="mobile_2fa")
     return _token_response_with_tokens(session_response, access_token, refresh_token)
 
 
@@ -667,7 +699,7 @@ async def get_session(
 
 
 @router.post("/logout")
-async def logout(request: Request, response: Response):
+async def logout(request: Request, response: Response, db: AsyncSession = Depends(get_db)):
     access_token = request.cookies.get(settings.ACCESS_COOKIE_NAME)
     refresh_token = request.cookies.get(settings.REFRESH_COOKIE_NAME)
     access_payload = None
@@ -685,6 +717,22 @@ async def logout(request: Request, response: Response):
     await _blacklist_token_payload(access_payload)
     await _blacklist_token_payload(refresh_payload)
     _clear_auth_cookies(response)
+    # Emit logout event (best-effort — если токен невалиден, user_id будет None,
+    # тогда событие не эмитим, чтобы не засорять каталог пустыми entity_id).
+    user_id = (access_payload or refresh_payload or {}).get("sub") if (access_payload or refresh_payload) else None
+    if user_id:
+        await emit_event_safe(
+            db,
+            event_type="user.after_logout",
+            entity_type="user",
+            entity_id=str(user_id),
+            payload={
+                "id": str(user_id),
+                "email": (access_payload or refresh_payload or {}).get("email"),
+                "ip": client_ip(request),
+            },
+            payload_version=1,
+        )
     return {"ok": True}
 
 

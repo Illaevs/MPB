@@ -2,6 +2,7 @@ import axios from 'axios'
 import { setActivePinia } from 'pinia'
 import router from '../router'
 import { useAuthStore } from '../stores/auth'
+import { setFromHttpDate } from '../composables/useServerClock'
 
 function getCookie(name) {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -43,8 +44,17 @@ export function setupHttpInterceptors(pinia) {
   }
 
   axios.interceptors.response.use(
-    (response) => response,
+    (response) => {
+      // Каждый успешный ответ несёт стандартный HTTP-заголовок Date —
+      // используем его, чтобы выставить смещение серверных часов от
+      // локальных. Так счётчик рабочего дня и часы в шапке устойчивы
+      // к спешащим/отстающим часам устройства.
+      try { setFromHttpDate(response.headers?.date) } catch { /* noop */ }
+      return response
+    },
     async (error) => {
+      // На неуспешном ответе Date тоже есть — обновляем смещение.
+      try { setFromHttpDate(error?.response?.headers?.date) } catch { /* noop */ }
       const { config, response } = error
       const isAuthRequest =
         config?.url?.includes('/api/v1/auth/refresh') ||

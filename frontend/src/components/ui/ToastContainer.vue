@@ -1,23 +1,25 @@
 <template>
-  <div class="toast-container">
-    <transition-group name="toast">
-      <div 
-        v-for="toast in toasts" 
-        :key="toast.id" 
-        class="toast-card"
-        :class="`toast-${toast.type}`"
-        @click="remove(toast.id)"
-      >
-        <div class="toast-icon">
-          <i v-if="toast.type === 'success'" class="fas fa-check-circle"></i>
-          <i v-if="toast.type === 'error'" class="fas fa-exclamation-circle"></i>
-          <i v-if="toast.type === 'info'" class="fas fa-info-circle"></i>
-          <i v-if="toast.type === 'warning'" class="fas fa-exclamation-triangle"></i>
+  <Teleport to="body">
+    <div class="toast-container">
+      <transition-group name="toast">
+        <div
+          v-for="toast in toasts"
+          :key="toast.id"
+          class="toast-card"
+          :class="`toast-${toast.type}`"
+          @click="remove(toast.id)"
+        >
+          <div class="toast-icon">
+            <i v-if="toast.type === 'success'" class="fas fa-check-circle"></i>
+            <i v-if="toast.type === 'error'" class="fas fa-exclamation-circle"></i>
+            <i v-if="toast.type === 'info'" class="fas fa-info-circle"></i>
+            <i v-if="toast.type === 'warning'" class="fas fa-exclamation-triangle"></i>
+          </div>
+          <div class="toast-message">{{ toast.message }}</div>
         </div>
-        <div class="toast-message">{{ toast.message }}</div>
-      </div>
-    </transition-group>
-  </div>
+      </transition-group>
+    </div>
+  </Teleport>
 </template>
 
 <script>

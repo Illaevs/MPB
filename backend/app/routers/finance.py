@@ -21,6 +21,7 @@ from app.schemas.treasury_allocation import (
 )
 from app.schemas.financial_plan import FinancialPlanCreate, FinancialPlanUpdate, FinancialPlanResponse
 from app.schemas.treasury_auto_rule import TreasuryAutoRuleCreate, TreasuryAutoRuleUpdate, TreasuryAutoRuleResponse
+from app.services.event_outbox import emit_event_safe
 from app.services.finance_service import FinanceService
 
 router = APIRouter()
@@ -1151,6 +1152,27 @@ async def create_treasury_transaction(
     await db.commit()
     await db.refresh(tx)
 
+    # Event Bus v2: эмиссия для внешних подписчиков (BI, банк, 1С).
+    # У treasury_transaction исторически бывает много update'ов
+    # (привязка, аллокация, ignore), поэтому подписчики обычно
+    # фильтруют через condition_json по статусу/категории.
+    from app.services.event_outbox import emit_event_safe
+    await emit_event_safe(
+        db,
+        event_type="treasury_transaction.after_create",
+        entity_type="treasury_transaction",
+        entity_id=str(tx.id),
+        payload={
+            "id": str(tx.id),
+            "doc_num": tx.doc_num,
+            "transaction_date": tx.transaction_date.isoformat() if tx.transaction_date else None,
+            "amount": float(tx.amount or 0),
+            "calc_type": tx.calc_type,
+            "category_code": tx.category_code,
+            "ignore_flag": tx.ignore_flag,
+        },
+    )
+
     return _build_tx_response(tx, [])
 
 
@@ -1202,6 +1224,41 @@ async def update_treasury_transaction(
         select(TreasuryAllocation).where(TreasuryAllocation.transaction_id == tx.id)
     )
     allocations = alloc_result.scalars().all()
+
+    # Event Bus v2: after_update — нужно подписчикам для мониторинга
+    # привязки транзакций к ДДС (BI). Если меняли ignore_flag/category —
+    # подписчики увидят это в payload.changes (тут пока упрощённо отдаём
+    # текущее состояние).
+    from app.services.event_outbox import emit_event_safe
+    await emit_event_safe(
+        db,
+        event_type="treasury_transaction.after_update",
+        entity_type="treasury_transaction",
+        entity_id=str(tx.id),
+        payload={
+            "id": str(tx.id),
+            "doc_num": tx.doc_num,
+            "amount": float(tx.amount or 0),
+            "category_code": tx.category_code,
+            "ignore_flag": tx.ignore_flag,
+            "allocations_count": len(allocations),
+        },
+    )
+    # Если поменялась привязка к доходно-расходной записи — отдельное
+    # доменное событие (легче подписаться, не разбирать changes).
+    if allocation_entry_id is not None:
+        await emit_event_safe(
+            db,
+            event_type="treasury_transaction.after_link",
+            entity_type="treasury_transaction",
+            entity_id=str(tx.id),
+            payload={
+                "id": str(tx.id),
+                "income_expense_id": allocation_entry_id or None,
+                "linked": bool(allocation_entry_id),
+            },
+        )
+
     return _build_tx_response(tx, allocations)
 
 
@@ -1223,6 +1280,20 @@ async def delete_treasury_transaction(
     # Delete transaction
     await db.delete(tx)
     await db.commit()
+
+    # Event Bus v2: after_delete для BI/audit — пересчитать агрегаты.
+    from app.services.event_outbox import emit_event_safe
+    await emit_event_safe(
+        db,
+        event_type="treasury_transaction.after_delete",
+        entity_type="treasury_transaction",
+        entity_id=str(tx.id),
+        payload={
+            "id": str(tx.id),
+            "doc_num": tx.doc_num,
+            "amount": float(tx.amount or 0),
+        },
+    )
     return {"message": "Транзакция удалена"}
 
 
@@ -1515,6 +1586,22 @@ async def create_treasury_allocation(
         category_code=payload.category_code,
     )
     db.add(allocation)
+    await db.flush()
+    # Эмитим для 1С — critical: 1С хочет видеть привязку tx → expense/income.
+    await emit_event_safe(
+        db,
+        event_type="treasury_allocation.after_create",
+        entity_type="treasury_allocation",
+        entity_id=str(allocation.id),
+        payload={
+            "id": str(allocation.id),
+            "transaction_id": str(tx.id),
+            "income_expense_id": str(income_expense_id),
+            "amount": float(allocation_amount),
+            "category_code": payload.category_code,
+        },
+        payload_version=1,
+    )
     await db.commit()
     await db.refresh(allocation)
     return TreasuryAllocationResponse.model_validate(allocation)
@@ -1570,6 +1657,21 @@ async def update_treasury_allocation(
     for key, value in update_data.items():
         setattr(allocation, key, value)
 
+    await emit_event_safe(
+        db,
+        event_type="treasury_allocation.after_update",
+        entity_type="treasury_allocation",
+        entity_id=str(allocation.id),
+        payload={
+            "id": str(allocation.id),
+            "transaction_id": str(allocation.transaction_id),
+            "income_expense_id": str(allocation.income_expense_id),
+            "amount": float(allocation.amount or 0),
+            "category_code": allocation.category_code,
+            "changed_fields": list(update_data.keys()),
+        },
+        payload_version=1,
+    )
     await db.commit()
     await db.refresh(allocation)
     return TreasuryAllocationResponse.model_validate(allocation)
@@ -1581,10 +1683,31 @@ async def delete_treasury_allocation(
     db: AsyncSession = Depends(get_db)
 ):
     alloc_uuid = _parse_uuid(alloc_id, "alloc_id")
+    # Snapshot до удаления — нужен для 1С (отвязка платежа).
+    snap_result = await db.execute(select(TreasuryAllocation).where(TreasuryAllocation.id == alloc_uuid))
+    snap = snap_result.scalar_one_or_none()
+    snapshot = None
+    if snap:
+        snapshot = {
+            "id": str(snap.id),
+            "transaction_id": str(snap.transaction_id) if snap.transaction_id else None,
+            "income_expense_id": str(snap.income_expense_id) if snap.income_expense_id else None,
+            "amount": float(snap.amount or 0),
+        }
     result = await db.execute(delete(TreasuryAllocation).where(TreasuryAllocation.id == alloc_uuid))
-    await db.commit()
     if result.rowcount <= 0:
+        await db.commit()
         raise HTTPException(status_code=404, detail="Allocation not found")
+    if snapshot:
+        await emit_event_safe(
+            db,
+            event_type="treasury_allocation.after_delete",
+            entity_type="treasury_allocation",
+            entity_id=str(alloc_uuid),
+            payload=snapshot,
+            payload_version=1,
+        )
+    await db.commit()
     return {"message": "Allocation deleted"}
 
 # Financial Summary

@@ -378,7 +378,7 @@
     </div>
 
     <!-- Upload Modal -->
-    <div v-if="uploadModalOpen" class="modal-overlay" @click.self="closeUploadModal">
+    <div v-if="uploadModalOpen" class="modal-overlay" v-modal-close="closeUploadModal">
       <div class="modal-content glass-modal" style="max-width: 500px;">
         <div class="modal-header border-bottom border-light">
           <h3 class="m-0">Загрузка результата</h3>
@@ -429,7 +429,7 @@
     </div>
 
     <!-- Success Modal -->
-    <div v-if="successModalOpen" class="modal-overlay" @click.self="closeSuccessModal">
+    <div v-if="successModalOpen" class="modal-overlay" v-modal-close="closeSuccessModal">
       <div class="modal-content glass-modal" style="max-width: 400px;">
         <div class="modal-body text-center p-5">
            <div class="mb-3 text-success">

@@ -102,6 +102,15 @@ class Settings(BaseSettings):
     OUTGOING_NUMBER_START: int = 1193
     KP_NUMBER_START: int = 600
 
+    # Inbound integrations (HMAC-shared secrets per vendor).
+    # Empty по умолчанию — приёмник вернёт 503 пока ENV не задан.
+    # Это fail-closed: лучше отказать, чем принять без подписи.
+    DIADOC_HMAC_SECRET: str = ""
+    TELEGRAM_HMAC_SECRET: str = ""
+    BANK_HMAC_SECRET: str = ""
+    GOSKLYUCH_HMAC_SECRET: str = ""
+    ONEC_HMAC_SECRET: str = ""
+
     # Upload queue (temporary storage)
     UPLOAD_TMP_DIR: str = ""
     UPLOAD_TMP_MAX_BYTES: int = 256 * 1024 * 1024

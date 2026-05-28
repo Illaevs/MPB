@@ -218,7 +218,18 @@ const loadStatus = async () => {
   try {
     status.value = await auth.fetchTwoFactorStatus()
   } catch (err) {
-    error.value = err?.response?.data?.detail || 'Не удалось загрузить настройки 2FA'
+    // Don't render a misleading "Выключена / Настроить 2FA" when the live
+    // status call hiccups (e.g. right after the mandatory login-time setup
+    // + session refresh). Fall back to the authoritative session flag so a
+    // user whose 2FA is actually enabled isn't told it's off.
+    status.value = {
+      enabled: !!auth.user?.two_factor_enabled,
+      enabled_at: auth.user?.two_factor_enabled_at || null,
+      backup_codes_remaining: null
+    }
+    if (!auth.user?.two_factor_enabled) {
+      error.value = err?.response?.data?.detail || 'Не удалось загрузить настройки 2FA'
+    }
   } finally {
     loadingStatus.value = false
   }

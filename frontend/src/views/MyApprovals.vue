@@ -344,7 +344,7 @@ import { normalizeAvatarUrl } from '../utils/avatar'
 const ENTITY_TYPES = [
   { value: 'outgoing_document', label: 'Исходящие документы' },
   { value: 'contract', label: 'Договоры' },
-  { value: 'deal', label: 'Сделки' },
+  { value: 'deal', label: 'Проекты' },
   { value: 'task', label: 'Задачи' },
   { value: 'income_expense_entry', label: 'Записи ДДС' },
   { value: 'treasury_transaction', label: 'Казначейство' },
@@ -968,7 +968,7 @@ export default defineComponent({
 }
 
 .approvals-row.is-mine {
-  box-shadow: inset 3px 0 0 var(--color-primary);
+  box-shadow: none;
 }
 
 .row-leftrail {

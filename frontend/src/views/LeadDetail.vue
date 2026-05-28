@@ -1,23 +1,38 @@
 
 <template>
   <div class="lead-detail-view h-100 d-flex flex-column">
-    <!-- Compact header card -->
-    <header class="card lead-hero-card p-2 mb-2 flex-shrink-0">
-      <nav class="lead-breadcrumb">
-        <router-link to="/leads" class="lead-breadcrumb__link">
-          <i class="fas fa-chevron-left mr-1"></i>Лиды
-        </router-link>
-        <span class="lead-breadcrumb__sep">/</span>
-        <span class="lead-breadcrumb__current">{{ lead.title || 'Загрузка...' }}</span>
-      </nav>
-      <div class="lead-hero-row">
-        <div class="lead-hero-title-block">
-          <h2 class="lead-hero-title m-0">{{ lead.title || 'Лид без названия' }}</h2>
-          <small v-if="lead.obj_name" class="text-muted">{{ lead.obj_name }}</small>
+    <!-- Unified header (по образцу ProjectDetail) -->
+    <div class="unified-header flex-shrink-0">
+      <div class="unified-header-inner">
+        <div class="unified-header-left">
+          <button class="unified-back-btn" @click="$router.push('/leads')" title="К списку лидов">
+            <i class="fas fa-arrow-left"></i>
+          </button>
+          <div class="unified-title-group">
+            <h1 class="unified-project-name">{{ lead.title || 'Загрузка...' }}</h1>
+            <span v-if="lead.obj_name" class="unified-obj-name">{{ lead.obj_name }}</span>
+          </div>
         </div>
 
-        <div class="lead-hero-actions">
-          <!-- Inline status badge -->
+        <nav class="unified-nav" @keydown="onTabKeydown" role="tablist" aria-label="Разделы лида">
+          <button
+            v-for="tab in tabs"
+            :key="tab.id"
+            :id="`tab-${tab.id}`"
+            type="button"
+            class="unified-nav-item"
+            :class="{ active: activeTab === tab.id }"
+            role="tab"
+            :aria-selected="activeTab === tab.id ? 'true' : 'false'"
+            :tabindex="activeTab === tab.id ? 0 : -1"
+            @click="setActiveTab(tab.id)"
+          >
+            <i :class="tab.icon" class="mr-1"></i>
+            <span>{{ tab.name }}</span>
+          </button>
+        </nav>
+
+        <div class="unified-header-right">
           <div v-if="lead.status" class="ld-status-wrap">
             <button
               type="button"
@@ -57,52 +72,25 @@
           <button
             v-else
             class="btn btn-sm btn-primary"
-            @click="convertLead"
             :disabled="saving"
+            title="Конвертировать в сделку"
+            @click="convertLead"
           >
             <i v-if="saving" class="fas fa-spinner fa-spin mr-1"></i>
             <i v-else class="fas fa-arrow-right-arrow-left mr-1"></i>Конвертировать
           </button>
-          <button class="btn btn-sm btn-outline-secondary" @click="openEditModal">
-            <i class="fas fa-edit mr-1"></i>Редактировать
+
+          <button class="unified-action-btn" title="Редактировать" @click="openEditModal">
+            <i class="fas fa-edit"></i>
           </button>
-          <div class="ld-more-wrap">
-            <button class="icon-btn" @click="ldMoreOpen = !ldMoreOpen" title="Действия">
-              <i class="fas fa-ellipsis-vertical"></i>
-            </button>
-            <transition name="ld-pop">
-              <div v-if="ldMoreOpen" class="ld-more-menu" v-click-outside="() => ldMoreOpen = false">
-                <button class="ld-more-menu__item more-menu-item--danger" @click="deleteLead(); ldMoreOpen = false">
-                  <i class="fas fa-trash mr-2"></i>Удалить лид
-                </button>
-              </div>
-            </transition>
-          </div>
+          <button class="unified-action-btn unified-action-btn--danger" title="Удалить лид" @click="deleteLead">
+            <i class="fas fa-trash"></i>
+          </button>
         </div>
       </div>
-    </header>
-
-    <!-- Tabs -->
-    <div class="lead-tabs flex-shrink-0">
-      <button
-        type="button"
-        class="lead-tab"
-        :class="{ active: activeTab === 'info' }"
-        @click="setActiveTab('info')"
-      >
-        <i class="fas fa-info-circle mr-1"></i>Информация
-      </button>
-      <button
-        type="button"
-        class="lead-tab"
-        :class="{ active: activeTab === 'timeline' }"
-        @click="setActiveTab('timeline')"
-      >
-        <i class="fas fa-stream mr-1"></i>Таймлайн
-      </button>
     </div>
 
-    <div class="flex-grow-1 overflow-hidden position-relative">
+    <div class="flex-grow-1 overflow-hidden position-relative lead-detail-body">
       <div v-show="activeTab === 'info'" class="h-100 overflow-auto scroll-container p-1">
         <div v-if="loadingLead" class="spinner mx-auto my-5"></div>
         <div v-else class="dashboard-grid h-100">
@@ -110,172 +98,235 @@
             <div class="card p-4">
               <h3 class="card-title mb-3">Основная информация</h3>
               <div class="info-grid">
-                <div class="info-row">
+                <div class="info-row info-row--editable" @click="beginEdit('title')">
                   <span class="text-muted">Название</span>
-                  <span class="fw-500 text-right">{{ lead.title || '-' }}</span>
+                  <input
+                    v-if="editingField === 'title'"
+                    ref="inlineInputRef"
+                    v-model="editDraft"
+                    type="text"
+                    class="info-edit-input"
+                    :disabled="inlineSaving"
+                    @click.stop
+                    @keydown.enter.prevent="saveEdit"
+                    @keydown.esc.prevent="cancelEdit"
+                    @blur="saveEdit"
+                  />
+                  <span v-else class="fw-500 text-right info-row__value">{{ lead.title || '—' }}</span>
                 </div>
-                <div class="info-row">
+                <div class="info-row info-row--editable" @click="beginEdit('obj_name')">
                   <span class="text-muted">Наименование объекта</span>
-                  <span class="fw-500 text-right">{{ lead.obj_name || '-' }}</span>
+                  <input
+                    v-if="editingField === 'obj_name'"
+                    ref="inlineInputRef"
+                    v-model="editDraft"
+                    type="text"
+                    class="info-edit-input"
+                    :disabled="inlineSaving"
+                    @click.stop
+                    @keydown.enter.prevent="saveEdit"
+                    @keydown.esc.prevent="cancelEdit"
+                    @blur="saveEdit"
+                  />
+                  <span v-else class="fw-500 text-right info-row__value">{{ lead.obj_name || '—' }}</span>
                 </div>
-                <div class="info-row">
+                <div class="info-row info-row--editable" @click="beginEdit('address')">
                   <span class="text-muted">Адрес объекта</span>
-                  <span class="fw-500 text-right">{{ lead.address || '-' }}</span>
+                  <input
+                    v-if="editingField === 'address'"
+                    ref="inlineInputRef"
+                    v-model="editDraft"
+                    type="text"
+                    class="info-edit-input"
+                    :disabled="inlineSaving"
+                    @click.stop
+                    @keydown.enter.prevent="saveEdit"
+                    @keydown.esc.prevent="cancelEdit"
+                    @blur="saveEdit"
+                  />
+                  <span v-else class="fw-500 text-right info-row__value">{{ lead.address || '—' }}</span>
                 </div>
-                <div class="info-row">
+                <div class="info-row info-row--editable" @click="beginEdit('object_type')">
                   <span class="text-muted">Тип объекта</span>
-                  <span class="fw-500 text-right">{{ lead.object_type || '-' }}</span>
+                  <select
+                    v-if="editingField === 'object_type'"
+                    ref="inlineInputRef"
+                    v-model="editDraft"
+                    class="info-edit-input"
+                    :disabled="inlineSaving"
+                    @click.stop
+                    @change="saveEdit"
+                    @keydown.esc.prevent="cancelEdit"
+                    @blur="saveEdit"
+                  >
+                    <option value="">— не указан —</option>
+                    <option v-for="t in objectTypes" :key="t" :value="t">{{ t }}</option>
+                  </select>
+                  <span v-else class="fw-500 text-right info-row__value">{{ lead.object_type || '—' }}</span>
                 </div>
-                <div class="info-row">
+                <div class="info-row info-row--editable" @click="beginEdit('object_area')">
                   <span class="text-muted">Площадь</span>
-                  <span class="fw-500 text-right">{{ lead.object_area ? `${lead.object_area} м²` : '-' }}</span>
+                  <input
+                    v-if="editingField === 'object_area'"
+                    ref="inlineInputRef"
+                    v-model="editDraft"
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    class="info-edit-input"
+                    :disabled="inlineSaving"
+                    @click.stop
+                    @keydown.enter.prevent="saveEdit"
+                    @keydown.esc.prevent="cancelEdit"
+                    @blur="saveEdit"
+                  />
+                  <span v-else class="fw-500 text-right info-row__value">{{ lead.object_area ? `${lead.object_area} м²` : '—' }}</span>
                 </div>
                 <div class="separator my-2"></div>
-                <div class="info-row">
+                <div class="info-row info-row--editable" @click="beginEdit('customer_id')">
                   <span class="text-muted">Заказчик</span>
-                  <span class="fw-500 text-right">{{ getCompanyName(lead.customer_id) }}</span>
-                </div>
-                <div class="info-row">
-                  <span class="text-muted">Наша компания</span>
-                  <span class="fw-500 text-right">{{ getCompanyName(lead.our_company_id) }}</span>
-                </div>
-                <div class="info-row">
-                  <span class="text-muted">Ответственный</span>
-                  <span class="fw-500 text-right">{{ getUserName(lead.responsible_user_id) }}</span>
-                </div>
-                <div class="separator my-2"></div>
-                <div class="info-row">
-                  <span class="text-muted">% аванса</span>
-                  <span class="fw-500 text-right">{{ lead.advance_percent ?? 0 }}%</span>
-                </div>
-                <div class="info-row">
-                  <span class="text-muted">Ставка НДС</span>
-                  <span class="fw-500 text-right">{{ vatRate }}%</span>
-                </div>
-                <div class="mt-2">
-                  <label class="text-muted small">Изменить ставку НДС</label>
-                  <div class="d-flex gap-2 align-center">
-                    <select v-model.number="vatRate" class="form-control form-control-sm" style="max-width: 120px;">
-                      <option v-for="rate in vatRateOptions" :key="`lead-vat-${rate}`" :value="rate">{{ rate }}%</option>
-                    </select>
-                    <button class="btn btn-sm btn-outline-primary" :disabled="!vatRateDirty || vatSaving" @click="saveVatRate">
-                      <i v-if="vatSaving" class="fas fa-spinner fa-spin"></i>
-                      <span v-else>Сохранить</span>
+                  <div
+                    v-if="editingField === 'customer_id'"
+                    class="info-edit-select"
+                    @click.stop
+                    @keydown.esc.prevent="cancelEdit"
+                  >
+                    <CompanySmartSelect
+                      v-model="editDraft"
+                      :options="customerCompanies"
+                      placeholder="Не выбран"
+                      @update:modelValue="saveEdit"
+                    />
+                    <button type="button" class="info-edit-cancel" title="Отмена" @click.stop="cancelEdit">
+                      <i class="fas fa-times"></i>
                     </button>
                   </div>
+                  <span v-else class="fw-500 text-right info-row__value">{{ getCompanyName(lead.customer_id) || '—' }}</span>
                 </div>
+                <div class="info-row info-row--editable" @click="beginEdit('responsible_user_id')">
+                  <span class="text-muted">Ответственный</span>
+                  <select
+                    v-if="editingField === 'responsible_user_id'"
+                    ref="inlineInputRef"
+                    v-model="editDraft"
+                    class="info-edit-input"
+                    :disabled="inlineSaving"
+                    @click.stop
+                    @change="saveEdit"
+                    @keydown.esc.prevent="cancelEdit"
+                    @blur="saveEdit"
+                  >
+                    <option value="">Не назначен</option>
+                    <option v-for="u in users" :key="u.id" :value="u.id">{{ u.full_name || u.email || u.id }}</option>
+                  </select>
+                  <span v-else class="fw-500 text-right info-row__value info-row__value--with-avatar">
+                    <template v-if="lead.responsible_user_id && responsibleUser">
+                      <UiAvatar
+                        :src="responsibleUser.avatar_url"
+                        :name="responsibleUser.full_name || responsibleUser.email || '?'"
+                        size="xs"
+                      />
+                      <span>{{ responsibleUser.full_name || responsibleUser.email || '—' }}</span>
+                    </template>
+                    <span v-else>—</span>
+                  </span>
+                </div>
+                <div class="separator my-2"></div>
+                <div class="info-row info-row--editable" @click="beginEdit('advance_percent')">
+                  <span class="text-muted">% аванса</span>
+                  <input
+                    v-if="editingField === 'advance_percent'"
+                    ref="inlineInputRef"
+                    v-model="editDraft"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="1"
+                    class="info-edit-input"
+                    :disabled="inlineSaving"
+                    @click.stop
+                    @keydown.enter.prevent="saveEdit"
+                    @keydown.esc.prevent="cancelEdit"
+                    @blur="saveEdit"
+                  />
+                  <span v-else class="fw-500 text-right info-row__value">{{ lead.advance_percent ?? 0 }}%</span>
+                </div>
+                <!--
+                  Ставка НДС лида в info-row убрана: единой ставки больше
+                  нет, каждый товар несёт свою (см. таблицу «Состав
+                  проекта», колонка НДС). Итоговая по лиду — производная
+                  от суммы tax_amount всех товаров.
+                -->
                 <div class="info-row">
                   <span class="text-muted">Стоимость</span>
                   <span class="fw-600 text-right text-primary">{{ formatCurrency(totalAmount) }}</span>
                 </div>
               </div>
             </div>
-
-            <div class="card p-4">
-              <div class="d-flex justify-between align-center mb-3 flex-wrap gap-2">
-                <h3 class="card-title m-0">Коммерческие предложения (КП)</h3>
-                <div class="d-flex gap-2 flex-wrap">
-                  <button class="btn btn-sm btn-primary" @click="openKpCreateModal">
-                    <i class="fas fa-plus mr-1"></i> Создать КП
-                  </button>
-                  <button
-                    v-if="canManageKpTemplates"
-                    class="btn btn-sm btn-outline-secondary"
-                    @click="openKpTemplatesModal"
-                  >
-                    <i class="fas fa-layer-group mr-1"></i> Шаблоны КП
-                  </button>
-                </div>
-              </div>
-
-              <div v-if="loadingKp" class="spinner mx-auto my-4"></div>
-              <div v-else-if="!kpDocuments.length" class="text-muted text-center py-4">
-                КП пока не созданы
-              </div>
-              <div v-else class="d-flex flex-column gap-3">
-                <div v-for="doc in kpDocuments" :key="doc.id" class="kp-card">
-                  <div class="d-flex justify-between align-center flex-wrap gap-2">
-                    <div>
-                      <div class="fw-600">{{ doc.number_display }}</div>
-                      <small class="text-muted">
-                        Версия {{ doc.current_version || 1 }} · {{ formatDate(doc.created_at) }}
-                      </small>
-                    </div>
-                    <div class="d-flex align-center gap-2 flex-wrap">
-                      <span class="badge badge-secondary">{{ doc.status || 'draft' }}</span>
-                      <button
-                        v-if="getKpTemplateDocx(doc)"
-                        class="btn btn-sm btn-outline-primary"
-                        @click="generateKpVersion(doc)"
-                        :disabled="kpActionId === doc.id"
-                      >
-                        <i v-if="kpActionId === doc.id" class="fas fa-spinner fa-spin mr-1"></i>
-                        <i v-else class="fas fa-magic mr-1"></i> Сгенерировать DOCX
-                      </button>
-                      <label class="btn btn-sm btn-outline-primary m-0">
-                        <i class="fas fa-upload mr-1"></i> Загрузить версию
-                        <input
-                          type="file"
-                          hidden
-                          accept=".docx,.pdf"
-                          @change="uploadKpVersion($event, doc)"
-                        />
-                      </label>
-                    </div>
-                  </div>
-
-                  <div v-if="doc.versions && doc.versions.length" class="kp-versions">
-                    <div
-                      v-for="ver in doc.versions"
-                      :key="ver.id"
-                      class="kp-version-row"
-                    >
-                      <div class="d-flex flex-column">
-                        <strong>v{{ ver.version }}</strong>
-                        <small class="text-muted">
-                          {{ formatCurrency(ver.total_amount || 0) }} · НДС {{ formatCurrency(ver.vat_amount || 0) }}
-                        </small>
-                      </div>
-                      <div class="d-flex gap-2">
-                        <a v-if="ver.docx_url" :href="ver.docx_url" target="_blank" rel="noopener noreferrer" class="btn btn-xs btn-outline-secondary">DOCX</a>
-                        <a v-if="ver.pdf_url" :href="ver.pdf_url" target="_blank" rel="noopener noreferrer" class="btn btn-xs btn-outline-secondary">PDF</a>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
           <div class="dashboard-right card p-0 d-flex flex-column h-100 overflow-hidden">
             <div class="card-header border-bottom p-4 d-flex justify-between align-center">
-              <h3 class="card-title m-0">Состав проекта/перечень услуг</h3>
-              <button class="btn btn-sm btn-primary" @click="showAddProductModal = true">
-                <i class="fas fa-plus mr-1"></i> Добавить
-              </button>
+              <h3 class="card-title m-0">История событий</h3>
             </div>
-            <div class="flex-grow-1 overflow-auto p-0">
-              <div v-if="productsLoading" class="spinner mx-auto my-5"></div>
-              <div v-else-if="!leadProducts.length" class="text-center text-muted py-5">
-                <i class="fas fa-box-open fa-3x mb-3 text-light-gray"></i>
-                <p>Товаров нет</p>
-              </div>
-              <template v-else>
-                <div class="border-bottom px-4 py-3 d-flex justify-between align-center gap-3 flex-wrap">
-                  <div class="small text-muted">
-                    Отдельная ставка НДС на каждый товар
-                  </div>
-                  <div class="d-flex align-center gap-2 flex-wrap">
-                    <span class="small text-muted">Выбрано: {{ selectedLeadProductIds.length }}</span>
-                    <select v-model.number="bulkLeadTaxRate" class="form-control form-control-sm" style="width: 110px;" :disabled="leadTaxUpdating">
-                      <option v-for="rate in vatRateOptions" :key="`lead-bulk-vat-${rate}`" :value="rate">{{ rate }}%</option>
-                    </select>
-                    <button class="btn btn-sm btn-outline-primary" :disabled="!selectedLeadProductIds.length || leadTaxUpdating" @click="applyBulkLeadTaxRate">
-                      <i v-if="leadTaxUpdating" class="fas fa-spinner fa-spin mr-1"></i>
-                      <span v-else>Применить</span>
-                    </button>
-                  </div>
+            <div class="flex-grow-1 overflow-auto p-2">
+              <LeadTimeline
+                :lead-id="route.params.id"
+                :users="users"
+                :current-user-id="currentUserId"
+                @lead-updated="loadLead"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- KP tab — рабочее пространство КП (список / превью / версии). -->
+      <div v-show="activeTab === 'kp'" class="h-100 p-2">
+        <LeadKpWorkspace
+          :lead-id="route.params.id"
+          :kp-documents="kpDocuments"
+          :kp-templates="kpTemplates"
+          :kp-bindings="kpBindings"
+          :can-manage-templates="canManageKpTemplates"
+          :loading="loadingKp"
+          @create-kp="openKpCreateModal"
+          @open-templates="openKpTemplatesModal"
+          @reload="loadKpDocuments"
+        />
+      </div>
+
+      <!-- Composition tab (товары / услуги) -->
+      <div v-show="activeTab === 'composition'" class="h-100 overflow-auto scroll-container p-2">
+        <div class="card p-0 d-flex flex-column overflow-hidden">
+          <div class="card-header border-bottom p-4 d-flex justify-between align-center">
+            <h3 class="card-title m-0">Состав проекта / перечень услуг</h3>
+            <button class="btn btn-sm btn-primary" @click="showAddProductModal = true">
+              <i class="fas fa-plus mr-1"></i> Добавить
+            </button>
+          </div>
+          <div class="overflow-auto p-0">
+            <div v-if="productsLoading" class="spinner mx-auto my-5"></div>
+            <div v-else-if="!leadProducts.length" class="text-center text-muted py-5">
+              <i class="fas fa-box-open fa-3x mb-3 text-light-gray"></i>
+              <p>Товаров нет</p>
+            </div>
+            <template v-else>
+              <div class="border-bottom px-4 py-3 d-flex justify-between align-center gap-3 flex-wrap">
+                <div class="small text-muted">
+                  Отдельная ставка НДС на каждый товар
                 </div>
-                <table class="table table-hover m-0">
+                <div class="d-flex align-center gap-2 flex-wrap">
+                  <span class="small text-muted">Выбрано: {{ selectedLeadProductIds.length }}</span>
+                  <select v-model.number="bulkLeadTaxRate" class="form-control form-control-sm" style="width: 110px;" :disabled="leadTaxUpdating">
+                    <option v-for="rate in vatRateOptions" :key="`lead-bulk-vat-${rate}`" :value="rate">{{ rate }}%</option>
+                  </select>
+                  <button class="btn btn-sm btn-outline-primary" :disabled="!selectedLeadProductIds.length || leadTaxUpdating" @click="applyBulkLeadTaxRate">
+                    <i v-if="leadTaxUpdating" class="fas fa-spinner fa-spin mr-1"></i>
+                    <span v-else>Применить</span>
+                  </button>
+                </div>
+              </div>
+              <table class="table table-hover m-0">
                 <thead class="sticky-top bg-surface">
                   <tr>
                     <th style="width: 44px;">
@@ -347,24 +398,13 @@
                   </tr>
                 </tfoot>
               </table>
-              </template>
-            </div>
+            </template>
           </div>
         </div>
       </div>
-
-      <!-- Timeline tab -->
-      <div v-show="activeTab === 'timeline'" class="h-100 overflow-auto scroll-container p-2">
-        <LeadTimeline
-          :lead-id="route.params.id"
-          :users="users"
-          :current-user-id="currentUserId"
-          @lead-updated="loadLead"
-        />
-      </div>
     </div>
 
-    <div v-if="showAddProductModal" class="modal-overlay" @click="closeAddModal">
+    <div v-if="showAddProductModal" class="modal-overlay" v-modal-close="closeAddModal">
       <div class="modal-content modal-product" @click.stop style="max-width: 600px;">
         <div class="modal-header">
           <h4>Добавить товар</h4>
@@ -424,7 +464,7 @@
       </div>
     </div>
 
-    <div v-if="showEditProductModal" class="modal-overlay" @click="closeEditModal">
+    <div v-if="showEditProductModal" class="modal-overlay" v-modal-close="closeEditModal">
       <div class="modal-content" @click.stop style="max-width: 600px;">
         <div class="modal-header">
           <h4>Редактировать товар</h4>
@@ -477,7 +517,6 @@
       v-model="showEditLeadModal"
       :lead="lead"
       :companies="companies"
-      :internal-companies="internalCompanies"
       :users="users"
       :statuses="statusOptions.filter(s => s.key !== 'converted')"
       :saving="saving"
@@ -485,21 +524,13 @@
       @cancel="closeEditLeadModal"
     />
 
-    <div v-if="showKpCreateModal" class="modal-overlay" @click="closeKpCreateModal">
+    <div v-if="showKpCreateModal" class="modal-overlay" v-modal-close="closeKpCreateModal">
       <div class="modal-content" @click.stop style="max-width: 520px;">
         <div class="modal-header">
           <h4>Создать КП</h4>
           <button class="btn-close" @click="closeKpCreateModal"><i class="fas fa-times"></i></button>
         </div>
         <div class="modal-body">
-          <div class="form-group">
-            <label>Наша компания</label>
-            <CompanySmartSelect
-                v-model="kpForm.our_company_id"
-                :options="internalCompanies"
-                placeholder="Найти нашу компанию"
-              />
-          </div>
           <div class="form-group">
             <label>Шаблон КП</label>
             <select v-model="kpForm.template_id" class="form-control">
@@ -526,7 +557,7 @@
       </div>
     </div>
 
-    <div v-if="showKpTemplatesModal" class="modal-overlay" @click="closeKpTemplatesModal">
+    <div v-if="showKpTemplatesModal" class="modal-overlay" v-modal-close="closeKpTemplatesModal">
       <div class="modal-content" @click.stop style="max-width: 960px;">
         <div class="modal-header">
           <h4>Шаблоны КП</h4>
@@ -632,7 +663,7 @@
   </div>
 </template>
 <script>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, nextTick, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
 import { api } from '@/services/api'
@@ -644,9 +675,11 @@ import { useCompaniesStore } from '../stores/companies'
 import { useUsersStore } from '../stores/users'
 import { useProductsStore } from '../stores/products'
 import CompanySmartSelect from '../components/ui/CompanySmartSelect.vue'
+import UiAvatar from '../components/ui/UiAvatar.vue'
 import ProductSmartSelect from '../components/ui/ProductSmartSelect.vue'
 import LeadFormModal from '../components/leads/LeadFormModal.vue'
 import LeadTimeline from '../components/leads/LeadTimeline.vue'
+import LeadKpWorkspace from '../components/leads/LeadKpWorkspace.vue'
 import { useToast } from '../composables/useToast'
 import { useConfirm } from '../composables/useConfirm'
 import { getActiveUser } from '../utils/permissions'
@@ -661,7 +694,7 @@ const ldClickOutside = {
 
 export default {
   name: 'LeadDetail',
-  components: { CompanySmartSelect, ProductSmartSelect, LeadFormModal, LeadTimeline },
+  components: { CompanySmartSelect, ProductSmartSelect, LeadFormModal, LeadTimeline, LeadKpWorkspace, UiAvatar },
   directives: { 'click-outside': ldClickOutside },
   setup() {
     const route = useRoute()
@@ -687,12 +720,12 @@ export default {
     const productSaving = ref(false)
     const leadTaxUpdating = ref(false)
     const selectedLeadProductIds = ref([])
-    const bulkLeadTaxRate = ref(20)
+    const bulkLeadTaxRate = ref(22)  // дефолт bulk-применения ставки НДС
 
     const showAddProductModal = ref(false)
     const showEditProductModal = ref(false)
     const showEditLeadModal = ref(false)
-    const activeTab = ref(String(route.query?.tab || '') === 'timeline' ? 'timeline' : 'info')
+    const activeTab = ref(['composition', 'kp'].includes(String(route.query?.tab || '')) ? String(route.query.tab) : 'info')
     const ldStatusMenuOpen = ref(false)
     const ldStatusBusy = ref(false)
     const ldMoreOpen = ref(false)
@@ -701,6 +734,89 @@ export default {
       const q = { ...(route.query || {}) }
       q.tab = t
       router.replace({ query: q }).catch(() => {})
+    }
+    const tabs = [
+      { id: 'info',        name: 'Информация', icon: 'fas fa-info-circle' },
+      { id: 'composition', name: 'Состав',     icon: 'fas fa-list-ul' },
+      { id: 'kp',          name: 'КП',         icon: 'fas fa-file-invoice' },
+    ]
+    const onTabKeydown = (event) => {
+      const ids = tabs.map(t => t.id)
+      const idx = ids.indexOf(activeTab.value)
+      let next = idx
+      if (event.key === 'ArrowRight') next = (idx + 1) % ids.length
+      else if (event.key === 'ArrowLeft') next = (idx - 1 + ids.length) % ids.length
+      else if (event.key === 'Home') next = 0
+      else if (event.key === 'End') next = ids.length - 1
+      else return
+      event.preventDefault()
+      setActiveTab(ids[next])
+      document.getElementById(`tab-${ids[next]}`)?.focus()
+    }
+
+    // ---- Inline-редактирование «Основной информации» ----
+    // Одно поле в режиме редактирования за раз. Enter/blur — сохранить,
+    // Esc — отменить. Селекты (компании/ответственный) пока не инлайн —
+    // редактируются через «Редактировать» в шапке.
+    const editingField = ref(null)
+    const editDraft = ref(null)
+    const inlineSaving = ref(false)
+    const inlineInputRef = ref(null)
+    const beginEdit = (field) => {
+      if (inlineSaving.value) return
+      if (editingField.value === field) return
+      editingField.value = field
+      const v = lead.value?.[field]
+      editDraft.value = v ?? ''
+      nextTick(() => {
+        const el = inlineInputRef.value
+        if (el && typeof el.focus === 'function') {
+          el.focus()
+          if (typeof el.select === 'function') el.select()
+        }
+      })
+    }
+    const cancelEdit = () => {
+      editingField.value = null
+      editDraft.value = null
+    }
+    const normInlineValue = (field, raw) => {
+      if (raw === null || raw === undefined) return null
+      if (field === 'object_area' || field === 'advance_percent') {
+        if (raw === '') return null
+        const n = Number(raw)
+        return Number.isNaN(n) ? null : n
+      }
+      if (raw === '') return null
+      const s = String(raw).trim()
+      return s === '' ? null : s
+    }
+    const saveEdit = async () => {
+      if (!editingField.value || inlineSaving.value) return
+      const field = editingField.value
+      const value = normInlineValue(field, editDraft.value)
+      const current = normInlineValue(field, lead.value?.[field])
+      if (value === current) { cancelEdit(); return }
+      // Бэкенд лидов фильтрует null → бросает "No fields to update".
+      // Очистка поля до пустого инлайн не поддерживается — тихо отменяем;
+      // снять значение можно через «Редактировать» в шапке.
+      if (value === null) { cancelEdit(); return }
+      inlineSaving.value = true
+      try {
+        await api.leads.update(lead.value.id, { [field]: value })
+        lead.value = { ...lead.value, [field]: value }
+        cancelEdit()
+      } catch (e) {
+        const detail = e?.response?.data?.detail || ''
+        if (typeof detail === 'string' && /no fields|нет полей/i.test(detail)) {
+          // подстраховка от той же серверной ошибки.
+          cancelEdit()
+          return
+        }
+        toast.error(detail || 'Не удалось сохранить')
+      } finally {
+        inlineSaving.value = false
+      }
     }
     const currentUserId = computed(() => {
       try {
@@ -749,7 +865,7 @@ export default {
       quantity: 1,
       unit: 'шт.',
       discount_percent: 0,
-      tax_rate: 20
+      tax_rate: 22  // дефолтная ставка НДС для новых товаров (была 20)
     })
 
     const statusOptions = [
@@ -832,9 +948,31 @@ export default {
     }
 
     const internalCompanies = computed(() => companies.value.filter(c => c.type === 'internal'))
+    const customerCompanies = computed(() => companies.value.filter(c => c.type === 'customer'))
+    const OBJECT_TYPES = [
+      'Линейные - метрополитен',
+      'Линейные - дороги, эстакады',
+      'Линейные - инженерные сети',
+      'Образовательные учреждения',
+      'Объекты здравоохранения',
+      'Спортивные сооружения',
+      'Административные здания',
+      'Жилые комплексы',
+      'Торговые центры',
+      'Паркинги',
+      'Аэропорты',
+      'Промышленные объекты',
+      'Складские/архивные здания',
+    ]
 
     const getCompanyName = (id) => companyMap.value[normalizeId(id)] || '-'
     const getUserName = (id) => userMap.value[normalizeId(id)] || '-'
+    const responsibleUser = computed(() => {
+      const id = lead.value?.responsible_user_id
+      if (!id) return null
+      const nid = normalizeId(id)
+      return users.value.find(u => normalizeId(u.id) === nid) || null
+    })
     const getProductName = (id) => productMap.value[normalizeId(id)] || ''
 
     const normalizeTaxRate = (value) => {
@@ -1129,7 +1267,9 @@ export default {
           quantity: 1,
           unit: selectedProduct.value.unit || 'шт.',
           discount_percent: 0,
-          tax_rate: Number(lead.value.vat_rate ?? 20)
+          // НДС товара по умолчанию 22%. lead.vat_rate больше не используем
+          // как референс — лидовая ставка убрана из UI, каждый товар несёт свою.
+          tax_rate: 22
         }
       }
     }
@@ -1284,9 +1424,9 @@ export default {
     }
 
     const openKpCreateModal = () => {
-      const defaultCompany = getCompanyIdForSelect(lead.value.our_company_id) || (internalCompanies.value[0]?.id || '')
+      // our_company_id is no longer selected in UI — backend resolves it
+      // from the parent lead → system default.
       kpForm.value = {
-        our_company_id: defaultCompany,
         template_id: '',
         vat_rate: lead.value.vat_rate ?? 20
       }
@@ -1298,15 +1438,10 @@ export default {
     }
 
     const createKp = async () => {
-      if (!kpForm.value.our_company_id) {
-        toast.warning('Укажите нашу компанию')
-        return
-      }
       kpSaving.value = true
       try {
         const payload = {
           lead_id: route.params.id,
-          our_company_id: kpForm.value.our_company_id || null,
           template_id: kpForm.value.template_id || null,
           vat_rate: kpForm.value.vat_rate ?? 20
         }
@@ -1355,8 +1490,91 @@ export default {
 
     const buildKpTemplateData = (kp) => {
       const latestVersion = (kp.versions || [])[0] || {}
-      const vatRate = lead.value.vat_rate ?? 20
+      // Эффективная ставка НДС: предпочтительно из последней версии КП
+      // (там она была зафиксирована), иначе средняя по товарам, иначе 22.
+      const vatFromProducts = (() => {
+        const rates = leadProducts.value.map(p => Number(p.tax_rate || 0)).filter(r => r > 0)
+        if (!rates.length) return null
+        return Math.round(rates.reduce((a, b) => a + b, 0) / rates.length)
+      })()
+      const vatRate = lead.value.vat_rate ?? vatFromProducts ?? 22
+
+      // Дата КП в формате «25» мая 2026 г.
+      const MONTHS = ['января','февраля','марта','апреля','мая','июня',
+                      'июля','августа','сентября','октября','ноября','декабря']
+      const formatKpDate = (raw) => {
+        const d = raw ? new Date(raw) : new Date()
+        if (Number.isNaN(d.getTime())) return ''
+        const dd = String(d.getDate()).padStart(2, '0')
+        return `«${dd}» ${MONTHS[d.getMonth()]} ${d.getFullYear()} г.`
+      }
+
+      // Денежное форматирование: «6 996 540,00» (с пробелом-разделителем
+      // тысяч и запятой как разделителем дробной части).
+      const fmtMoney = (n) => {
+        const v = Number(n || 0)
+        return v.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      }
+
+      // Сумма и НДС: используем актуальные computed на странице, не
+      // снапшот из последней версии — пользователь успел поменять состав
+      // и ждёт свежие цифры.
+      const totalNumber = Number(totalAmount.value || 0)
+      const vatNumber = Number(totalVatAmount.value || 0)
+
+      // {products_table}: docxtemplater не умеет вставить настоящую docx
+      // таблицу из строки — для этого нужен серверный python-docx или
+      // платный HTML-модуль. Пока подставляем текстовый список (одна
+      // строка на товар) — он встанет вместо плейсхолдера и форматирование
+      // будет линейное. Настоящая таблица — отдельной задачей через
+      // серверный рендер.
+      const productsLines = leadProducts.value.map((item, idx) => {
+        const name = item.custom_name || getProductName(item.product_id) || '—'
+        const qty = item.quantity || 0
+        const unit = item.unit || ''
+        const total = fmtMoney(item.final_price || 0)
+        return `${idx + 1}. ${name} — ${qty} ${unit} = ${total} ₽`
+      })
+      const productsTable = productsLines.length ? productsLines.join('\n') : '—'
+
+      // ФИО директора нашей компании: пока берём contact_person из
+      // companies[our_company_id]. Если пусто — пустая строка.
+      const ourCompany = companies.value.find(
+        c => normalizeId(c.id) === normalizeId(lead.value.our_company_id)
+      )
+      const directorName = ourCompany?.contact_person || ''
+      const ourCompanyShort = ourCompany?.short_name || ourCompany?.name || ''
+
+      // ВСЕ ключи именованы под плейсхолдеры шаблона КП.
+      // НЕ переименовывать без согласования с docx-шаблонами на проде —
+      // иначе в выводе появятся `undefined` (как раз эту проблему чиним).
       return {
+        // — реквизиты КП —
+        kp_number: kp.number_display || '',
+        kp_date: formatKpDate(kp.created_at),
+        kp_validity_days: 30,
+        // — получатель —
+        recipient_short_name: getCompanyName(lead.value.customer_id) || '',
+        recipient_eio: '',
+        recipient_to_name: '',
+        // — объект —
+        object_name: lead.value.obj_name || '',
+        object_address: lead.value.address || '',
+        // — финансы —
+        total_amount: fmtMoney(totalNumber),
+        total_amount_text: latestVersion.total_text || '',
+        vat_rate: Math.round(Number(vatRate) || 0),
+        vat_amount: fmtMoney(vatNumber),
+        vat_amount_text: latestVersion.vat_text || '',
+        advance_percent: lead.value.advance_percent ?? 0,
+        // — наша компания —
+        our_company_short_name: ourCompanyShort,
+        our_company_director_position: 'Генеральный директор',
+        our_company_director_name: directorName,
+        // — состав (текстовая версия, пока не сделан серверный рендер) —
+        products_table: productsTable,
+
+        // — legacy-ключи, оставлены чтобы не сломать старые шаблоны —
         number: kp.number_display,
         number_display: kp.number_display,
         date: formatDate(kp.created_at),
@@ -1365,12 +1583,8 @@ export default {
         address: lead.value.address || '',
         object_type: lead.value.object_type || '',
         object_area: lead.value.object_area || '',
-        customer_name: getCompanyName(lead.value.customer_id),
-        our_company_name: getCompanyName(lead.value.our_company_id),
-        advance_percent: lead.value.advance_percent ?? 0,
-        vat_rate: vatRate,
-        total_amount: latestVersion.total_amount ?? totalAmount.value,
-        vat_amount: latestVersion.vat_amount ?? totalVatAmount.value,
+        customer_name: getCompanyName(lead.value.customer_id) || '',
+        our_company_name: ourCompanyShort,
         total_text: latestVersion.total_text || '',
         vat_text: latestVersion.vat_text || '',
         items: leadProducts.value.map((item, idx) => ({
@@ -1385,7 +1599,18 @@ export default {
     }
 
     const generateKpDocxBlob = async (templateUrl, data) => {
-      const response = await axios.get(templateUrl, { responseType: 'arraybuffer' })
+      // KpTemplate.docx_url исторически называется *_url, но содержит
+      // storage-path вида "KP/templates/.../600.docx". Прямой axios.get
+      // на такой путь даёт 404. Поэтому всегда тащим через единый
+      // download-эндпоинт `/api/v1/storage/download?path=...` — он
+      // авторизует, локализует путь и отдаёт arraybuffer. Для редкого
+      // случая, когда в БД лежит полный URL (миграция со старого
+      // публичного хранилища), используем его как есть.
+      const isHttpUrl = /^https?:\/\//i.test(templateUrl)
+      const resolved = isHttpUrl
+        ? templateUrl
+        : `/api/v1/storage/download?path=${encodeURIComponent(templateUrl)}`
+      const response = await axios.get(resolved, { responseType: 'arraybuffer' })
       const zip = new PizZip(response.data)
       const doc = new Docxtemplater(zip, {
         paragraphLoop: true,
@@ -1399,8 +1624,9 @@ export default {
     }
 
     const generateKpVersion = async (kp) => {
-      const templateUrl = getKpTemplateDocx(kp)
-      if (!templateUrl) return
+      // Серверный рендер: бэк сам читает шаблон, подставляет плейсхолдеры
+      // и собирает настоящую docx-таблицу товаров. Фронт лишь скачивает
+      // готовый blob и заливает его как новую версию КП.
       kpActionId.value = kp.id
       const fileName = `${kp.number_display || 'KP'}.docx`
       const localId = uploadQueue.addLocalUpload({
@@ -1409,8 +1635,10 @@ export default {
         entityId: kp.id
       })
       try {
-        const data = buildKpTemplateData(kp)
-        const blob = await generateKpDocxBlob(templateUrl, data)
+        const renderResponse = await axios.get(`/api/v1/kp/${kp.id}/render-docx`, {
+          responseType: 'blob'
+        })
+        const blob = renderResponse.data
         const formData = new FormData()
         formData.append('kp_id', kp.id)
         formData.append('file', blob, fileName)
@@ -1565,7 +1793,10 @@ export default {
 
     return {
       route, // exposed for template use (route.params.id in timeline tab)
-      activeTab, setActiveTab,
+      activeTab, setActiveTab, tabs, onTabKeydown,
+      editingField, editDraft, inlineSaving, inlineInputRef,
+      beginEdit, cancelEdit, saveEdit,
+      loadLead,
       ldStatusMenuOpen, ldStatusBusy, ldMoreOpen,
       onChangeStatus,
       onLeadFormSubmit,
@@ -1603,8 +1834,11 @@ export default {
       totalAmount,
       objectTypeOptions,
       internalCompanies,
+      customerCompanies,
+      objectTypes: OBJECT_TYPES,
       getCompanyName,
       getUserName,
+      responsibleUser,
       getProductName,
       formatCurrency,
       formatDate,
@@ -1647,6 +1881,7 @@ export default {
       generateKpVersion,
       openKpTemplatesModal,
       closeKpTemplatesModal,
+      loadKpDocuments,
       onTemplateDocxChange,
       onTemplatePdfChange,
       uploadKpTemplate,
@@ -1945,4 +2180,268 @@ export default {
     gap: 8px;
   }
 }
+
+
+/* ============================================================
+   Unified header (визуально как у ProjectDetail/«Сделок»)
+   ============================================================ */
+.unified-header {
+  padding: 0 20px;
+  background: var(--md-sys-color-surface);
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--glass-border-light, rgba(255, 255, 255, 0.3));
+  margin-bottom: 16px;
+}
+.unified-header-inner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 56px;
+}
+.unified-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex-shrink: 1;
+}
+.unified-back-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  background: transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.8rem;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+.unified-back-btn:hover {
+  background: var(--md-sys-color-surface-container);
+  color: var(--md-sys-color-on-surface);
+}
+.unified-title-group {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+.unified-project-name {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--md-sys-color-on-surface);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.unified-obj-name {
+  font-size: 0.8rem;
+  color: var(--md-sys-color-on-surface-variant);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 60ch;
+  flex-shrink: 1;
+  min-width: 0;
+}
+.unified-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  flex-shrink: 0;
+  outline: none;
+}
+.unified-nav-item {
+  position: relative;
+  padding: 8px 14px;
+  border: none;
+  background: transparent;
+  color: var(--md-sys-color-on-surface-variant);
+  font-weight: 500;
+  font-size: 0.82rem;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: all 0.15s;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+}
+.unified-nav-item:hover {
+  color: var(--md-sys-color-on-surface);
+  background: var(--md-sys-color-surface-container-low);
+}
+.unified-nav-item.active {
+  color: var(--md-sys-color-primary);
+  background: var(--md-sys-color-primary-container);
+  font-weight: 600;
+}
+.unified-nav-item:focus-visible {
+  outline: 2px solid var(--md-sys-color-primary);
+  outline-offset: 1px;
+}
+.unified-header-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+.unified-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  background: transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.8rem;
+  transition: all 0.15s;
+}
+.unified-action-btn:hover {
+  background: var(--md-sys-color-surface-container);
+  color: var(--md-sys-color-on-surface);
+}
+.unified-action-btn--danger:hover {
+  background: var(--color-danger-container, #ffebee);
+  color: var(--color-danger, #c62828);
+  border-color: var(--color-danger, #c62828);
+}
+
+/* ============================================================
+   Inline-edit стиль для строк «Основной информации»
+   ============================================================ */
+.info-row--editable {
+  cursor: text;
+  border-radius: 6px;
+  padding: 2px 6px;
+  margin: 0 -6px;
+  transition: background 0.12s ease;
+}
+.info-row--editable:hover {
+  background: var(--md-sys-color-surface-container-low, rgba(15, 23, 42, 0.04));
+}
+.info-row--editable:hover .info-row__value::after {
+  content: '\f303';
+  font-family: 'Font Awesome 6 Free';
+  font-weight: 900;
+  margin-left: 8px;
+  font-size: 0.7rem;
+  opacity: 0.45;
+}
+.info-edit-input {
+  flex: 1;
+  min-width: 0;
+  max-width: 60%;
+  margin-left: auto;
+  text-align: right;
+  padding: 3px 8px;
+  border: 1px solid var(--md-sys-color-primary, #1976d2);
+  border-radius: 6px;
+  font: inherit;
+  font-weight: 500;
+  background: var(--md-sys-color-surface, #fff);
+  color: inherit;
+  outline: none;
+}
+.info-edit-input:focus {
+  box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.15);
+}
+.info-edit-input:disabled {
+  opacity: 0.6;
+}
+.info-edit-select {
+  flex: 1;
+  min-width: 0;
+  max-width: 70%;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.info-edit-select > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+.info-edit-cancel {
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--md-sys-color-outline-variant, rgba(15, 23, 42, 0.15));
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--md-sys-color-on-surface-variant);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  flex-shrink: 0;
+}
+.info-edit-cancel:hover {
+  background: var(--md-sys-color-surface-container);
+  color: var(--color-danger, #c62828);
+  border-color: var(--color-danger, #c62828);
+}
+.info-row__value--with-avatar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+/* ============================================================
+   Целостный контейнер: шапка + контент = единый rounded box
+   (без зазоров и индивидуальных рамок у внутренних карточек)
+   ============================================================ */
+.unified-header {
+  margin-bottom: 0;
+  border-radius: 12px 12px 0 0;
+  border-bottom: 1px solid var(--md-sys-color-outline-variant, rgba(15, 23, 42, 0.08));
+}
+.lead-detail-body {
+  border: 1px solid var(--md-sys-color-outline-variant, rgba(15, 23, 42, 0.08));
+  border-top: none;
+  border-radius: 0 0 12px 12px;
+  background: var(--md-sys-color-surface, #fff);
+  overflow: hidden;
+}
+/* Контейнеры табов внутри тела — без внешних отступов, чтобы
+   внутренние карточки прилегали к рамке тела edge-to-edge. */
+.lead-detail-body .scroll-container { padding: 0; }
+/* Все внутренние .card снимают индивидуальную рамку/радиус/тень —
+   они теперь секции одного большого контейнера, а не отдельные карточки. */
+.lead-detail-body .card,
+.lead-detail-body .dashboard-left .card,
+.lead-detail-body .dashboard-right {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+/* Двухколоночная сетка «Инфо»: без зазора, разделитель между колонками. */
+.lead-detail-body .dashboard-grid {
+  gap: 0;
+  height: 100%;
+}
+.lead-detail-body .dashboard-grid .dashboard-right {
+  border-left: 1px solid var(--md-sys-color-outline-variant, rgba(15, 23, 42, 0.08));
+}
+/* Левая колонка — это flex-column нескольких карточек; между ними даём
+   горизонтальный разделитель, а не gap. */
+.lead-detail-body .dashboard-left {
+  gap: 0;
+}
+.lead-detail-body .dashboard-left > .card + .card {
+  border-top: 1px solid var(--md-sys-color-outline-variant, rgba(15, 23, 42, 0.08));
+}
+
+
 </style>

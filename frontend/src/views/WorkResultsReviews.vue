@@ -335,7 +335,7 @@
     </div>
 
     <!-- Review Modal -->
-    <div v-if="showReviewModal" class="modal-overlay" @click="closeReviewModal">
+    <div v-if="showReviewModal" class="modal-overlay" v-modal-close="closeReviewModal">
       <div class="modal-content" @click.stop style="max-width: 520px;">
         <div class="modal-header">
           <h4>Согласование результата</h4>
@@ -373,7 +373,7 @@
     </div>
 
     <!-- Bulk Reject Modal -->
-    <div v-if="showBulkRejectModal" class="modal-overlay" @click="closeBulkReject">
+    <div v-if="showBulkRejectModal" class="modal-overlay" v-modal-close="closeBulkReject">
       <div class="modal-content" @click.stop style="max-width: 480px;">
         <div class="modal-header">
           <h4>Отклонить {{ selectedReviewable }} результата</h4>
@@ -404,7 +404,7 @@
 
     <!-- Versions Drawer -->
     <transition name="drawer">
-      <div v-if="versionsOpen" class="drawer-overlay" @click.self="closeVersions">
+      <div v-if="versionsOpen" class="drawer-overlay" v-modal-close="closeVersions">
         <div class="drawer">
           <div class="drawer-header">
             <div>

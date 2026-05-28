@@ -191,6 +191,23 @@ async def create_document(
         )
     except Exception:
         pass
+
+    # Event Bus v2: документ создан в реестре — подписчики Диадок/СОДы
+    # узнают о новом объекте, могут запросить файл / связать со своими.
+    from app.services.event_outbox import emit_event_safe
+    await emit_event_safe(
+        db,
+        event_type="document.after_create",
+        entity_type="document",
+        entity_id=str(doc.id),
+        payload={
+            "id": str(doc.id),
+            "title": doc.title,
+            "doc_type": doc.doc_type,
+            "status": doc.status,
+            "deal_id": doc.project_id,
+        },
+    )
     return doc
 
 
@@ -206,6 +223,33 @@ async def update_document(
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     previous_status = doc.status
+
+    # Event Bus v2: before_status_change — даём шанс in-process хендлеру
+    # (см. event_handlers/documents.validate_status_progression) отменить
+    # некорректный переход (например, archived → draft).
+    next_status = payload.dict(exclude_unset=True).get("status")
+    if next_status and next_status != previous_status:
+        from app.services.event_dispatcher import (
+            Cancel as _EBCancel,
+            EventContext as _EBCtx,
+            dispatch_before,
+        )
+        pre_ctx = _EBCtx(
+            event_key="document.before_status_change",
+            entity_type="document",
+            entity_id=str(doc.id),
+            payload={
+                "id": str(doc.id),
+                "status_before": previous_status,
+                "status_after": next_status,
+                "doc_type": doc.doc_type,
+            },
+            user_id=str(getattr(user, "id", "")) or None,
+        )
+        pre_result = await dispatch_before("document.before_status_change", pre_ctx)
+        if isinstance(pre_result, _EBCancel):
+            raise HTTPException(status_code=400, detail=pre_result.reason)
+
     for key, value in payload.dict(exclude_unset=True).items():
         setattr(doc, key, value)
     await db.commit()
@@ -242,6 +286,36 @@ async def update_document(
             )
     except Exception:
         pass
+
+    # Event Bus v2: эмиссии для внешних подписчиков. Общий after_update
+    # + специальный after_status_change при реальной смене.
+    from app.services.event_outbox import emit_event_safe
+    await emit_event_safe(
+        db,
+        event_type="document.after_update",
+        entity_type="document",
+        entity_id=str(doc.id),
+        payload={
+            "id": str(doc.id),
+            "title": doc.title,
+            "doc_type": doc.doc_type,
+            "status": doc.status,
+            "deal_id": doc.project_id,
+        },
+    )
+    if previous_status != doc.status:
+        await emit_event_safe(
+            db,
+            event_type="document.after_status_change",
+            entity_type="document",
+            entity_id=str(doc.id),
+            payload={
+                "id": str(doc.id),
+                "status_before": previous_status,
+                "status_after": doc.status,
+                "doc_type": doc.doc_type,
+            },
+        )
     return doc
 
 
@@ -253,6 +327,20 @@ async def delete_document(document_id: str, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Document not found")
     await db.delete(doc)
     await db.commit()
+
+    # Event Bus v2: after_delete для внешних реестров.
+    from app.services.event_outbox import emit_event_safe
+    await emit_event_safe(
+        db,
+        event_type="document.after_delete",
+        entity_type="document",
+        entity_id=str(doc.id),
+        payload={
+            "id": str(doc.id),
+            "title": doc.title,
+            "deal_id": doc.project_id,
+        },
+    )
     return {"message": "Document deleted"}
 
 
@@ -468,18 +556,43 @@ async def create_dispatch(
         pkg = await db.execute(select(DocumentPackage).where(DocumentPackage.id == payload.package_id))
         if not pkg.scalar_one_or_none():
             raise HTTPException(status_code=404, detail="Package not found")
+    # Event Bus v2: before_send хук на dispatch — даём шанс отменить
+    # отправку (документ не готов, нет канала, нет получателя и т.п.).
+    # Хендлер живёт в event_handlers/documents.py.
+    from app.services.event_dispatcher import (
+        Cancel as _EBCancel,
+        EventContext as _EBCtx,
+        dispatch_before,
+    )
+    pre_ctx = _EBCtx(
+        event_key="document.before_send",
+        entity_type="document",
+        entity_id=str(payload.document_id or payload.package_id or ""),
+        payload={
+            "document_id": str(payload.document_id) if payload.document_id else None,
+            "package_id": str(payload.package_id) if payload.package_id else None,
+            "channel": getattr(payload, "channel", None),
+            "file_path": getattr(payload, "file_path", None),
+            "storage_url": getattr(payload, "storage_url", None),
+        },
+        user_id=str(getattr(user, "id", "")) or None,
+    )
+    pre_result = await dispatch_before("document.before_send", pre_ctx)
+    if isinstance(pre_result, _EBCancel):
+        raise HTTPException(status_code=400, detail=pre_result.reason)
+
     dispatch = DocumentDispatch(**payload.dict())
     db.add(dispatch)
     await db.commit()
     await db.refresh(dispatch)
+    doc_title = None
+    deal_id = None
+    if dispatch.document_id:
+        result = await db.execute(select(Document).where(Document.id == dispatch.document_id))
+        doc = result.scalar_one_or_none()
+        doc_title = doc.title if doc else None
+        deal_id = doc.project_id if doc else None
     try:
-        doc_title = None
-        deal_id = None
-        if dispatch.document_id:
-            result = await db.execute(select(Document).where(Document.id == dispatch.document_id))
-            doc = result.scalar_one_or_none()
-            doc_title = doc.title if doc else None
-            deal_id = doc.project_id if doc else None
         await log_event(
             db,
             entity_type="document",
@@ -495,6 +608,39 @@ async def create_dispatch(
         )
     except Exception:
         pass
+
+    # Event Bus v2: эмиссии для Диадок/СОДы.
+    # 1) Сам dispatch создан — внешний интегратор получает событие.
+    # 2) document.after_send — отправка документа состоялась (агрегат
+    #    для тех, кому не интересны дочерние dispatch'и).
+    from app.services.event_outbox import emit_event_safe
+    await emit_event_safe(
+        db,
+        event_type="document_dispatch.after_create",
+        entity_type="document_dispatch",
+        entity_id=str(dispatch.id),
+        payload={
+            "id": str(dispatch.id),
+            "document_id": str(dispatch.document_id) if dispatch.document_id else None,
+            "package_id": str(dispatch.package_id) if dispatch.package_id else None,
+            "channel": getattr(dispatch, "channel", None),
+            "status": getattr(dispatch, "status", None),
+        },
+    )
+    if dispatch.document_id:
+        await emit_event_safe(
+            db,
+            event_type="document.after_send",
+            entity_type="document",
+            entity_id=str(dispatch.document_id),
+            payload={
+                "id": str(dispatch.document_id),
+                "title": doc_title,
+                "deal_id": deal_id,
+                "channel": getattr(dispatch, "channel", None),
+                "dispatch_id": str(dispatch.id),
+            },
+        )
     return dispatch
 
 
@@ -513,15 +659,15 @@ async def add_dispatch_channel(
     db.add(channel)
     await db.commit()
     await db.refresh(channel)
+    document_id = dispatch_obj.document_id if dispatch_obj else None
+    doc_title = None
+    deal_id = None
+    if document_id:
+        result = await db.execute(select(Document).where(Document.id == document_id))
+        doc = result.scalar_one_or_none()
+        doc_title = doc.title if doc else None
+        deal_id = doc.project_id if doc else None
     try:
-        document_id = dispatch_obj.document_id if dispatch_obj else None
-        doc_title = None
-        deal_id = None
-        if document_id:
-            result = await db.execute(select(Document).where(Document.id == document_id))
-            doc = result.scalar_one_or_none()
-            doc_title = doc.title if doc else None
-            deal_id = doc.project_id if doc else None
         await log_event(
             db,
             entity_type="document",
@@ -538,6 +684,23 @@ async def add_dispatch_channel(
         )
     except Exception:
         pass
+
+    # Event Bus v2: канал отправки добавлен — Диадок/СОДы получают
+    # инфу что документ ушёл (через какой канал, когда).
+    from app.services.event_outbox import emit_event_safe
+    await emit_event_safe(
+        db,
+        event_type="document_dispatch.after_send",
+        entity_type="document_dispatch",
+        entity_id=str(dispatch_id),
+        payload={
+            "dispatch_id": str(dispatch_id),
+            "document_id": str(document_id) if document_id else None,
+            "channel": channel.channel,
+            "channel_date": str(channel.channel_date) if channel.channel_date else None,
+            "channel_id": str(channel.id),
+        },
+    )
     return channel
 
 

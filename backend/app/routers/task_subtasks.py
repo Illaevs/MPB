@@ -18,6 +18,7 @@ from app.core.auth_middleware import CurrentUser
 from app.database.session import get_db
 from app.models import Task, TaskAssignee, TaskSubtask, TaskWatcher, User
 from app.routers.tasks import _require_task_access
+from app.services.event_outbox import emit_event_safe
 from app.schemas.task_subtask import (
     TaskSubtaskCreate,
     TaskSubtaskReorder,
@@ -168,6 +169,24 @@ async def create_subtask(
     # автоматически добавляем как соисполнителя (иначе он не сможет
     # увидеть задачу/чек-лист).
     await _ensure_user_on_task(db, task, assignee_id)
+    await db.flush()
+    await emit_event_safe(
+        db,
+        event_type="task_subtask.after_create",
+        entity_type="task_subtask",
+        entity_id=str(subtask.id),
+        payload={
+            "id": str(subtask.id),
+            "task_id": str(task.id),
+            "title": title,
+            "assigned_to_user_id": assignee_id,
+            "due_date": payload.due_date.isoformat() if payload.due_date else None,
+            "due_time": due_time,
+            "is_urgent": bool(payload.is_urgent),
+            "created_by_user_id": str(user.id),
+        },
+        payload_version=1,
+    )
     await db.commit()
     await db.refresh(subtask)
 
@@ -191,10 +210,17 @@ async def update_subtask(
         raise HTTPException(status_code=404, detail="Task not found")
     await _require_task_access(db, user, task)
 
+    # Snapshot — нужен для emit (различаем done_change от title-edit).
+    _prev_done = bool(subtask.is_done)
+    _prev_assignee = str(subtask.assigned_to_user_id) if subtask.assigned_to_user_id else None
+    _changed_fields: List[str] = []
+
     if payload.title is not None:
         title = payload.title.strip()
         if not title:
             raise HTTPException(status_code=400, detail="Title is required")
+        if subtask.title != title:
+            _changed_fields.append("title")
         subtask.title = title
 
     if payload.is_done is not None:
@@ -206,26 +232,77 @@ async def update_subtask(
             subtask.done_at = datetime.utcnow()
         elif not new_done and subtask.is_done:
             subtask.done_at = None
+        if subtask.is_done != new_done:
+            _changed_fields.append("is_done")
         subtask.is_done = new_done
 
     if payload.assigned_to_user_id is not None:
         # Пустая строка/None трактуем как «сбросить ответственного».
         val = str(payload.assigned_to_user_id).strip() if payload.assigned_to_user_id else ""
-        subtask.assigned_to_user_id = val or None
+        new_assignee = val or None
+        if new_assignee != _prev_assignee:
+            _changed_fields.append("assigned_to_user_id")
+        subtask.assigned_to_user_id = new_assignee
         # При смене ответственного — гарантируем, что юзер видит задачу.
         if val:
             await _ensure_user_on_task(db, task, val)
 
     if payload.due_date is not None:
+        if subtask.due_date != payload.due_date:
+            _changed_fields.append("due_date")
         subtask.due_date = payload.due_date
 
     if payload.due_time is not None:
         # Пустая строка = «снять время».
         val = (payload.due_time or "").strip()
-        subtask.due_time = val or None
+        new_time = val or None
+        if subtask.due_time != new_time:
+            _changed_fields.append("due_time")
+        subtask.due_time = new_time
 
     if payload.is_urgent is not None:
-        subtask.is_urgent = bool(payload.is_urgent)
+        new_urg = bool(payload.is_urgent)
+        if bool(subtask.is_urgent) != new_urg:
+            _changed_fields.append("is_urgent")
+        subtask.is_urgent = new_urg
+
+    # Если is_done изменилось — эмитим специализированное событие (check/uncheck),
+    # это самый интересный кейс для Telegram-уведомлений.
+    if "is_done" in _changed_fields:
+        await emit_event_safe(
+            db,
+            event_type="task_subtask.after_check",
+            entity_type="task_subtask",
+            entity_id=str(subtask.id),
+            payload={
+                "id": str(subtask.id),
+                "task_id": str(task.id),
+                "title": subtask.title,
+                "is_done": bool(subtask.is_done),
+                "checked_by_user_id": str(user.id),
+                "assigned_to_user_id": str(subtask.assigned_to_user_id) if subtask.assigned_to_user_id else None,
+            },
+            payload_version=1,
+        )
+
+    # Общее update-событие — всегда, если хоть одно поле изменилось.
+    if _changed_fields:
+        await emit_event_safe(
+            db,
+            event_type="task_subtask.after_update",
+            entity_type="task_subtask",
+            entity_id=str(subtask.id),
+            payload={
+                "id": str(subtask.id),
+                "task_id": str(task.id),
+                "changed_fields": _changed_fields,
+                "title": subtask.title,
+                "is_done": bool(subtask.is_done),
+                "assigned_to_user_id": str(subtask.assigned_to_user_id) if subtask.assigned_to_user_id else None,
+                "updated_by_user_id": str(user.id),
+            },
+            payload_version=1,
+        )
 
     await db.commit()
     await db.refresh(subtask)
@@ -248,7 +325,22 @@ async def delete_subtask(
         raise HTTPException(status_code=404, detail="Task not found")
     await _require_task_access(db, user, task)
 
+    snapshot = {
+        "id": str(subtask.id),
+        "task_id": str(task.id),
+        "title": subtask.title,
+        "assigned_to_user_id": str(subtask.assigned_to_user_id) if subtask.assigned_to_user_id else None,
+        "deleted_by_user_id": str(user.id),
+    }
     await db.delete(subtask)
+    await emit_event_safe(
+        db,
+        event_type="task_subtask.after_delete",
+        entity_type="task_subtask",
+        entity_id=str(snapshot["id"]),
+        payload=snapshot,
+        payload_version=1,
+    )
     await db.commit()
     return {"deleted": True}
 

@@ -93,7 +93,7 @@
       </div>
     </div>
 
-    <div v-if="dealHealthIgnoreModal.visible" class="modal-overlay" @click="closeDealHealthIgnoreModal">
+    <div v-if="dealHealthIgnoreModal.visible" class="modal-overlay" v-modal-close="closeDealHealthIgnoreModal">
       <div class="modal-glass" style="max-width: 560px;" @click.stop>
         <div class="modal-glass-header">
           <h3>Игнорировать проблему</h3>

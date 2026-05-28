@@ -12,7 +12,11 @@
       @blur="onBlur"
       autocomplete="off"
     />
-    <div v-if="showDropdown" class="smart-select__dropdown">
+    <div
+      v-if="showDropdown"
+      class="smart-select__dropdown"
+      @mousedown.prevent
+    >
       <button
         v-for="item in filtered"
         :key="item.id"

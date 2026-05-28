@@ -350,6 +350,23 @@ async def create_income_expense_entry(
         raise HTTPException(status_code=400, detail="Invalid company or related reference")
     await db.refresh(entry)
 
+    # Event Bus v2: запись ДДС создана — BI/1С обновляют свои агрегаты.
+    from app.services.event_outbox import emit_event_safe
+    await emit_event_safe(
+        db,
+        event_type="income_expense_entry.after_create",
+        entity_type="income_expense_entry",
+        entity_id=str(entry.id),
+        payload={
+            "id": str(entry.id),
+            "deal_id": str(entry.deal_id) if entry.deal_id else None,
+            "contract_id": str(entry.contract_id) if entry.contract_id else None,
+            "direction": entry.direction,
+            "amount": float(entry.amount or 0),
+            "category_code": entry.category_code,
+        },
+    )
+
     return await _build_entry_response(db, entry)
 
 
@@ -511,6 +528,24 @@ async def update_income_expense_entry(
     await db.commit()
     await db.refresh(entry)
 
+    # Event Bus v2: общий after_update; payment_status_change эмитим
+    # отдельно только когда payment_status реально поменялся.
+    from app.services.event_outbox import emit_event_safe
+    await emit_event_safe(
+        db,
+        event_type="income_expense_entry.after_update",
+        entity_type="income_expense_entry",
+        entity_id=str(entry.id),
+        payload={
+            "id": str(entry.id),
+            "deal_id": str(entry.deal_id) if entry.deal_id else None,
+            "contract_id": str(entry.contract_id) if entry.contract_id else None,
+            "direction": entry.direction,
+            "amount": float(entry.amount or 0),
+            "payment_status": getattr(entry, "payment_status", None),
+        },
+    )
+
     return await _build_entry_response(db, entry)
 
 
@@ -557,4 +592,19 @@ async def delete_income_expense_entry(
     await db.execute(delete(TreasuryAllocation).where(TreasuryAllocation.income_expense_id == entry_id))
     await db.delete(entry)
     await db.commit()
+
+    # Event Bus v2: after_delete для синхронизации внешних агрегатов.
+    from app.services.event_outbox import emit_event_safe
+    await emit_event_safe(
+        db,
+        event_type="income_expense_entry.after_delete",
+        entity_type="income_expense_entry",
+        entity_id=str(entry.id),
+        payload={
+            "id": str(entry.id),
+            "deal_id": str(entry.deal_id) if entry.deal_id else None,
+            "amount": float(entry.amount or 0),
+            "direction": entry.direction,
+        },
+    )
     return {"message": "Deleted"}

@@ -50,6 +50,13 @@ import * as customer from './customer'
 import * as dataHealth from './dataHealth'
 import * as ai from './ai'
 import * as home from './home'
+import * as workday from './workday'
+import * as profiles from './profiles'
+import * as absences from './absences'
+import * as feed from './feed'
+import * as eventBus from './eventBus'
+import * as search from './search'
+import * as reglaments from './reglaments'
 
 export const api = {
   // Reference data
@@ -95,6 +102,13 @@ export const api = {
   dataHealth,
   ai,
   home,
+  workday,
+  profiles,
+  absences,
+  feed,
+  eventBus,
+  search,
+  reglaments,
 }
 
 export { request, get, post, put, patch, del, rawRequest } from './_client'

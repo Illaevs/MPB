@@ -15,6 +15,7 @@
           @click="loadUsers"
         />
         <UiButton
+          v-if="canEditUsers"
           variant="primary"
           size="md"
           icon-left="fas fa-user-plus"
@@ -38,7 +39,7 @@
         description="Создайте первого пользователя, чтобы назначать роли и привязки к компаниям."
       >
         <template #actions>
-          <UiButton variant="primary" size="sm" icon-left="fas fa-user-plus" @click="openCreate">
+          <UiButton v-if="canEditUsers" variant="primary" size="sm" icon-left="fas fa-user-plus" @click="openCreate">
             Создать пользователя
           </UiButton>
         </template>
@@ -87,11 +88,11 @@
                   class="company-chip"
                 >
                   <span class="company-chip__text">{{ link.company_name || link.company_id }}</span>
-                  <button class="company-chip__remove" type="button" title="Удалить привязку" @click.stop="removeCompanyLink(link)">
+                  <button v-if="canEditUsers" class="company-chip__remove" type="button" title="Удалить привязку" @click.stop="removeCompanyLink(link)">
                     <i class="fas fa-times"></i>
                   </button>
                 </span>
-                <button class="company-chip company-chip--add" type="button" title="Добавить привязку" @click="openLinkModal(user, 'leader')">
+                <button v-if="canEditUsers" class="company-chip company-chip--add" type="button" title="Добавить привязку" @click="openLinkModal(user, 'leader')">
                   <i class="fas fa-plus"></i>
                 </button>
               </div>
@@ -106,11 +107,11 @@
                   class="company-chip"
                 >
                   <span class="company-chip__text">{{ link.company_name || link.company_id }}</span>
-                  <button class="company-chip__remove" type="button" title="Удалить привязку" @click.stop="removeCompanyLink(link)">
+                  <button v-if="canEditUsers" class="company-chip__remove" type="button" title="Удалить привязку" @click.stop="removeCompanyLink(link)">
                     <i class="fas fa-times"></i>
                   </button>
                 </span>
-                <button class="company-chip company-chip--add" type="button" title="Добавить привязку" @click="openLinkModal(user, 'employee')">
+                <button v-if="canEditUsers" class="company-chip company-chip--add" type="button" title="Добавить привязку" @click="openLinkModal(user, 'employee')">
                   <i class="fas fa-plus"></i>
                 </button>
               </div>
@@ -125,18 +126,18 @@
                   class="company-chip"
                 >
                   <span class="company-chip__text">{{ link.company_name || link.company_id }}</span>
-                  <button class="company-chip__remove" type="button" title="Удалить привязку" @click.stop="removeCompanyLink(link)">
+                  <button v-if="canEditUsers" class="company-chip__remove" type="button" title="Удалить привязку" @click.stop="removeCompanyLink(link)">
                     <i class="fas fa-times"></i>
                   </button>
                 </span>
-                <button class="company-chip company-chip--add" type="button" title="Добавить привязку" @click="openLinkModal(user, 'customer')">
+                <button v-if="canEditUsers" class="company-chip company-chip--add" type="button" title="Добавить привязку" @click="openLinkModal(user, 'customer')">
                   <i class="fas fa-plus"></i>
                 </button>
               </div>
             </div>
           </div>
 
-          <div class="user-card__actions">
+          <div v-if="canEditUsers" class="user-card__actions">
             <UiIconButton
               icon="fas fa-check"
               :label="user.id === activeUserId ? 'Текущий активный пользователь' : 'Сделать активным'"
@@ -230,7 +231,7 @@ import {
   UiModal,
   UiSelect
 } from '../components/ui'
-import { getActiveUser, saveActiveUser } from '../utils/permissions'
+import { getActiveUser, saveActiveUser, canEditSection } from '../utils/permissions'
 import { useToast } from '../composables/useToast'
 import { api } from '../services/api'
 import { useUsersStore } from '../stores/users'
@@ -267,6 +268,12 @@ export default {
     const activeUserId = ref(getActiveUser()?.id || '')
     const showLinkModal = ref(false)
     const linkSaving = ref(false)
+
+    // Section-level write gate. Backend is the final authority (these
+    // endpoints enforce require_section_write("users")); this only hides
+    // controls a read-only role must not see (create/edit/delete users,
+    // company links, and the client-side "make active" switch).
+    const canEditUsers = computed(() => canEditSection('users'))
 
     const userForm = ref({
       id: '',
@@ -560,6 +567,7 @@ export default {
       activeUserId,
       showLinkModal,
       linkSaving,
+      canEditUsers,
       userForm,
       linkForm,
       linkModalTitle,

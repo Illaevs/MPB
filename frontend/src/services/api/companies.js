@@ -69,3 +69,11 @@ export const relatedDeals = (companyId, options) =>
 /** Удобный хелпер для CompanySmartSelect-подобных мест. */
 export const findByInn = (inn, options) =>
   get(`${BASE}/`, { search: inn, limit: 5 }, options)
+
+/** Получить "нашу компанию" по флагу is_default; 404 если не настроена. */
+export const getDefaultOurCompany = (options) =>
+  get(`${BASE}/default-our-company`, undefined, options)
+
+/** Назначить компанию (только internal) дефолтной "нашей". */
+export const setDefaultOurCompany = (companyId, options) =>
+  post(`${BASE}/${companyId}/set-default`, undefined, options)

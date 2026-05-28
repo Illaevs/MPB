@@ -85,7 +85,7 @@
       </div>
     </div>
 
-    <div v-if="showCreateModal" class="modal-overlay" @click="closeModal">
+    <div v-if="showCreateModal" class="modal-overlay" v-modal-close="closeModal">
       <div class="modal-content" style="max-width: 700px;" @click.stop>
         <div class="modal-header">
           <h3>{{ isEditing ? 'Редактировать этап' : 'Новый этап' }}</h3>

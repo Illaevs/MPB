@@ -118,6 +118,11 @@
               </div>
 
               <div class="task-row__date" :class="getDueDateClass(task.due_date)">
+                <span
+                  class="task-chat-badge"
+                  :class="{ 'task-chat-badge--zero': !getTaskUnreadCount(task.id) }"
+                  :title="getTaskUnreadCount(task.id) ? `Непрочитанных сообщений: ${getTaskUnreadCount(task.id)}` : 'Нет новых сообщений в чате'"
+                >{{ getTaskUnreadCount(task.id) }}</span>
                 <i v-if="task.due_date" class="far fa-calendar-alt"></i>
                 <span>{{ task.due_date ? formatDate(task.due_date) : '—' }}</span>
                 <span v-if="task.due_date && task.due_time" class="task-row__time">{{ String(task.due_time).slice(0, 5) }}</span>
@@ -184,6 +189,9 @@
               :delay-on-touch-only="true"
               :force-fallback="isTouchDevice"
               fallback-on-body
+              ghost-class="task-card--ghost"
+              chosen-class="task-card--chosen"
+              drag-class="task-card--dragging"
               @start="onKanbanSortStart(column.key)"
               @end="onTaskDragEnd"
               @change="onTaskKanbanChange($event, column.key)"
@@ -213,14 +221,19 @@
 
                   <div class="task-card__bottom">
                     <div
-                      v-if="task.due_date"
                       class="task-card__date"
-                      :class="getDueDateClass(task.due_date)"
+                      :class="task.due_date ? getDueDateClass(task.due_date) : ''"
                     >
-                      <i class="far fa-calendar-alt"></i>
-                      {{ formatDate(task.due_date) }}<span v-if="task.due_time" class="task-card__time"> {{ String(task.due_time).slice(0, 5) }}</span>
+                      <span
+                        class="task-chat-badge"
+                        :class="{ 'task-chat-badge--zero': !getTaskUnreadCount(task.id) }"
+                        :title="getTaskUnreadCount(task.id) ? `Непрочитанных сообщений: ${getTaskUnreadCount(task.id)}` : 'Нет новых сообщений в чате'"
+                      >{{ getTaskUnreadCount(task.id) }}</span>
+                      <template v-if="task.due_date">
+                        <i class="far fa-calendar-alt"></i>
+                        {{ formatDate(task.due_date) }}<span v-if="task.due_time" class="task-card__time"> {{ String(task.due_time).slice(0, 5) }}</span>
+                      </template>
                     </div>
-                    <span v-else></span>
 
                     <AssigneeStack :user-ids="getTaskAssigneeIds(task)" :users="users" :max="3" />
                   </div>
@@ -265,6 +278,9 @@
               :delay-on-touch-only="true"
               :force-fallback="isTouchDevice"
               fallback-on-body
+              ghost-class="task-matrix-card--ghost"
+              chosen-class="task-matrix-card--chosen"
+              drag-class="task-matrix-card--dragging"
               @start="onMatrixDragStart(column.key)"
               @end="onTaskDragEnd"
               @change="onTaskMatrixChange($event, column.key)"
@@ -516,15 +532,54 @@ export default {
   border-radius: 50%;
   flex-shrink: 0;
 }
+
+/* Бейдж непрочитанных сообщений чата задачи.
+   - По умолчанию: зелёный кружок с числом непрочитанных от других юзеров.
+   - --zero: серый, для нулевых, чтобы UI оставался «единообразным» —
+     всегда виден один индикатор слева от названия задачи независимо
+     от того, есть ли там новые сообщения. */
+.task-chat-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #16a34a;
+  color: #fff;
+  font-size: 11px;
+  font-weight: var(--fw-bold);
+  line-height: 1;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+.task-chat-badge--zero {
+  background: #e2e8f0;
+  color: #94a3b8;
+  font-weight: var(--fw-medium);
+}
 .task-row__title {
-  flex: 0 1 auto;
+  /* flex: 1 1 0 — забирает остаток ширины ячейки и сжимается;
+     basis 0 (вместо auto) гарантирует, что длинный текст не растянет
+     колонку и не пойдёт в соседнюю. */
+  flex: 1 1 0;
   min-width: 0;
   font-size: var(--text-md);
   font-weight: var(--fw-medium);
   color: var(--color-text);
+  /* Раньше было nowrap+ellipsis. Заменили на перенос (2 строки максимум)
+     по запросу: длинные названия не должны наезжать на соседние колонки
+     и не должны быть отрезаны до пары слов. word-break — на случай
+     URL/одного длинного «слова» без пробелов. */
+  white-space: normal;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-height: var(--leading-tight, 1.25);
 }
 .task-row__priority,
 .task-row__paperclip {
@@ -618,6 +673,28 @@ export default {
 }
 .task-card--updating { opacity: 0.6; pointer-events: none; }
 
+/* DND visual states (vuedraggable / Sortable.js classes).
+   - ghost   — placeholder в новой позиции (рамка-пунктир, видно «куда упадёт»).
+   - chosen  — карточка в исходной позиции, пока её тащат (приглушённая).
+   - dragging — клон, который ездит за курсором (приподнят, чёткая тень). */
+.task-card--ghost {
+  background: rgba(33, 150, 243, 0.06) !important;
+  border: 2px dashed rgba(33, 150, 243, 0.55) !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+.task-card--ghost > * { visibility: hidden; }
+.task-card--chosen {
+  opacity: 0.45;
+  transform: none !important;
+}
+.task-card--dragging {
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.22) !important;
+  transform: rotate(1.5deg) !important;
+  cursor: grabbing !important;
+  border-color: rgba(33, 150, 243, 0.55) !important;
+}
+
 .task-card__title-row {
   display: flex;
   align-items: flex-start;
@@ -675,5 +752,17 @@ export default {
    ============================================================ */
 .task-matrix-card__avatar-stack {
   margin-left: var(--space-2);
+}
+.task-matrix-card--ghost {
+  background: rgba(33, 150, 243, 0.06) !important;
+  border: 2px dashed rgba(33, 150, 243, 0.55) !important;
+  box-shadow: none !important;
+}
+.task-matrix-card--ghost > * { visibility: hidden; }
+.task-matrix-card--chosen { opacity: 0.45; }
+.task-matrix-card--dragging {
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.22) !important;
+  transform: rotate(1.5deg) !important;
+  cursor: grabbing !important;
 }
 </style>

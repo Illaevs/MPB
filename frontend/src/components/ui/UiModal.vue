@@ -4,7 +4,7 @@
       <div
         v-if="modelValue"
         class="ui-modal__overlay"
-        @click.self="onOverlayClick"
+        v-modal-close="onOverlayClick"
         @keydown.esc="onEsc"
         tabindex="-1"
       >

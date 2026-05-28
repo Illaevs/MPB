@@ -15,6 +15,7 @@ from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from app.database.session import get_db
 from app.models import StageResult, Deal, Stage, DealGip, User
 from app.services.event_log import log_event
+from app.services.event_outbox import emit_event_safe
 
 
 class ResultReviewUpdate(BaseModel):
@@ -255,6 +256,7 @@ async def update_result_review(
     if not update_data:
         return {"message": "No changes"}
 
+    prev_status = result.status
     await StageResult.update(db, result_id, **update_data)
     if result.deal_id:
         try:
@@ -272,4 +274,34 @@ async def update_result_review(
             )
         except Exception:
             pass
+    # Emit specialized events для SOD-консьюмеров и BI: они хотят слышать
+    # именно про переходы review → approved/rejected, не общий update.
+    if status and status != prev_status:
+        if status == "approved":
+            event_type = "stage_result.after_approve"
+        elif status in {"rejected", "send_back"}:
+            event_type = "stage_result.after_reject"
+        elif status == "review":
+            event_type = "stage_result.after_submit"
+        else:
+            event_type = None
+        if event_type:
+            await emit_event_safe(
+                db,
+                event_type=event_type,
+                entity_type="stage_result",
+                entity_id=str(result.id),
+                payload={
+                    "id": str(result.id),
+                    "deal_id": str(result.deal_id) if result.deal_id else None,
+                    "stage_id": str(result.stage_id) if result.stage_id else None,
+                    "product_name": result.product_name,
+                    "version_label": result.version_label,
+                    "status_before": prev_status,
+                    "status_after": status,
+                    "reviewer_id": str(reviewer_id) if reviewer_id else None,
+                    "reviewer_comment": reviewer_comment,
+                },
+                payload_version=1,
+            )
     return {"message": "Updated"}

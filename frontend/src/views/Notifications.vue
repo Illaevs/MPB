@@ -15,7 +15,8 @@
       </div>
     </div>
 
-    <UiCard class="notifications-settings-card">
+    <!-- Telegram-канал доставки временно отключён в UI (бот будет подключён позже) -->
+    <UiCard v-if="false" class="notifications-settings-card">
       <template #header>
         <div class="notifications-settings-card__header">
           <div>
@@ -230,6 +231,7 @@ import { useRouter } from 'vue-router'
 import * as notificationsApi from '../services/api/notifications'
 import SkeletonLoader from '../components/ui/SkeletonLoader.vue'
 import { UiBadge, UiButton, UiCard, UiEmptyState, UiIconButton, UiInput, UiSelect } from '../components/ui'
+import { formatMskDateTime } from '../composables/useServerClock'
 
 export default {
   name: 'Notifications',
@@ -329,13 +331,12 @@ export default {
     })
 
     const formatDateTime = (value) => {
+      // Серверное время: ISO без TZ → трактуем как Europe/Moscow
+      // (бэкенд в MSK сохраняет datetime.now() без часового пояса).
+      // Гарантирует, что юзеры с любой локальной TZ видят одинаковое
+      // «серверное» время уведомлений.
       if (!value) return '-'
-      return new Date(value).toLocaleString('ru-RU', {
-        day: '2-digit',
-        month: 'short',
-        hour: '2-digit',
-        minute: '2-digit'
-      })
+      return formatMskDateTime(value) || '-'
     }
 
     const buildParams = () => {

@@ -185,7 +185,7 @@
       </div>
     </div>
 
-    <div v-if="showCaseModal" class="modal-overlay" @click="closeCaseModal">
+    <div v-if="showCaseModal" class="modal-overlay" v-modal-close="closeCaseModal">
       <div class="modal-content" @click.stop>
         <div class="modal-header">
           <h3>{{ editingCase ? uiText.editCaseTitle : uiText.newCaseTitle }}</h3>
@@ -253,7 +253,7 @@
       </div>
     </div>
 
-    <div v-if="showTaskModal" class="modal-overlay" @click="closeTaskModal">
+    <div v-if="showTaskModal" class="modal-overlay" v-modal-close="closeTaskModal">
       <div class="modal-content" @click.stop>
         <div class="modal-header">
           <h3>{{ taskMode === 'existing' ? uiText.taskModalTitleLink : uiText.taskModalTitleNew }}</h3>

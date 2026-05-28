@@ -28,6 +28,26 @@ export const remove = (id, options) =>
 export const activity = (id, params, options) =>
   get(`${BASE}/${id}/activity`, params, options)
 
+/* ---- Timeline (DealActivity: пользовательские события — comment/file/task_link) ---- */
+
+export const timeline = (id, params, options) =>
+  get(`${BASE}/${id}/timeline`, params, options)
+
+export const addComment = (id, content, options) =>
+  post(`${BASE}/${id}/comments`, { content }, options)
+
+export const uploadFile = (id, formData, options) =>
+  post(`${BASE}/${id}/files`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    ...options,
+  })
+
+export const createTask = (id, payload, options) =>
+  post(`${BASE}/${id}/tasks`, payload, options)
+
+export const deleteActivity = (activityId, options) =>
+  del(`${BASE}/activities/${activityId}`, options)
+
 /* ---- Папки ---- */
 
 export const folders = (id, options) =>

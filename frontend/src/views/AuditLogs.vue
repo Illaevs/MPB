@@ -117,6 +117,7 @@ import SkeletonLoader from '../components/ui/SkeletonLoader.vue'
 import { UiBadge, UiButton, UiCard, UiEmptyState, UiIconButton, UiInput, UiSelect } from '../components/ui'
 import UiChipFilter from '../components/ui/UiChipFilter.vue'
 import { useUsersStore } from '../stores/users'
+import { formatDateTime as fmtDateTime } from '../utils/format'
 
 export default {
   name: 'AuditLogs',
@@ -144,7 +145,7 @@ export default {
     const userMap = ref({})
 
     const entityOptions = [
-      { value: 'deal', label: 'Сделки' },
+      { value: 'deal', label: 'Проекты' },
       { value: 'task', label: 'Задачи' },
       { value: 'document', label: 'Документы' },
       { value: 'outgoing', label: 'Исходящие' },
@@ -161,7 +162,7 @@ export default {
 
     // Цветовые опции для UiChipFilter
     const entityChipOptions = [
-      { value: 'deal',           label: 'Сделки',       color: '#22c55e' },
+      { value: 'deal',           label: 'Проекты',      color: '#22c55e' },
       { value: 'task',           label: 'Задачи',       color: '#3b82f6' },
       { value: 'document',       label: 'Документы',    color: '#a855f7' },
       { value: 'outgoing',       label: 'Исходящие',    color: '#0ea5e9' },
@@ -177,7 +178,7 @@ export default {
 
     const entityLabel = (value) => {
       const map = {
-        deal: 'Сделка',
+        deal: 'Проект',
         task: 'Задача',
         document: 'Документ',
         outgoing: 'Исходящие',
@@ -227,7 +228,7 @@ export default {
 
     const formatDateTime = (value) => {
       if (!value) return '-'
-      return new Date(value).toLocaleString('ru-RU', {
+      return fmtDateTime(value, {
         day: '2-digit',
         month: 'short',
         hour: '2-digit',
@@ -312,7 +313,7 @@ export default {
         const payload = details.details
         if (payload.snapshot) return snapshotDescription(payload.snapshot)
         if (payload.task_title) return truncate(`Задача: ${payload.task_title}`)
-        if (payload.deal_title) return truncate(`Сделка: ${payload.deal_title}`)
+        if (payload.deal_title) return truncate(`Проект: ${payload.deal_title}`)
         if (payload.document_title) return truncate(`Документ: ${payload.document_title}`)
         if (payload.outgoing_number) return truncate(`Исходящий: ${payload.outgoing_number}`)
         if (payload.error_message) return truncate(`Ошибка: ${payload.error_message}`)

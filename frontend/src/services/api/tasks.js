@@ -49,6 +49,36 @@ export const updateMessage = (messageId, payload, options) =>
 export const deleteMessage = (messageId, options) =>
   del(`${BASE}/messages/${messageId}`, options)
 
+// ===== Chat unread counters =====
+// Bulk-возвращает {task_id: count} для непрочитанных от других юзеров.
+// Путь содержит ДВА сегмента после `/tasks/` (`/chat/unread-counts`) —
+// без этого FastAPI ловил роут как `/tasks/{task_id}` (task_id =
+// "chat-unread-counts") в tasks-роутере и отвечал 400 ещё до того, как
+// task_messages-роутер мог получить запрос.
+export const listChatUnreadCounts = (options) =>
+  get(`${BASE}/chat/unread-counts`, undefined, options)
+
+// Помечает чат задачи как прочитанный (last_read_at = now) — обнуляет
+// бейдж в Tasks list/kanban. Вызывается при открытии модалки задачи.
+export const markChatRead = (taskId, options) =>
+  post(`${BASE}/${taskId}/chat/mark-read`, undefined, options)
+
+// ===== Subtasks (checklist) =====
+export const listSubtasks = (taskId, options) =>
+  get(`${BASE}/${taskId}/subtasks`, undefined, options)
+
+export const createSubtask = (taskId, payload, options) =>
+  post(`${BASE}/${taskId}/subtasks`, payload, options)
+
+export const updateSubtask = (subtaskId, payload, options) =>
+  patch(`${BASE}/subtasks/${subtaskId}`, payload, options)
+
+export const deleteSubtask = (subtaskId, options) =>
+  del(`${BASE}/subtasks/${subtaskId}`, options)
+
+export const reorderSubtasks = (taskId, ids, options) =>
+  post(`${BASE}/${taskId}/subtasks/reorder`, { ids }, options)
+
 // ===== Auctions =====
 export const listAuctions = (params, options) =>
   get(`${AUCTIONS_BASE}/`, params, options)

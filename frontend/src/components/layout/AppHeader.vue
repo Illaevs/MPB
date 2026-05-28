@@ -6,6 +6,7 @@
       <span class="content-header__search-shortcut">Ctrl+K</span>
     </button>
     <div class="content-header__actions">
+      <WorkdayTopbarChip />
       <div class="content-header__tools">
         <button class="header-utility-btn" title="Калькулятор НДС" @click="$emit('open-vat')">
           <i class="fas fa-calculator"></i>
@@ -292,12 +293,18 @@
       </div>
       <div class="content-header__time">{{ currentTimeLabel }}</div>
       <div class="user-profile content-header__profile d-flex align-center gap-2">
-        <div class="user-profile__meta">
+        <button
+          type="button"
+          class="user-profile__meta user-profile__meta-btn"
+          :disabled="!activeUser"
+          :title="activeUser ? 'Открыть мой профиль' : 'Пользователь не выбран'"
+          @click="profileDrawerOpen = true"
+        >
           <div class="user-profile__name">{{ activeUser?.full_name || 'Пользователь не выбран' }}</div>
           <div class="user-profile__hint">
-            {{ activeUser ? 'Активный пользователь' : 'Выберите в разделе Пользователи' }}
+            {{ activeUser ? (activeUser.role_name || 'Роль не назначена') : 'Выберите в разделе Пользователи' }}
           </div>
-        </div>
+        </button>
         <input
           ref="avatarInput"
           type="file"
@@ -328,6 +335,9 @@
       </div>
     </div>
   </header>
+
+  <!-- Профиль-драйвер: выезжает справа по клику на ФИО/роль в топбаре -->
+  <ProfileDrawer v-model="profileDrawerOpen" />
 </template>
 
 <script>
@@ -339,9 +349,12 @@ import { WALLPAPER_PRESETS } from '../../config/wallpaperPresets'
 import { navAllLinks } from '../../config/nav'
 import { useAuthStore } from '../../stores/auth'
 import { getStoredPermissions, saveActiveUser } from '../../utils/permissions'
+import WorkdayTopbarChip from '../ui/WorkdayTopbarChip.vue'
+import ProfileDrawer from '../ui/ProfileDrawer.vue'
 
 export default {
   name: 'AppHeader',
+  components: { WorkdayTopbarChip, ProfileDrawer },
   props: {
     activeUser: { type: Object, default: null },
     unreadCount: { type: Number, default: 0 },
@@ -357,6 +370,10 @@ export default {
     const uploadingAvatar = ref(false)
     const uploadingWallpaper = ref(false)
     const brokenAvatarUrls = ref(new Set())
+    // Стейт правого drawer'а «Мой профиль». Открывается кликом по
+    // ФИО/роли в топбаре; закрывается крестиком, кликом по оверлею
+    // или Esc (логика внутри UiDrawer).
+    const profileDrawerOpen = ref(false)
 
     const activeUserInitial = computed(() => {
       const source = props.activeUser?.full_name || props.activeUser?.email || '?'
@@ -604,6 +621,7 @@ export default {
       wallpaperInput,
       uploadingAvatar,
       uploadingWallpaper,
+      profileDrawerOpen,
       activeUserInitial,
       isAvatarBroken,
       markAvatarBroken,
@@ -877,6 +895,32 @@ export default {
 .user-profile__meta {
   min-width: 0;
   text-align: right;
+}
+
+/* Когда .user-profile__meta — кнопка (клик открывает drawer профиля).
+   Сбрасываем дефолтные кнопочные стили, оставляя визуал прежним. */
+.user-profile__meta-btn {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  text-align: right;
+}
+.user-profile__meta-btn:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+.user-profile__meta-btn:focus-visible {
+  outline: 2px solid var(--color-primary, #6366f1);
+  outline-offset: 2px;
+  border-radius: 6px;
 }
 
 .user-profile__name {

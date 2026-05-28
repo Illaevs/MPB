@@ -212,6 +212,7 @@ import { getActiveUser, hasSectionAccess } from '../utils/permissions'
 import { useToast } from '../composables/useToast'
 import { downloadFromApi } from '../utils/download'
 import { useUsersStore } from '../stores/users'
+import { formatDateTime as fmtDateTime } from '../utils/format'
 
 const LAST_SEEN_KEY = 'global_chat_last_seen'
 const MAX_FILE_BYTES = 1024 * 1024 * 1024
@@ -268,7 +269,7 @@ export default {
     const formatDateTime = (value) => {
       if (!value) return ''
       try {
-        return new Date(value).toLocaleString('ru-RU', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' })
+        return fmtDateTime(value, { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' })
       } catch (e) {
         return value
       }

@@ -1,6 +1,6 @@
 """Pydantic-схемы для event-bus API."""
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -13,6 +13,9 @@ class EventOutboxResponse(BaseModel):
     entity_id: str
     payload: Dict[str, Any] = Field(default_factory=dict)
     payload_version: int = 1
+    # V1.5: цепочка предков — для UI «отсюда какие события родились»
+    # и для дебага циклов.
+    causation_chain: List[str] = Field(default_factory=list)
     status: str
     attempt_count: int = 0
     last_error: Optional[str] = None

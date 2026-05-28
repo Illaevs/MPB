@@ -173,13 +173,27 @@
         </div>
 
         <div v-if="pendingFiles.length" class="task-chat__file-list">
-          <div v-for="(file, idx) in pendingFiles" :key="file.name + idx" class="task-chat__pending-file">
+          <div
+            v-for="(file, idx) in pendingFiles"
+            :key="file.name + idx"
+            class="task-chat__pending-file"
+            :class="{ 'is-uploading': sending }"
+          >
             <span class="task-chat__pending-file-main">
-              <i class="fas fa-paperclip"></i>
+              <i v-if="sending" class="fas fa-spinner fa-spin"></i>
+              <i v-else class="fas fa-paperclip"></i>
               <span>{{ file.name }}</span>
             </span>
-            <span class="task-chat__pending-file-meta">{{ formatSize(file.size) }}</span>
-            <button type="button" class="task-chat__pending-remove" @click="removeFile(idx)">
+            <span class="task-chat__pending-file-meta">
+              {{ sending ? 'Загрузка…' : formatSize(file.size) }}
+            </span>
+            <button
+              type="button"
+              class="task-chat__pending-remove"
+              :disabled="sending"
+              :title="sending ? 'Идёт загрузка…' : 'Убрать файл'"
+              @click="removeFile(idx)"
+            >
               <i class="fas fa-times"></i>
             </button>
           </div>
@@ -187,12 +201,14 @@
 
         <div class="task-chat__composer-bar">
           <textarea
+            ref="inputRef"
             v-model="draft"
             class="task-chat__input"
             rows="1"
-            placeholder="Напишите сообщение… (Ctrl+Enter — отправить)"
-            @keydown.ctrl.enter.prevent.stop="sendMessage"
-            @keydown.meta.enter.prevent.stop="sendMessage"
+            placeholder="Напишите сообщение… (Enter — отправить, Shift/Ctrl+Enter — перенос строки)"
+            :style="{ maxHeight: inputMaxHeight + 'px' }"
+            @input="autoResizeInput"
+            @keydown.enter.exact.prevent.stop="sendMessage"
           ></textarea>
 
           <div class="task-chat__composer-actions">
@@ -283,7 +299,7 @@
     </Teleport>
 
     <Teleport to="body">
-      <div v-if="confirmModalOpen" class="task-chat-confirm-overlay" @click.self="confirmModalOpen = false">
+      <div v-if="confirmModalOpen" class="task-chat-confirm-overlay" v-modal-close="() => confirmModalOpen = false">
         <div class="task-chat-confirm-glass">
           <div class="task-chat-confirm-header">
             <h5 class="m-0">{{ confirmModalTitle }}</h5>
@@ -313,6 +329,8 @@ import { getActiveUser } from '../utils/permissions'
 import { useToast } from '../composables/useToast'
 import { downloadFromApi } from '../utils/download'
 import { normalizeAvatarUrl } from '../utils/avatar'
+import { parseServerDate } from '../composables/useServerClock'
+import { formatTime as fmtServerTime, formatDate as fmtServerDate } from '../utils/format'
 
 const AVATAR_THEMES = [
   { background: 'linear-gradient(135deg, #d7e7ff 0%, #b4d0ff 100%)', color: '#2563eb' },
@@ -466,6 +484,10 @@ export default {
     const pollingTimer = ref(null)
     const listRef = ref(null)
     const fileInput = ref(null)
+    const inputRef = ref(null)
+    // Динамический cap высоты поля ввода: «не более X высоты чата».
+    // Дефолт — 200px, пересчёт при mount/resize. См. recomputeInputMax().
+    const inputMaxHeight = ref(200)
 
     const activeUser = computed(() => getActiveUser())
     const pollingActive = computed(() => !!pollingTimer.value)
@@ -524,36 +546,44 @@ export default {
       return !!(userId && String(message.user_id) === String(userId))
     }
 
+    // Время сообщения в чате — серверное (МСК). Раньше использовался
+    // локальный `new Date(value).toLocaleString()`, который трактовал
+    // naive ISO с бэка как локальное время браузера — у юзеров вне МСК
+    // время показывалось «−3 часа».
     const formatTime = (value) => {
       if (!value) return ''
-      try {
-        return new Date(value).toLocaleString('ru-RU', { hour: '2-digit', minute: '2-digit' })
-      } catch (e) {
-        return value
-      }
+      return fmtServerTime(value) || ''
+    }
+
+    // День сравниваем тоже в МСК: иначе сообщение, отправленное в МСК
+    // 00:30, для UTC-юзера попадёт во «вчера». Через parseServerDate
+    // получаем правильный Date, дальше сравниваем по YYYY-MM-DD в МСК.
+    const mskDayKey = (value) => {
+      if (!value) return ''
+      const d = value instanceof Date ? value : parseServerDate(value)
+      if (!d) return ''
+      // Intl с timeZone:'Europe/Moscow' → стабильный ключ дня независимо
+      // от TZ браузера.
+      return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Europe/Moscow', year: 'numeric', month: '2-digit', day: '2-digit',
+      }).format(d)
     }
 
     const isSameDay = (left, right) => {
-      if (!left || !right) return false
-      const a = new Date(left)
-      const b = new Date(right)
-      return (
-        a.getFullYear() === b.getFullYear() &&
-        a.getMonth() === b.getMonth() &&
-        a.getDate() === b.getDate()
-      )
+      const a = mskDayKey(left)
+      const b = mskDayKey(right)
+      return Boolean(a) && a === b
     }
 
     const formatDayLabel = (value) => {
       if (!value) return ''
-      const date = new Date(value)
       const today = new Date()
       const yesterday = new Date()
       yesterday.setDate(today.getDate() - 1)
-      const short = date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
-      if (isSameDay(date, today)) return `Сегодня, ${short}`
-      if (isSameDay(date, yesterday)) return `Вчера, ${short}`
-      return date.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'short' })
+      const short = fmtServerDate(value, { day: 'numeric', month: 'short', year: undefined })
+      if (isSameDay(value, today)) return `Сегодня, ${short}`
+      if (isSameDay(value, yesterday)) return `Вчера, ${short}`
+      return fmtServerDate(value, { weekday: 'long', day: 'numeric', month: 'short', year: undefined })
     }
 
     const chatItems = computed(() => {
@@ -703,11 +733,46 @@ export default {
         pendingFiles.value = []
         selectedMentions.value = []
         mentionPickerOpen.value = false
+        // Сброс высоты textarea после отправки — иначе пустой инпут
+        // остаётся «вытянутым» под прошлое сообщение.
+        await nextTick()
+        autoResizeInput()
         await scrollToBottom()
       } catch (e) {
         toastError('Ошибка отправки сообщения')
       } finally {
         sending.value = false
+      }
+    }
+
+    // Auto-resize textarea как в Telegram: высота подгоняется под
+    // содержимое, но не больше `inputMaxHeight` (динамический cap,
+    // зависит от размера .task-chat). При cap включается внутренний
+    // скролл textarea.
+    const autoResizeInput = () => {
+      const el = inputRef.value
+      if (!el) return
+      // Сброс на 'auto' нужен, чтобы scrollHeight не залипал на старом
+      // (наибольшем за сессию) значении — иначе при удалении строк
+      // textarea не сжимается.
+      el.style.height = 'auto'
+      const max = inputMaxHeight.value || 200
+      const next = Math.min(el.scrollHeight, max)
+      el.style.height = next + 'px'
+    }
+
+    // Пересчёт cap-а: 40% высоты `.task-chat`, но не меньше 80px и не
+    // больше 320px. Это даёт «дифференциальность по масштабу»: при
+    // высоком чате textarea может расти до 320px, при сжатом — резко
+    // отрезается, чтобы оставить место под историей сообщений.
+    const recomputeInputMax = () => {
+      const host = document.querySelector('.task-chat')
+      const h = host?.clientHeight || 0
+      if (!h) return
+      const next = Math.round(Math.min(320, Math.max(80, h * 0.4)))
+      if (next !== inputMaxHeight.value) {
+        inputMaxHeight.value = next
+        autoResizeInput()
       }
     }
 
@@ -798,17 +863,38 @@ export default {
       }
     )
 
+    let inputResizeObserver = null
+    const onWindowResize = () => recomputeInputMax()
+
     onMounted(async () => {
       draft.value = loadDraft(props.taskId)
       if (props.taskId && props.canRead) {
         await loadMessages()
         startPolling()
       }
+      // После маунта меряем контейнер чата и подстраиваем textarea.
+      // ResizeObserver на `.task-chat` ловит изменения высоты модалки
+      // (resizable drawer, кнопка свернуть/развернуть, поворот экрана).
+      await nextTick()
+      recomputeInputMax()
+      autoResizeInput()
+      const host = document.querySelector('.task-chat')
+      if (host && typeof ResizeObserver !== 'undefined') {
+        inputResizeObserver = new ResizeObserver(() => recomputeInputMax())
+        inputResizeObserver.observe(host)
+      }
+      window.addEventListener('resize', onWindowResize)
     })
 
     onBeforeUnmount(() => {
       stopPolling()
+      if (inputResizeObserver) { inputResizeObserver.disconnect(); inputResizeObserver = null }
+      window.removeEventListener('resize', onWindowResize)
     })
+
+    // При смене черновика по taskId — также подгонимая высоту (например,
+    // загрузили сохранённый длинный черновик из localStorage).
+    watch(() => draft.value, () => { nextTick(() => autoResizeInput()) })
 
     return {
       loading,
@@ -823,6 +909,9 @@ export default {
       editingBody,
       listRef,
       fileInput,
+      inputRef,
+      inputMaxHeight,
+      autoResizeInput,
       pollingActive,
       chatItems,
       isOwn,
@@ -1381,11 +1470,25 @@ export default {
   font-size: var(--text-sm);
   font-weight: var(--fw-medium);
 }
+.task-chat__pending-file.is-uploading {
+  background: var(--color-primary-soft, rgba(99, 102, 241, 0.08));
+  border-color: var(--color-primary, #6366f1);
+}
+.task-chat__pending-file.is-uploading .task-chat__pending-file-main,
+.task-chat__pending-file.is-uploading .task-chat__pending-file-meta {
+  color: var(--color-primary, #6366f1);
+}
+.task-chat__pending-file.is-uploading .task-chat__pending-remove {
+  opacity: 0.4;
+  cursor: default;
+}
 
 .task-chat__composer-bar {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--space-2);
+  /* `end` ровняет actions по нижней грани textarea. При росте textarea
+     кнопки остаются у дна — как в Telegram. */
   align-items: end;
   padding: 10px 12px;
   border: 1px solid var(--color-border);
@@ -1399,7 +1502,13 @@ export default {
 }
 
 .task-chat__input {
-  min-height: 24px;
+  /* min-height = высота одной строки + вертикальные паддинги.
+     Раньше было 24px при line-height ~1.5 — верх текста подрезался
+     при descenders (буквы «р», «у»). Поднимаем до 36px, чтобы строка
+     помещалась с воздухом сверху и снизу. */
+  min-height: 36px;
+  /* max-height устанавливается inline (`inputMaxHeight`), привязан
+     к высоте `.task-chat`. CSS-дефолт оставляем как fallback. */
   max-height: 200px;
   resize: none;
   border: 0;
@@ -1409,7 +1518,18 @@ export default {
   font-family: var(--font-main);
   font-size: var(--text-md);
   line-height: var(--leading-normal);
-  padding: 4px 0;
+  /* Симметричный padding — верх не клиппится. Раньше `padding: 4px 0`
+     визуально съедало 2-3px сверху. */
+  padding: 7px 0;
+  /* Auto-grow: высота ставится JS-ом по scrollHeight. overflow-y: auto —
+     включает скролл, когда уперлись в max. До этого скролла нет. */
+  overflow-y: auto;
+  /* Длинные одно-словные строки не должны выпинать инпут шире контейнера. */
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  /* В Chrome/Edge современных версий native-метрика делает то же
+     самое без JS; держим для будущей замены autoResizeInput(). */
+  field-sizing: content;
 }
 .task-chat__input::placeholder { color: var(--color-text-subtle); }
 

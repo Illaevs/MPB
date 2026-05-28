@@ -4,6 +4,8 @@ import { api } from '../../../services/api'
 import { useToast } from '../../../composables/useToast'
 import { normalizeEmailBody, looksGibberish, formatPlainTextToHtml, fixMojibake } from '../../../utils/mailHelpers'
 import { downloadFromApi } from '../../../utils/download'
+import { formatDate as fmtDate, formatTime as fmtTime, formatDateTime as fmtDateTime } from '../../../utils/format'
+import { parseServerDate } from '../../../composables/useServerClock'
 
 /**
  * Mail view shared state + actions.
@@ -763,14 +765,14 @@ export function useMailState() {
 
   const formatDate = (v) => {
     if (!v) return '-'
-    const d = new Date(v), now = new Date()
-    if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
-    return d.toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' })
+    const d = parseServerDate(v) || new Date(v), now = new Date()
+    if (d.toDateString() === now.toDateString()) return fmtTime(d)
+    return fmtDate(d, { day: '2-digit', month: 'short' })
   }
 
   const formatDateFull = (v) => {
     if (!v) return '-'
-    return new Date(v).toLocaleString('ru-RU', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    return fmtDateTime(v, { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
   }
 
   const getInitials = (value) => {

@@ -12,6 +12,7 @@ from sqlalchemy.orm import selectinload
 from app.database.session import get_db
 from app.models import LegalCase, LegalCaseEvent, LegalCaseEventFile, LegalCaseTask, Company, Task, Deal
 from app.core.config import settings
+from app.services.event_outbox import emit_event_safe
 from app.services.storage import (
     clean_name,
     ensure_path,
@@ -262,6 +263,20 @@ async def create_legal_case(payload: LegalCaseCreate, db: AsyncSession = Depends
     await _ensure_company(db, payload.plaintiff_id, "plaintiff")
     await _ensure_company(db, payload.defendant_id, "defendant")
     case = await LegalCase.create(db, **payload.dict(exclude_unset=True))
+    await emit_event_safe(
+        db,
+        event_type="legal_case.after_create",
+        entity_type="legal_case",
+        entity_id=str(case.id),
+        payload={
+            "id": str(case.id),
+            "case_number": case.case_number,
+            "plaintiff_id": str(case.plaintiff_id) if case.plaintiff_id else None,
+            "defendant_id": str(case.defendant_id) if case.defendant_id else None,
+            "jurisdiction": case.jurisdiction,
+        },
+        payload_version=1,
+    )
     return {
         "id": str(case.id),
         "case_number": case.case_number,
@@ -290,7 +305,20 @@ async def update_legal_case(case_id: str, payload: LegalCaseUpdate, db: AsyncSes
         await _ensure_company(db, payload.plaintiff_id, "plaintiff")
     if payload.defendant_id is not None:
         await _ensure_company(db, payload.defendant_id, "defendant")
-    updated = await LegalCase.update(db, case_id, **payload.dict(exclude_unset=True))
+    update_payload = payload.dict(exclude_unset=True)
+    updated = await LegalCase.update(db, case_id, **update_payload)
+    await emit_event_safe(
+        db,
+        event_type="legal_case.after_update",
+        entity_type="legal_case",
+        entity_id=str(updated.id),
+        payload={
+            "id": str(updated.id),
+            "case_number": updated.case_number,
+            "changed_fields": list(update_payload.keys()),
+        },
+        payload_version=1,
+    )
     return {
         "id": str(updated.id),
         "case_number": updated.case_number,

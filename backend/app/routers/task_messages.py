@@ -16,6 +16,7 @@ from app.core.config import settings
 from app.database.session import get_db
 from app.models import Task, TaskAssignee, TaskMessage, TaskRead, TaskWatcher, User
 from app.schemas.task_message import TaskMessageResponse, TaskMessageUpdate
+from app.services.event_outbox import emit_event_safe
 from app.services.notifications import create_notification
 from app.services.permissions import get_section_permissions
 from app.services.storage import (
@@ -213,6 +214,27 @@ async def create_task_message(
     except Exception:
         pass
 
+    # Emit для Telegram echo / FTS index / других слушателей.
+    # entity_type=task_message — событие относится именно к сообщению, не к задаче.
+    # task_id в payload — чтобы подписчик мог проверить ACL/тематику.
+    await emit_event_safe(
+        db,
+        event_type="task_message.after_create",
+        entity_type="task_message",
+        entity_id=str(message.id),
+        payload={
+            "id": str(message.id),
+            "task_id": str(task.id),
+            "user_id": str(user.id),
+            "body": message.body,
+            "mentions": mentions_list,
+            "has_attachments": bool(attachments_payload),
+            "attachment_count": len(attachments_payload),
+        },
+        payload_version=1,
+    )
+    await db.commit()
+
     # Reload with user relation
     # AsyncSession.get(..., options=...) isn't reliable across SQLAlchemy versions; use SELECT + joinedload.
     result = await db.execute(
@@ -249,6 +271,20 @@ async def update_task_message(
         raise HTTPException(status_code=400, detail="Message cannot be empty")
     message.body = body
     message.edited_at = datetime.utcnow()
+    await emit_event_safe(
+        db,
+        event_type="task_message.after_update",
+        entity_type="task_message",
+        entity_id=str(message.id),
+        payload={
+            "id": str(message.id),
+            "task_id": str(task.id),
+            "user_id": str(message.user_id),
+            "body": body,
+            "edited_by_user_id": str(user.id),
+        },
+        payload_version=1,
+    )
     await db.commit()
     await db.refresh(message)
     return _serialize_message(message)
@@ -274,6 +310,19 @@ async def delete_task_message(
         return {"deleted": True}
     message.is_deleted = True
     message.deleted_at = datetime.utcnow()
+    await emit_event_safe(
+        db,
+        event_type="task_message.after_delete",
+        entity_type="task_message",
+        entity_id=str(message.id),
+        payload={
+            "id": str(message.id),
+            "task_id": str(task.id),
+            "user_id": str(message.user_id),
+            "deleted_by_user_id": str(user.id),
+        },
+        payload_version=1,
+    )
     await db.commit()
     return {"deleted": True}
 

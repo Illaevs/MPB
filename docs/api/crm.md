@@ -1,12 +1,12 @@
 # CRM Core API
 
-Сгенерировано из `docs/API.md` на 2026-02-15 03:22:39 (local time).
+Сгенерировано из `docs/API.md` на 2026-05-19 01:30:03 (local time).
 
 ## Scope
 - Домен: `crm`
 - Описание: Сделки, лиды, этапы, задачи, продукты, тендеры и исполнение.
 - Routers: `14`
-- Endpoints: `122`
+- Endpoints: `139`
 - Список роутеров: `deals`, `leads`, `stages`, `tasks`, `products`, `task_auctions`, `tenders`, `deal_execution`, `executor`, `subcontractors`, `subcontractor_stages`, `subcontractor_products`, `result_reviews`, `kp`
 
 ## Common Rules
@@ -15,7 +15,7 @@
 
 ## Data Contract Catalog (Domain)
 
-Модели, используемые в домене: `48`.
+Модели, используемые в домене: `52`.
 
 ### Model `DealCreate`
 
@@ -40,6 +40,16 @@ Source: `backend/app/schemas/deal.py`
 | total_paid | Optional[float] | no | 0.0 | - |
 | vat_rate | Optional[float] | no | 20.0 | - |
 | vat_included | Optional[bool] | no | True | - |
+
+
+### Model `DealGipsUpdate`
+
+Source: `backend/app/schemas/deal.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| user_ids | list[str] | no | [] | - |
 
 
 ### Model `DealResponse`
@@ -68,6 +78,42 @@ Source: `backend/app/schemas/deal.py`
 | id | Union[str, UUID] | yes | - | - |
 | created_at | Optional[datetime] | yes | - | - |
 | updated_at | Optional[datetime] | yes | - | - |
+
+
+### Model `DealUpdate`
+
+Source: `backend/app/schemas/deal.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| title | Optional[str] | no | None | - |
+| obj_name | Optional[str] | no | None | - |
+| address | Optional[str] | no | None | - |
+| object_type | Optional[str] | no | None | - |
+| object_area | Optional[float] | no | None | - |
+| customer_id | Optional[Union[str, UUID]] | no | None | - |
+| our_company_id | Optional[Union[str, UUID]] | no | None | - |
+| general_contractor_id | Optional[Union[str, UUID]] | no | None | - |
+| penalty_config | Optional[dict] | no | None | - |
+| s3_prefix_tz | Optional[str] | no | None | - |
+| s3_prefix_docs | Optional[str] | no | None | - |
+| status | Optional[str] | no | None | - |
+| total_contract_value | Optional[float] | no | None | - |
+| total_paid | Optional[float] | no | None | - |
+| vat_rate | Optional[float] | no | None | - |
+| vat_included | Optional[bool] | no | None | - |
+
+
+### Model `DealVatUpdate`
+
+Source: `backend/app/schemas/deal.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| vat_rate | Optional[float] | no | None | - |
+| vat_included | Optional[bool] | no | None | - |
 
 
 ### Model `LeadCreate`
@@ -131,6 +177,7 @@ Source: `backend/app/schemas/stage.py`
 | date_start | date | yes | - | - |
 | duration | int | yes | - | - |
 | date_end | Optional[date] | no | None | - |
+| close_date | Optional[date] | no | None | - |
 | resources | Optional[List[dict]] | no | [] | - |
 | planned_cost | Optional[float] | no | 0.0 | - |
 | actual_cost | Optional[float] | no | 0.0 | - |
@@ -155,6 +202,7 @@ Source: `backend/app/schemas/stage.py`
 | date_start | date | yes | - | - |
 | duration | int | yes | - | - |
 | date_end | Optional[date] | no | None | - |
+| close_date | Optional[date] | no | None | - |
 | resources | Optional[List[dict]] | no | [] | - |
 | planned_cost | Optional[float] | no | 0.0 | - |
 | actual_cost | Optional[float] | no | 0.0 | - |
@@ -182,6 +230,7 @@ Source: `backend/app/schemas/stage.py`
 | date_start | date | yes | - | - |
 | duration | int | yes | - | - |
 | date_end | Optional[date] | no | None | - |
+| close_date | Optional[date] | no | None | - |
 | resources | Optional[List[dict]] | no | [] | - |
 | planned_cost | Optional[float] | no | 0.0 | - |
 | actual_cost | Optional[float] | no | 0.0 | - |
@@ -213,15 +262,18 @@ Source: `backend/app/schemas/task.py`
 | payee_id | Optional[Union[str, UUID]] | no | None | - |
 | start_date | Optional[date] | no | None | - |
 | due_date | Optional[date] | no | None | - |
+| due_time | Optional[str] | no | None | - |
 | estimated_hours | Optional[float] | no | 0.0 | - |
 | actual_hours | Optional[float] | no | 0.0 | - |
 | budget | Optional[float] | no | None | - |
 | category_code | Optional[str] | no | None | - |
 | work_category | Optional[str] | no | None | - |
 | tags | Optional[List[str]] | no | [] | - |
-| attachments | Optional[List[str]] | no | [] | - |
+| attachments | Optional[List[Dict[str, Any]]] | no | [] | - |
 | notify_assigned | Optional[bool] | no | True | - |
 | notify_overdue | Optional[bool] | no | True | - |
+| assignee_ids | Optional[List[Union[str, UUID]]] | no | None | - |
+| watcher_ids | Optional[List[Union[str, UUID]]] | no | None | - |
 
 
 ### Model `TaskResponse`
@@ -245,16 +297,20 @@ Source: `backend/app/schemas/task.py`
 | payee_id | Optional[Union[str, UUID]] | no | None | - |
 | start_date | Optional[date] | no | None | - |
 | due_date | Optional[date] | no | None | - |
+| due_time | Optional[str] | no | None | - |
 | estimated_hours | Optional[float] | no | 0.0 | - |
 | actual_hours | Optional[float] | no | 0.0 | - |
 | budget | Optional[float] | no | None | - |
 | category_code | Optional[str] | no | None | - |
 | work_category | Optional[str] | no | None | - |
 | tags | Optional[List[str]] | no | [] | - |
-| attachments | Optional[List[str]] | no | [] | - |
+| attachments | Optional[List[Dict[str, Any]]] | no | [] | - |
 | notify_assigned | Optional[bool] | no | True | - |
 | notify_overdue | Optional[bool] | no | True | - |
+| assignee_ids | Optional[List[Union[str, UUID]]] | no | None | - |
+| watcher_ids | Optional[List[Union[str, UUID]]] | no | None | - |
 | id | Union[str, UUID] | yes | - | - |
+| number | Optional[int] | no | None | - |
 | completed_at | Optional[datetime] | no | None | - |
 | created_at | Optional[datetime] | no | None | - |
 | updated_at | Optional[datetime] | no | None | - |
@@ -269,6 +325,7 @@ Source: `backend/app/schemas/task.py`
 | --- | --- | --- | --- | --- |
 | title | Optional[str] | no | None | - |
 | description | Optional[str] | no | None | - |
+| deal_id | Optional[Union[str, UUID]] | no | None | - |
 | stage_id | Optional[Union[str, UUID]] | no | None | - |
 | status | Optional[str] | no | None | - |
 | priority | Optional[str] | no | None | - |
@@ -279,16 +336,19 @@ Source: `backend/app/schemas/task.py`
 | payee_id | Optional[Union[str, UUID]] | no | None | - |
 | start_date | Optional[date] | no | None | - |
 | due_date | Optional[date] | no | None | - |
+| due_time | Optional[str] | no | None | - |
 | estimated_hours | Optional[float] | no | None | - |
 | actual_hours | Optional[float] | no | None | - |
 | budget | Optional[float] | no | None | - |
 | category_code | Optional[str] | no | None | - |
 | work_category | Optional[str] | no | None | - |
 | tags | Optional[List[str]] | no | None | - |
-| attachments | Optional[List[str]] | no | None | - |
+| attachments | Optional[List[Dict[str, Any]]] | no | None | - |
 | notify_assigned | Optional[bool] | no | None | - |
 | notify_overdue | Optional[bool] | no | None | - |
 | executor_rating | Optional[int] | no | None | - |
+| assignee_ids | Optional[List[Union[str, UUID]]] | no | None | - |
+| watcher_ids | Optional[List[Union[str, UUID]]] | no | None | - |
 
 
 ### Model `TaskWithRelations`
@@ -312,16 +372,20 @@ Source: `backend/app/schemas/task.py`
 | payee_id | Optional[Union[str, UUID]] | no | None | - |
 | start_date | Optional[date] | no | None | - |
 | due_date | Optional[date] | no | None | - |
+| due_time | Optional[str] | no | None | - |
 | estimated_hours | Optional[float] | no | 0.0 | - |
 | actual_hours | Optional[float] | no | 0.0 | - |
 | budget | Optional[float] | no | None | - |
 | category_code | Optional[str] | no | None | - |
 | work_category | Optional[str] | no | None | - |
 | tags | Optional[List[str]] | no | [] | - |
-| attachments | Optional[List[str]] | no | [] | - |
+| attachments | Optional[List[Dict[str, Any]]] | no | [] | - |
 | notify_assigned | Optional[bool] | no | True | - |
 | notify_overdue | Optional[bool] | no | True | - |
+| assignee_ids | Optional[List[str]] | no | None | - |
+| watcher_ids | Optional[List[str]] | no | None | - |
 | id | Union[str, UUID] | yes | - | - |
+| number | Optional[int] | no | None | - |
 | completed_at | Optional[datetime] | no | None | - |
 | created_at | Optional[datetime] | no | None | - |
 | updated_at | Optional[datetime] | no | None | - |
@@ -330,7 +394,9 @@ Source: `backend/app/schemas/task.py`
 | assigned_to_name | Optional[str] | no | None | - |
 | created_by_name | Optional[str] | no | None | - |
 | assigned_to_user_name | Optional[str] | no | None | - |
+| assigned_to_user_avatar_url | Optional[str] | no | None | - |
 | created_by_user_name | Optional[str] | no | None | - |
+| created_by_user_avatar_url | Optional[str] | no | None | - |
 | payer_name | Optional[str] | no | None | - |
 | payee_name | Optional[str] | no | None | - |
 | source_auction_id | Optional[str] | no | None | - |
@@ -339,6 +405,9 @@ Source: `backend/app/schemas/task.py`
 | rating_coefficient | Optional[float] | no | None | - |
 | deadline_coefficient | Optional[float] | no | None | - |
 | penalty_amount | Optional[float] | no | None | - |
+| matrix_quadrant | Optional[str] | no | None | - |
+| matrix_sort_order | Optional[int] | no | None | - |
+| matrix_manual | Optional[bool] | no | False | - |
 
 
 ### Model `DealProductCreate`
@@ -358,6 +427,7 @@ Source: `backend/app/schemas/deal_product.py`
 | discount_percent | Optional[float] | no | 0.0 | - |
 | discount_amount | Optional[float] | no | 0.0 | - |
 | tax_rate | Optional[float] | no | 0.0 | - |
+| tax_included | Optional[bool] | no | False | - |
 | currency | Optional[str] | no | 'RUB' | - |
 | total_price | Optional[float] | no | None | - |
 | discount_total | Optional[float] | no | 0.0 | - |
@@ -386,6 +456,7 @@ Source: `backend/app/schemas/deal_product.py`
 | discount_percent | Optional[float] | no | 0.0 | - |
 | discount_amount | Optional[float] | no | 0.0 | - |
 | tax_rate | Optional[float] | no | 0.0 | - |
+| tax_included | Optional[bool] | no | False | - |
 | currency | Optional[str] | no | 'RUB' | - |
 | total_price | Optional[float] | no | None | - |
 | discount_total | Optional[float] | no | 0.0 | - |
@@ -396,6 +467,8 @@ Source: `backend/app/schemas/deal_product.py`
 | notes | Optional[str] | no | None | - |
 | custom_properties | Optional[dict] | no | {} | - |
 | id | Union[str, UUID] | yes | - | - |
+| product | Optional[ProductResponse] | no | None | - |
+| invoice_links | List[DealProductInvoiceLinkResponse] | no | factory:list | - |
 | created_at | Optional[datetime] | yes | - | - |
 | updated_at | Optional[datetime] | yes | - | - |
 
@@ -415,6 +488,7 @@ Source: `backend/app/schemas/deal_product.py`
 | discount_percent | Optional[float] | no | None | - |
 | discount_amount | Optional[float] | no | None | - |
 | tax_rate | Optional[float] | no | None | - |
+| tax_included | Optional[bool] | no | None | - |
 | currency | Optional[str] | no | None | - |
 | stage_id | Optional[Union[str, UUID]] | no | None | - |
 | status | Optional[str] | no | None | - |
@@ -591,6 +665,7 @@ Source: `backend/app/schemas/tender.py`
 | deal_product_id | str | yes | - | - |
 | status | Optional[str] | no | None | - |
 | winner_company_id | Optional[str] | no | None | - |
+| submission_deadline | Optional[datetime] | no | None | - |
 
 
 ### Model `TenderOfferCreate`
@@ -653,8 +728,21 @@ Source: `backend/app/schemas/tender.py`
 | direction_id | Optional[str] | no | None | - |
 | status | str | yes | - | - |
 | winner_company_id | Optional[str] | no | None | - |
+| submission_deadline | Optional[datetime] | no | None | - |
 | created_at | Optional[datetime] | no | None | - |
 | updated_at | Optional[datetime] | no | None | - |
+
+
+### Model `TenderUpdate`
+
+Source: `backend/app/schemas/tender.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| status | Optional[str] | no | None | - |
+| winner_company_id | Optional[str] | no | None | - |
+| submission_deadline | Optional[datetime] | no | None | - |
 
 
 ### Model `StageProductAssignmentCreate`
@@ -670,7 +758,9 @@ Source: `backend/app/schemas/stage_product_assignment.py`
 | subcontractor_card_id | Union[str, UUID] | yes | - | - |
 | subcontractor_product_id | Optional[Union[str, UUID]] | no | None | - |
 | contract_id | Optional[Union[str, UUID]] | no | None | - |
+| start_date | Optional[date] | no | None | - |
 | due_date | Optional[date] | no | None | - |
+| contract_due_date | Optional[date] | no | None | - |
 | status | Optional[str] | no | 'not_started' | - |
 
 
@@ -687,7 +777,9 @@ Source: `backend/app/schemas/stage_product_assignment.py`
 | subcontractor_card_id | Union[str, UUID] | yes | - | - |
 | subcontractor_product_id | Optional[Union[str, UUID]] | no | None | - |
 | contract_id | Optional[Union[str, UUID]] | no | None | - |
+| start_date | Optional[date] | no | None | - |
 | due_date | Optional[date] | no | None | - |
+| contract_due_date | Optional[date] | no | None | - |
 | status | Optional[str] | no | 'not_started' | - |
 | id | Union[str, UUID] | yes | - | - |
 | created_at | Optional[datetime] | yes | - | - |
@@ -703,7 +795,9 @@ Source: `backend/app/schemas/stage_product_assignment.py`
 | --- | --- | --- | --- | --- |
 | subcontractor_product_id | Optional[Union[str, UUID]] | no | None | - |
 | contract_id | Optional[Union[str, UUID]] | no | None | - |
+| start_date | Optional[date] | no | None | - |
 | due_date | Optional[date] | no | None | - |
+| contract_due_date | Optional[date] | no | None | - |
 | status | Optional[str] | no | None | - |
 
 
@@ -815,6 +909,7 @@ Source: `backend/app/schemas/subcontractor_stage.py`
 | date_start | date | yes | - | - |
 | duration | int | yes | - | - |
 | date_end | Optional[date] | no | None | - |
+| close_date | Optional[date] | no | None | - |
 | resources | Optional[List[dict]] | no | [] | - |
 | planned_cost | Optional[float] | no | 0.0 | - |
 | actual_cost | Optional[float] | no | 0.0 | - |
@@ -839,6 +934,7 @@ Source: `backend/app/schemas/subcontractor_stage.py`
 | date_start | date | yes | - | - |
 | duration | int | yes | - | - |
 | date_end | Optional[date] | no | None | - |
+| close_date | Optional[date] | no | None | - |
 | resources | Optional[List[dict]] | no | [] | - |
 | planned_cost | Optional[float] | no | 0.0 | - |
 | actual_cost | Optional[float] | no | 0.0 | - |
@@ -866,6 +962,7 @@ Source: `backend/app/schemas/subcontractor_stage.py`
 | date_start | date | yes | - | - |
 | duration | int | yes | - | - |
 | date_end | Optional[date] | no | None | - |
+| close_date | Optional[date] | no | None | - |
 | resources | Optional[List[dict]] | no | [] | - |
 | planned_cost | Optional[float] | no | 0.0 | - |
 | actual_cost | Optional[float] | no | 0.0 | - |
@@ -1062,15 +1159,14 @@ Source: `backend/app/routers/deals.py`
 
 Prefix: `/api/v1/deals`
 
-Endpoints: `9`
+Endpoints: `10`
 
 #### `GET /api/v1/deals`
 
 - Controller: `backend/app/routers/deals.py::get_deals`
-- Summary: Получить список всех проектов с фильтрами
 - Data Contract:
   - Path params: none
-  - Query params: `skip`: int (optional, default=0, constraints=-); `limit`: int (optional, default=100, constraints=-); `status`: Optional[str] (optional, default=None, constraints=-); `min_contract_value`: Optional[float] (optional, default=None, constraints=-); `max_contract_value`: Optional[float] (optional, default=None, constraints=-); `search`: Optional[str] (optional, default=None, constraints=-)
+  - Query params: `skip`: int (optional, default=0, constraints=-); `limit`: int (optional, default=100, constraints=-); `status`: Optional[str] (optional, default=None, constraints=-); `min_contract_value`: Optional[float] (optional, default=None, constraints=-); `max_contract_value`: Optional[float] (optional, default=None, constraints=-); `search`: Optional[str] (optional, default=None, constraints=-); `customer_id`: Optional[str] (optional, default=None, constraints=-); `our_company_id`: Optional[str] (optional, default=None, constraints=-)
   - Header params: none
   - Form params: none
   - File params: none
@@ -1091,11 +1187,12 @@ Endpoints: `9`
     - `Deal.id.in_`
     - `db.execute`
     - `Deal.get_filtered`
+    - `Deal.customer_id.in_`
+    - `Deal.our_company_id.in_`
     - `or_`
     - `and_`
     - `Deal.title.ilike`
     - `Deal.obj_name.ilike`
-    - `Deal.address.ilike`
   - Side effects: DB read
 - Error Handling:
   - Explicit `HTTPException` not found in handler body
@@ -1104,7 +1201,6 @@ Endpoints: `9`
 #### `POST /api/v1/deals`
 
 - Controller: `backend/app/routers/deals.py::create_deal`
-- Summary: Создать новый проект
 - Data Contract:
   - Path params: none
   - Query params: none
@@ -1120,9 +1216,11 @@ Endpoints: `9`
   - Depends/Security:
     - `db: Depends(get_db)`
     - `user: Depends(CurrentUser)`
+    - `_: Depends(require_section_write('projects'))`
 - Logic Flow:
   - Internal calls:
     - `Depends`
+    - `require_section_write`
     - `Deal.create`
     - `log_event`
   - Side effects: DB write, Audit/Event logging
@@ -1133,7 +1231,6 @@ Endpoints: `9`
 #### `DELETE /api/v1/deals/{deal_id}`
 
 - Controller: `backend/app/routers/deals.py::delete_deal`
-- Summary: Удалить проект
 - Data Contract:
   - Path params: `deal_id`: str (required, default=-, constraints=-)
   - Query params: none
@@ -1143,12 +1240,16 @@ Endpoints: `9`
   - Body: none
   - Success status: `200`
 - Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
+  - Access mode: JWT (AuthMiddleware) + current user context
   - Depends/Security:
     - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+    - `_: Depends(require_section_write('projects'))`
 - Logic Flow:
   - Internal calls:
     - `Depends`
+    - `require_section_write`
+    - `ensure_can_edit_record`
     - `Deal.delete`
     - `HTTPException`
   - Side effects: No explicit side effects (read/transform path)
@@ -1159,7 +1260,6 @@ Endpoints: `9`
 #### `GET /api/v1/deals/{deal_id}`
 
 - Controller: `backend/app/routers/deals.py::get_deal`
-- Summary: Получить проект по ID
 - Data Contract:
   - Path params: `deal_id`: str (required, default=-, constraints=-)
   - Query params: none
@@ -1178,25 +1278,54 @@ Endpoints: `9`
 - Logic Flow:
   - Internal calls:
     - `Depends`
-    - `Deal.get_by_id`
-    - `HTTPException`
-    - `allowed_deal_ids`
   - Side effects: No explicit side effects (read/transform path)
 - Error Handling:
-  - `404`: `Проект не найден`; `РџСЂРѕРµРєС‚ РЅРµ РЅР°Р№РґРµРЅ`; body schema `{"detail": "..."}`
+  - Explicit `HTTPException` not found in handler body
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 #### `PUT /api/v1/deals/{deal_id}`
 
 - Controller: `backend/app/routers/deals.py::update_deal`
-- Summary: Обновить проект
 - Data Contract:
   - Path params: `deal_id`: str (required, default=-, constraints=-)
   - Query params: none
   - Header params: none
   - Form params: none
   - File params: none
-  - Body: `deal_update`: dict
+  - Body models: [`DealUpdate`](#model-dealupdate)
+  - Response model: `DealResponse`
+  - Response contracts: [`DealResponse`](#model-dealresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+    - `_: Depends(require_section_write('projects'))`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `require_section_write`
+    - `ensure_can_edit_record`
+    - `HTTPException`
+    - `Deal.update`
+    - `log_event`
+  - Side effects: DB write, Audit/Event logging
+- Error Handling:
+  - `400`: `Нет данных для обновления`; body schema `{"detail": "..."}`
+  - `404`: `Проект не найден`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/deals/{deal_id}/activity`
+
+- Controller: `backend/app/routers/deals.py::get_deal_activity`
+- Data Contract:
+  - Path params: `deal_id`: str (required, default=-, constraints=-)
+  - Query params: `category`: Optional[str] (optional, default=None, constraints=-); `skip`: int (optional, default=0, constraints=-); `limit`: int (optional, default=50, constraints=-)
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
   - Success status: `200`
 - Authentication & Authorization:
   - Access mode: JWT (AuthMiddleware) + current user context
@@ -1205,15 +1334,20 @@ Endpoints: `9`
     - `user: Depends(CurrentUser)`
 - Logic Flow:
   - Internal calls:
-    - `Body`
     - `Depends`
-    - `HTTPException`
-    - `Deal.update`
-    - `log_event`
-  - Side effects: DB write, Audit/Event logging
+    - `db.execute`
+    - `select(EventLog).where(or_(and_(EventLog.entity_type == 'deal', EventLog.entity_id == deal_id_str), EventLog.details.like(details_pattern))).order_by(desc(EventLog.created_at)).limit`
+    - `select(EventLog).where(or_(and_(EventLog.entity_type == 'deal', EventLog.entity_id == deal_id_str), EventLog.details.like(details_pattern))).order_by`
+    - `User.id.in_`
+    - `desc`
+    - `select`
+    - `select(EventLog).where`
+    - `or_`
+    - `and_`
+    - `EventLog.details.like`
+  - Side effects: DB write, DB read, Audit/Event logging
 - Error Handling:
-  - `400`: `Нет данных для обновления`; body schema `{"detail": "..."}`
-  - `404`: `Проект не найден`; body schema `{"detail": "..."}`
+  - Explicit `HTTPException` not found in handler body
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 #### `GET /api/v1/deals/{deal_id}/folders`
@@ -1236,13 +1370,10 @@ Endpoints: `9`
   - Internal calls:
     - `Depends`
     - `storage_available`
-    - `Deal.get_by_id`
-    - `HTTPException`
-    - `allowed_deal_ids`
     - `ensure_path`
   - Side effects: File/storage operation
 - Error Handling:
-  - `404`: `РџСЂРѕРµРєС‚ РЅРµ РЅР°Р№РґРµРЅ`; `Р\xa0СџРЎР‚Р\xa0С•Р\xa0ВµР\xa0С”РЎвЂљ Р\xa0Р…Р\xa0Вµ Р\xa0Р…Р\xa0В°Р\xa0в„–Р\xa0Т‘Р\xa0ВµР\xa0Р…`; body schema `{"detail": "..."}`
+  - Explicit `HTTPException` not found in handler body
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 #### `GET /api/v1/deals/{deal_id}/gips`
@@ -1257,20 +1388,19 @@ Endpoints: `9`
   - Body: none
   - Success status: `200`
 - Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
+  - Access mode: JWT (AuthMiddleware) + current user context
   - Depends/Security:
     - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
 - Logic Flow:
   - Internal calls:
     - `Depends`
-    - `Deal.get_by_id`
-    - `HTTPException`
     - `db.execute`
     - `select`
     - `User.id.in_`
   - Side effects: DB read
 - Error Handling:
-  - `404`: `Deal not found`; body schema `{"detail": "..."}`
+  - Explicit `HTTPException` not found in handler body
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 #### `PUT /api/v1/deals/{deal_id}/gips`
@@ -1278,58 +1408,63 @@ Endpoints: `9`
 - Controller: `backend/app/routers/deals.py::set_deal_gips`
 - Data Contract:
   - Path params: `deal_id`: str (required, default=-, constraints=-)
-  - Query params: `payload`: dict (required, default=-, constraints=-)
+  - Query params: none
   - Header params: none
   - Form params: none
   - File params: none
-  - Body: none
+  - Body models: [`DealGipsUpdate`](#model-dealgipsupdate)
   - Success status: `200`
 - Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
+  - Access mode: JWT (AuthMiddleware) + current user context
   - Depends/Security:
     - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+    - `_: Depends(require_section_write('projects'))`
 - Logic Flow:
   - Internal calls:
     - `Depends`
-    - `Deal.get_by_id`
-    - `HTTPException`
+    - `require_section_write`
+    - `ensure_can_edit_record`
     - `db.execute`
     - `db.add`
     - `db.commit`
+    - `HTTPException`
     - `DealGip`
     - `User.id.in_`
     - `delete`
     - `select`
   - Side effects: DB write, DB read
 - Error Handling:
-  - `400`: `Invalid user id in payload`; body schema `{"detail": "..."}`
-  - `404`: `Deal not found`; body schema `{"detail": "..."}`
+  - `400`: `В payload передан неверный user_id`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 #### `PATCH /api/v1/deals/{deal_id}/vat`
 
 - Controller: `backend/app/routers/deals.py::update_deal_vat`
-- Summary: Обновить настройки НДС для проекта
 - Data Contract:
   - Path params: `deal_id`: str (required, default=-, constraints=-)
   - Query params: none
   - Header params: none
   - Form params: none
   - File params: none
-  - Body: none
+  - Body models: [`DealVatUpdate`](#model-dealvatupdate)
   - Success status: `200`
 - Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
+  - Access mode: JWT (AuthMiddleware) + current user context
   - Depends/Security:
     - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+    - `_: Depends(require_section_write('projects'))`
 - Logic Flow:
   - Internal calls:
     - `Depends`
+    - `require_section_write`
+    - `ensure_can_edit_record`
     - `HTTPException`
     - `Deal.update`
   - Side effects: DB write
 - Error Handling:
-  - `400`: `Нет данных для обновления НДС`; `Неверный формат данных`; body schema `{"detail": "..."}`
+  - `400`: `Нет данных для обновления НДС`; body schema `{"detail": "..."}`
   - `404`: `Проект не найден`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
@@ -1340,14 +1475,14 @@ Source: `backend/app/routers/leads.py`
 
 Prefix: `/api/v1/leads`
 
-Endpoints: `6`
+Endpoints: `11`
 
 #### `GET /api/v1/leads`
 
 - Controller: `backend/app/routers/leads.py::get_leads`
 - Data Contract:
   - Path params: none
-  - Query params: `skip`: int (optional, default=0, constraints=-); `limit`: int (optional, default=100, constraints=-); `status`: Optional[str] (optional, default=None, constraints=-); `search`: Optional[str] (optional, default=None, constraints=-); `responsible_user_id`: Optional[str] (optional, default=None, constraints=-)
+  - Query params: `skip`: int (optional, default=0, constraints=-); `limit`: int (optional, default=100, constraints=-); `status`: Optional[str] (optional, default=None, constraints=-); `search`: Optional[str] (optional, default=None, constraints=-); `responsible_user_id`: Optional[str] (optional, default=None, constraints=-); `customer_id`: Optional[str] (optional, default=None, constraints=-); `our_company_id`: Optional[str] (optional, default=None, constraints=-); `sort_by`: Optional[str] (optional, default='created_at', constraints=-); `sort_dir`: Optional[str] (optional, default='desc', constraints=-)
   - Header params: none
   - Form params: none
   - File params: none
@@ -1363,9 +1498,18 @@ Endpoints: `6`
 - Logic Flow:
   - Internal calls:
     - `Depends`
+    - `select`
     - `get_section_permissions`
-    - `Lead.get_filtered`
-  - Side effects: No explicit side effects (read/transform path)
+    - `and_`
+    - `func.count`
+    - `asc`
+    - `desc`
+    - `or_`
+    - `Lead.customer_id.in_`
+    - `Lead.our_company_id.in_`
+    - `Lead.title.ilike`
+    - `Lead.obj_name.ilike`
+  - Side effects: DB read
 - Error Handling:
   - Explicit `HTTPException` not found in handler body
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
@@ -1384,16 +1528,48 @@ Endpoints: `6`
   - Response contracts: [`LeadResponse`](#model-leadresponse)
   - Success status: `200`
 - Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
+  - Access mode: JWT (AuthMiddleware) + current user context
   - Depends/Security:
     - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
 - Logic Flow:
   - Internal calls:
     - `Depends`
     - `Lead.create`
+    - `LeadActivity.create`
   - Side effects: DB write
 - Error Handling:
   - Explicit `HTTPException` not found in handler body
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `DELETE /api/v1/leads/activities/{activity_id}`
+
+- Controller: `backend/app/routers/leads.py::delete_lead_activity`
+- Data Contract:
+  - Path params: `activity_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context; route may enforce role/section checks
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `HTTPException`
+    - `LeadActivity.delete`
+    - `db.execute`
+    - `select`
+  - Side effects: DB read
+- Error Handling:
+  - `400`: `System activities cannot be deleted`; body schema `{"detail": "..."}`
+  - `403`: `Not author`; body schema `{"detail": "..."}`
+  - `404`: `Activity not found`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 #### `DELETE /api/v1/leads/{lead_id}`
@@ -1408,14 +1584,17 @@ Endpoints: `6`
   - Body: none
   - Success status: `200`
 - Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
+  - Access mode: JWT (AuthMiddleware) + current user context
   - Depends/Security:
     - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
 - Logic Flow:
   - Internal calls:
     - `Depends`
-    - `Lead.delete`
+    - `Lead.get_by_id`
     - `HTTPException`
+    - `ensure_can_edit_record`
+    - `Lead.delete`
   - Side effects: No explicit side effects (read/transform path)
 - Error Handling:
   - `404`: `Lead not found`; body schema `{"detail": "..."}`
@@ -1462,18 +1641,51 @@ Endpoints: `6`
   - Body: `lead_update`: dict
   - Success status: `200`
 - Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
+  - Access mode: JWT (AuthMiddleware) + current user context
   - Depends/Security:
     - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
 - Logic Flow:
   - Internal calls:
     - `Body`
     - `Depends`
     - `HTTPException`
+    - `Lead.get_by_id`
+    - `ensure_can_edit_record`
     - `Lead.update`
+    - `LeadActivity.create`
   - Side effects: DB write
 - Error Handling:
   - `400`: `No fields to update`; body schema `{"detail": "..."}`
+  - `404`: `Lead not found`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/leads/{lead_id}/comments`
+
+- Controller: `backend/app/routers/leads.py::add_lead_comment`
+- Data Contract:
+  - Path params: `lead_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: `body`: dict
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Body`
+    - `Depends`
+    - `Lead.get_by_id`
+    - `HTTPException`
+    - `LeadActivity.create`
+  - Side effects: DB write
+- Error Handling:
+  - `400`: `Empty comment`; body schema `{"detail": "..."}`
   - `404`: `Lead not found`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
@@ -1489,9 +1701,10 @@ Endpoints: `6`
   - Body: none
   - Success status: `200`
 - Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
+  - Access mode: JWT (AuthMiddleware) + current user context
   - Depends/Security:
     - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
 - Logic Flow:
   - Internal calls:
     - `Depends`
@@ -1503,7 +1716,105 @@ Endpoints: `6`
     - `Lead.update`
     - `Product.get_by_id`
     - `DealProduct.create`
+    - `LeadActivity.create`
   - Side effects: DB write
+- Error Handling:
+  - `404`: `Lead not found`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/leads/{lead_id}/files`
+
+- Controller: `backend/app/routers/leads.py::upload_lead_file`
+- Data Contract:
+  - Path params: `lead_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: `caption`: Optional[str] (optional, default=None, constraints=-)
+  - File params: `file`: UploadFile (required, default=-, constraints=-)
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `File`
+    - `Form`
+    - `Depends`
+    - `clean_name`
+    - `Lead.get_by_id`
+    - `HTTPException`
+    - `storage_available`
+    - `ensure_path`
+    - `write_upload_to_tmp`
+    - `LeadActivity.create`
+    - `upload_file_with_safe_extension`
+  - Side effects: DB write, File/storage operation
+- Error Handling:
+  - `404`: `Lead not found`; body schema `{"detail": "..."}`
+  - `500`: `Storage not configured`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/leads/{lead_id}/tasks`
+
+- Controller: `backend/app/routers/leads.py::create_lead_task`
+- Summary: Create a task linked to this lead and add a timeline entry.
+- Data Contract:
+  - Path params: `lead_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: `body`: dict
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Body`
+    - `Depends`
+    - `Lead.get_by_id`
+    - `HTTPException`
+    - `Task.create`
+    - `LeadActivity.create`
+  - Side effects: DB write
+- Error Handling:
+  - `400`: `Title is required`; body schema `{"detail": "..."}`
+  - `404`: `Lead not found`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/leads/{lead_id}/timeline`
+
+- Controller: `backend/app/routers/leads.py::get_lead_timeline`
+- Summary: Return timeline activities for a lead. `types` is a comma-separated filter.
+- Data Contract:
+  - Path params: `lead_id`: str (required, default=-, constraints=-)
+  - Query params: `limit`: int (optional, default=200, constraints=-); `offset`: int (optional, default=0, constraints=-); `types`: Optional[str] (optional, default=None, constraints=-)
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `_: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `Lead.get_by_id`
+    - `HTTPException`
+    - `LeadActivity.created_at.desc`
+    - `LeadActivity.activity_type.in_`
+    - `select`
+    - `db.execute`
+  - Side effects: DB write, DB read
 - Error Handling:
   - `404`: `Lead not found`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
@@ -1515,7 +1826,7 @@ Source: `backend/app/routers/stages.py`
 
 Prefix: `/api/v1/stages`
 
-Endpoints: `10`
+Endpoints: `13`
 
 #### `GET /api/v1/stages`
 
@@ -1559,18 +1870,18 @@ Endpoints: `10`
   - Response contracts: [`StageResponse`](#model-stageresponse)
   - Success status: `200`
 - Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
+  - Access mode: JWT (AuthMiddleware) + current user context
   - Depends/Security:
     - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
 - Logic Flow:
   - Internal calls:
     - `Depends`
     - `Stage.create`
+    - `safe_refresh_deal_health_issues`
     - `HTTPException`
-    - `Deal.get_by_id`
-    - `db.add`
-    - `db.commit`
-  - Side effects: DB write
+    - `log_event`
+  - Side effects: DB write, Audit/Event logging
 - Error Handling:
   - `400`: `f'Ошибка создания этапа: {str(e)}`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
@@ -1598,6 +1909,35 @@ Endpoints: `10`
     - `Depends`
     - `Stage.get_by_deal_id`
   - Side effects: No explicit side effects (read/transform path)
+- Error Handling:
+  - Explicit `HTTPException` not found in handler body
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/stages/deal/{deal_id}/dependencies`
+
+- Controller: `backend/app/routers/stages.py::get_stage_dependencies_by_deal`
+- Summary: Get stage dependencies for deal.
+- Data Contract:
+  - Path params: `deal_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware)
+  - Depends/Security:
+    - `db: Depends(get_db)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `Stage.get_by_deal_id`
+    - `db.execute`
+    - `normalize_dependency_type`
+    - `StageDependency.successor_id.in_`
+    - `select`
+  - Side effects: DB read
 - Error Handling:
   - Explicit `HTTPException` not found in handler body
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
@@ -1667,18 +2007,23 @@ Endpoints: `10`
   - Body: none
   - Success status: `200`
 - Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
+  - Access mode: JWT (AuthMiddleware) + current user context
   - Depends/Security:
     - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
 - Logic Flow:
   - Internal calls:
     - `Depends`
     - `Stage.get_by_id`
     - `HTTPException`
-    - `Stage.delete`
     - `db.execute`
     - `db.commit`
-  - Side effects: DB write, DB read
+    - `Stage.delete`
+    - `safe_refresh_deal_health_issues`
+    - `log_event`
+    - `delete`
+    - `or_`
+  - Side effects: DB write, DB read, Audit/Event logging
 - Error Handling:
   - `404`: `Этап не найден`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
@@ -1726,23 +2071,98 @@ Endpoints: `10`
   - Response contracts: [`StageResponse`](#model-stageresponse)
   - Success status: `200`
 - Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
+  - Access mode: JWT (AuthMiddleware) + current user context
   - Depends/Security:
     - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
 - Logic Flow:
   - Internal calls:
     - `Depends`
     - `Stage.get_by_id`
     - `HTTPException`
     - `Stage.update`
-    - `db.execute`
-    - `db.commit`
-    - `Deal.get_by_id`
-    - `db.add`
-  - Side effects: DB write, DB read
+    - `safe_refresh_deal_health_issues`
+    - `GanttService.propagate_dates`
+    - `log_event`
+  - Side effects: DB write, Audit/Event logging
 - Error Handling:
   - `400`: `Ошибка обновления этапа`; body schema `{"detail": "..."}`
   - `404`: `Этап не найден`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/stages/{stage_id}/copy`
+
+- Controller: `backend/app/routers/stages.py::copy_stage`
+- Summary: Create a new editable stage copy in the same deal.
+- Data Contract:
+  - Path params: `stage_id`: str (required, default=-, constraints=-)
+  - Query params: `payload`: Optional[StageCopyPayload] (optional, default=None, constraints=-)
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Response model: `StageResponse`
+  - Response contracts: [`StageResponse`](#model-stageresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `Stage`
+    - `db.add`
+    - `Stage.get_by_id`
+    - `HTTPException`
+    - `db.flush`
+    - `db.commit`
+    - `db.refresh`
+    - `safe_refresh_deal_health_issues`
+    - `db.execute`
+    - `log_event`
+    - `StageProductLink`
+  - Side effects: DB write, DB read, Audit/Event logging
+- Error Handling:
+  - `404`: `Stage not found`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `PUT /api/v1/stages/{stage_id}/dependency`
+
+- Controller: `backend/app/routers/stages.py::set_stage_dependency`
+- Summary: Replace stage predecessor dependencies.
+- Data Contract:
+  - Path params: `stage_id`: str (required, default=-, constraints=-)
+  - Query params: `payload`: dict (required, default=-, constraints=-)
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `Stage.get_by_id`
+    - `HTTPException`
+    - `normalize_dependency_type`
+    - `db.execute`
+    - `StageDependency`
+    - `db.add`
+    - `db.flush`
+    - `GanttService._resolve_successor_schedule`
+    - `safe_refresh_deal_health_issues`
+    - `db.commit`
+    - `GanttService.propagate_dates`
+  - Side effects: DB write, DB read, Audit/Event logging
+- Error Handling:
+  - `400`: `Stage cannot depend on itself`; `Predecessor stage must belong to the same deal`; `Dependency cycle is not allowed`; body schema `{"detail": "..."}`
+  - `404`: `Stage not found`; `Predecessor stage not found`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 #### `PUT /api/v1/stages/{stage_id}/products`
@@ -1758,9 +2178,10 @@ Endpoints: `10`
   - Body: none
   - Success status: `200`
 - Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
+  - Access mode: JWT (AuthMiddleware) + current user context
   - Depends/Security:
     - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
 - Logic Flow:
   - Internal calls:
     - `Depends`
@@ -1769,8 +2190,10 @@ Endpoints: `10`
     - `Deal.get_by_id`
     - `DealProduct.get_by_deal`
     - `StageProductLink.delete_by_stage`
+    - `safe_refresh_deal_health_issues`
     - `StageProductLink.create`
-  - Side effects: DB write
+    - `log_event`
+  - Side effects: DB write, Audit/Event logging
 - Error Handling:
   - `400`: `Invalid deal products for stage`; body schema `{"detail": "..."}`
   - `404`: `Stage not found`; `Deal not found`; body schema `{"detail": "..."}`
@@ -1809,15 +2232,15 @@ Source: `backend/app/routers/tasks.py`
 
 Prefix: `/api/v1/tasks`
 
-Endpoints: `7`
+Endpoints: `11`
 
 #### `GET /api/v1/tasks`
 
 - Controller: `backend/app/routers/tasks.py::get_tasks`
-- Summary: Получить список всех задач с фильтрами
+- Summary: Получить список всех задач с фильтрами. Возвращает заголовок X-Total-Count.
 - Data Contract:
   - Path params: none
-  - Query params: `skip`: int (optional, default=0, constraints=-); `limit`: int (optional, default=100, constraints=-); `deal_id`: Optional[str] (optional, default=None, constraints=-); `assigned_to_id`: Optional[str] (optional, default=None, constraints=-); `assigned_to_user_id`: Optional[str] (optional, default=None, constraints=-); `status`: Optional[str] (optional, default=None, constraints=-); `due_date_from`: Optional[str] (optional, default=None, constraints=-); `due_date_to`: Optional[str] (optional, default=None, constraints=-)
+  - Query params: `skip`: int (optional, default=0, constraints=-); `limit`: int (optional, default=100, constraints=-); `deal_id`: Optional[str] (optional, default=None, constraints=-); `assigned_to_id`: Optional[str] (optional, default=None, constraints=-); `assigned_to_user_id`: Optional[str] (optional, default=None, constraints=-); `status`: Optional[str] (optional, default=None, constraints=-); `priority`: Optional[str] (optional, default=None, constraints=-); `category_code`: Optional[str] (optional, default=None, constraints=-); `work_category`: Optional[str] (optional, default=None, constraints=-); `source`: Optional[str] (optional, default=None, constraints=-); `has_budget`: Optional[bool] (optional, default=None, constraints=-); `overdue`: Optional[bool] (optional, default=None, constraints=-); `search`: Optional[str] (optional, default=None, constraints=-); `due_date_from`: Optional[str] (optional, default=None, constraints=-); `due_date_to`: Optional[str] (optional, default=None, constraints=-)
   - Header params: none
   - Form params: none
   - File params: none
@@ -1833,10 +2256,17 @@ Endpoints: `7`
 - Logic Flow:
   - Internal calls:
     - `Depends`
+    - `select`
     - `get_section_permissions`
     - `Task.created_at.desc`
     - `db.execute`
-    - `select`
+    - `Task.source_auction_id.isnot`
+    - `Task.status.notin_`
+    - `or_`
+    - `func.count`
+    - `Task.source_auction_id.is_`
+    - `Task.title.ilike`
+    - `Task.description.ilike`
   - Side effects: DB write, DB read
 - Error Handling:
   - Explicit `HTTPException` not found in handler body
@@ -1864,21 +2294,22 @@ Endpoints: `7`
 - Logic Flow:
   - Internal calls:
     - `Depends`
-    - `Task.create`
-    - `IncomeExpenseEntry`
-    - `db.add`
     - `Deal.get_by_id`
     - `HTTPException`
     - `Stage.get_by_id`
     - `Company.get_by_id`
     - `User.get_by_id`
+    - `db.execute`
+    - `IncomeExpenseEntry`
+    - `db.add`
+    - `Task.create`
     - `db.commit`
     - `db.refresh`
-    - `Task.update`
-  - Side effects: DB write, Audit/Event logging
+  - Side effects: DB write, DB read, Audit/Event logging
 - Error Handling:
-  - `400`: `category_code, payer_id, payee_id and due_date required for task with budget`; `Invalid due_date`; body schema `{"detail": "..."}`
+  - `400`: `Не удалось сохранить задачу: проверьте поля.`; body schema `{"detail": "..."}`
   - `404`: `Проект не найден`; `Этап не найден`; `Ответственный не найден`; `Assigned user not found`; `Created user not found`; body schema `{"detail": "..."}`
+  - `503`: `Не удалось присвоить номер задаче, повторите попытку.`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 #### `GET /api/v1/tasks/deals/{deal_id}/tasks`
@@ -1912,6 +2343,40 @@ Endpoints: `7`
   - `404`: `Проект не найден`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
+#### `PUT /api/v1/tasks/matrix/reorder`
+
+- Controller: `backend/app/routers/tasks.py::reorder_task_matrix`
+- Summary: Сохранить персональный порядок задач внутри квадранта матрицы.
+- Data Contract:
+  - Path params: none
+  - Query params: `payload`: TaskMatrixReorder (required, default=-, constraints=-)
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `HTTPException`
+    - `db.execute`
+    - `get_section_permissions`
+    - `db.commit`
+    - `db.add`
+    - `Task.id.in_`
+    - `TaskUserMatrix.task_id.in_`
+    - `TaskUserMatrix`
+    - `select`
+  - Side effects: DB write, DB read
+- Error Handling:
+  - `400`: `Invalid matrix quadrant`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
 #### `DELETE /api/v1/tasks/{task_id}`
 
 - Controller: `backend/app/routers/tasks.py::delete_task`
@@ -1925,15 +2390,21 @@ Endpoints: `7`
   - Body: none
   - Success status: `200`
 - Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
+  - Access mode: JWT (AuthMiddleware) + current user context
   - Depends/Security:
     - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
 - Logic Flow:
   - Internal calls:
     - `Depends`
-    - `Task.delete`
+    - `Task.get_by_id`
     - `HTTPException`
-  - Side effects: No explicit side effects (read/transform path)
+    - `ensure_can_edit_record`
+    - `db.execute`
+    - `db.commit`
+    - `Task.delete`
+    - `delete`
+  - Side effects: DB write, DB read
 - Error Handling:
   - `404`: `Задача не найдена`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
@@ -1991,19 +2462,117 @@ Endpoints: `7`
     - `Depends`
     - `HTTPException`
     - `Task.get_by_id`
-    - `Task.update`
+    - `ensure_can_edit_record`
+    - `Deal.get_by_id`
     - `Stage.get_by_id`
     - `Company.get_by_id`
     - `User.get_by_id`
+    - `ensure_entity_action_allowed`
+    - `Task.update`
     - `IncomeExpenseEntry`
     - `db.add`
-    - `db.execute`
-    - `db.commit`
-    - `db.refresh`
   - Side effects: DB write, DB read, Audit/Event logging
 - Error Handling:
-  - `400`: `Нет данных для обновления`; `category_code, payer_id, payee_id and due_date required for task with budget`; `Invalid due_date`; body schema `{"detail": "..."}`
-  - `404`: `Task not found`; `Задача не найдена`; `Этап не найден`; `Ответственный не найден`; `Payer company not found`; body schema `{"detail": "..."}`
+  - `400`: `Нет данных для обновления`; body schema `{"detail": "..."}`
+  - `404`: `Task not found`; `Проект не найден`; `Этап не найден`; `Ответственный не найден`; `Payer company not found`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `DELETE /api/v1/tasks/{task_id}/attachments`
+
+- Controller: `backend/app/routers/tasks.py::delete_task_attachment`
+- Summary: Delete a specific task attachment.
+- Data Contract:
+  - Path params: `task_id`: str (required, default=-, constraints=-)
+  - Query params: `path`: str (required, default=-, constraints=-)
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `Task.get_by_id`
+    - `HTTPException`
+    - `Task.update`
+    - `delete_path`
+  - Side effects: DB write
+- Error Handling:
+  - `404`: `Task not found`; `Attachment not found`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/tasks/{task_id}/attachments`
+
+- Controller: `backend/app/routers/tasks.py::upload_task_attachments`
+- Summary: Upload attachments for a task.
+- Data Contract:
+  - Path params: `task_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `Task.get_by_id`
+    - `HTTPException`
+    - `storage_available`
+    - `ensure_path`
+    - `Task.update`
+    - `clean_name`
+    - `write_upload_to_tmp`
+    - `upload_file_with_safe_extension`
+  - Side effects: DB write, File/storage operation
+- Error Handling:
+  - `400`: `No files uploaded`; body schema `{"detail": "..."}`
+  - `404`: `Task not found`; body schema `{"detail": "..."}`
+  - `500`: `Storage is not configured`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `PUT /api/v1/tasks/{task_id}/matrix`
+
+- Controller: `backend/app/routers/tasks.py::update_task_matrix_position`
+- Summary: Обновить персональный квадрант задачи для текущего пользователя.
+- Data Contract:
+  - Path params: `task_id`: str (required, default=-, constraints=-)
+  - Query params: `payload`: TaskMatrixUpdate (required, default=-, constraints=-)
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `HTTPException`
+    - `Task.get_by_id`
+    - `db.execute`
+    - `TaskUserMatrix`
+    - `db.add`
+    - `db.commit`
+    - `db.refresh`
+    - `select`
+  - Side effects: DB write, DB read
+- Error Handling:
+  - `400`: `Invalid matrix quadrant`; body schema `{"detail": "..."}`
+  - `404`: `Task not found`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 #### `POST /api/v1/tasks/{task_id}/recalculate-penalty`
@@ -2985,7 +3554,7 @@ Source: `backend/app/routers/tenders.py`
 
 Prefix: `/api/v1/tenders`
 
-Endpoints: `7`
+Endpoints: `8`
 
 #### `POST /api/v1/tenders`
 
@@ -3144,6 +3713,38 @@ Endpoints: `7`
   - `404`: `Tender not found`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
+#### `PATCH /api/v1/tenders/{tender_id}`
+
+- Controller: `backend/app/routers/tenders.py::update_tender`
+- Summary: Set tender fields — used for the admin "установка даты"
+- Data Contract:
+  - Path params: `tender_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body models: [`TenderUpdate`](#model-tenderupdate)
+  - Response model: `TenderResponse`
+  - Response contracts: [`TenderResponse`](#model-tenderresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware)
+  - Depends/Security:
+    - `db: Depends(get_db)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `TenderResponse.model_validate`
+    - `db.execute`
+    - `HTTPException`
+    - `db.commit`
+    - `db.refresh`
+    - `select`
+  - Side effects: DB write, DB read
+- Error Handling:
+  - `404`: `Tender not found`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
 #### `POST /api/v1/tenders/{tender_id}/offers`
 
 - Controller: `backend/app/routers/tenders.py::create_tender_offer`
@@ -3233,7 +3834,6 @@ Endpoints: `10`
 - Logic Flow:
   - Internal calls:
     - `Depends`
-    - `db.get_bind`
     - `Deal.get_by_id`
     - `HTTPException`
     - `DealProduct.get_by_deal`
@@ -3241,8 +3841,9 @@ Endpoints: `10`
     - `Stage.get_by_deal_id`
     - `Contract.get_by_deal_id`
     - `db.execute`
-    - `or_`
+    - `db.commit`
     - `select`
+    - `delete`
     - `StageProductAssignment.create`
   - Side effects: DB write, DB read
 - Error Handling:
@@ -3305,6 +3906,7 @@ Endpoints: `10`
     - `Product.get_by_id`
     - `SubcontractorCard.get_by_id`
     - `StageProductAssignment.create`
+    - `safe_refresh_deal_health_issues`
     - `SubcontractorProduct.get_by_id`
   - Side effects: DB write
 - Error Handling:
@@ -3330,8 +3932,10 @@ Endpoints: `10`
 - Logic Flow:
   - Internal calls:
     - `Depends`
+    - `StageProductAssignment.get_by_id`
     - `StageProductAssignment.delete`
     - `HTTPException`
+    - `safe_refresh_deal_health_issues`
   - Side effects: No explicit side effects (read/transform path)
 - Error Handling:
   - `404`: `Assignment not found`; body schema `{"detail": "..."}`
@@ -3359,6 +3963,7 @@ Endpoints: `10`
     - `Depends`
     - `StageProductAssignment.update`
     - `HTTPException`
+    - `safe_refresh_deal_health_issues`
   - Side effects: DB write
 - Error Handling:
   - `404`: `Assignment not found`; body schema `{"detail": "..."}`
@@ -3411,12 +4016,15 @@ Endpoints: `10`
 - Logic Flow:
   - Internal calls:
     - `Depends`
+    - `StageProductAssignment.get_by_id`
+    - `HTTPException`
     - `db.execute`
+    - `safe_refresh_deal_health_issues`
     - `StageProductSubtask.create`
     - `select`
   - Side effects: DB write, DB read
 - Error Handling:
-  - Explicit `HTTPException` not found in handler body
+  - `404`: `Assignment not found`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 #### `POST /api/v1/defacto/subtasks`
@@ -3440,6 +4048,8 @@ Endpoints: `10`
   - Internal calls:
     - `Depends`
     - `StageProductSubtask.create`
+    - `StageProductAssignment.get_by_id`
+    - `safe_refresh_deal_health_issues`
   - Side effects: DB write
 - Error Handling:
   - Explicit `HTTPException` not found in handler body
@@ -3463,8 +4073,11 @@ Endpoints: `10`
 - Logic Flow:
   - Internal calls:
     - `Depends`
+    - `StageProductSubtask.get_by_id`
     - `StageProductSubtask.delete`
     - `HTTPException`
+    - `safe_refresh_deal_health_issues`
+    - `StageProductAssignment.get_by_id`
   - Side effects: No explicit side effects (read/transform path)
 - Error Handling:
   - `404`: `Subtask not found`; body schema `{"detail": "..."}`
@@ -3492,6 +4105,8 @@ Endpoints: `10`
     - `Depends`
     - `StageProductSubtask.update`
     - `HTTPException`
+    - `StageProductAssignment.get_by_id`
+    - `safe_refresh_deal_health_issues`
   - Side effects: DB write
 - Error Handling:
   - `404`: `Subtask not found`; body schema `{"detail": "..."}`
@@ -3511,23 +4126,25 @@ Endpoints: `11`
 - Controller: `backend/app/routers/executor.py::get_executor_cards`
 - Data Contract:
   - Path params: none
-  - Query params: `company_id`: str (required, default=-, constraints=-)
+  - Query params: `company_id`: Optional[str] (optional, default=None, constraints=-)
   - Header params: none
   - Form params: none
   - File params: none
   - Body: none
   - Success status: `200`
 - Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
+  - Access mode: JWT (AuthMiddleware) + current user context
   - Depends/Security:
     - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
 - Logic Flow:
   - Internal calls:
     - `Query`
     - `Depends`
-    - `or_`
     - `db.execute`
     - `select`
+    - `CompanyUserLink.link_type.in_`
+    - `or_`
     - `Stage.id.in_`
   - Side effects: DB read
 - Error Handling:
@@ -3582,12 +4199,12 @@ Endpoints: `11`
     - `storage_available`
     - `HTTPException`
     - `SubcontractorCard.get_by_id`
+    - `upload_slot`
+    - `Deal.get_by_id`
+    - `clean_name`
     - `ensure_path`
     - `list_items`
     - `publish`
-    - `StageResult.create`
-    - `Deal.get_by_id`
-    - `clean_name`
   - Side effects: DB write, File/storage operation
 - Error Handling:
   - `400`: `Files are required`; body schema `{"detail": "..."}`
@@ -3640,7 +4257,6 @@ Endpoints: `11`
 - Logic Flow:
   - Internal calls:
     - `Depends`
-    - `db.get_bind`
     - `Stage.get_by_id`
     - `HTTPException`
     - `SubcontractorCard.get_by_id`
@@ -3668,14 +4284,18 @@ Endpoints: `11`
   - Body: none
   - Success status: `200`
 - Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
-  - Depends/Security: none at function level
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
 - Logic Flow:
   - Internal calls:
     - `Form`
+    - `Depends`
+    - `authorize_storage_path`
     - `ensure_path`
     - `clean_name`
-  - Side effects: No explicit side effects (read/transform path)
+  - Side effects: File/storage operation
 - Error Handling:
   - Explicit `HTTPException` not found in handler body
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
@@ -3692,13 +4312,17 @@ Endpoints: `11`
   - Body: none
   - Success status: `200`
 - Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
-  - Depends/Security: none at function level
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
 - Logic Flow:
   - Internal calls:
     - `Query`
+    - `Depends`
     - `storage_available`
     - `HTTPException`
+    - `authorize_storage_path`
     - `delete_path`
   - Side effects: File/storage operation
 - Error Handling:
@@ -3718,12 +4342,16 @@ Endpoints: `11`
   - Body: none
   - Success status: `200`
 - Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
-  - Depends/Security: none at function level
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
 - Logic Flow:
   - Internal calls:
     - `Query`
+    - `Depends`
     - `HTTPException`
+    - `authorize_storage_path`
     - `get_download_href`
   - Side effects: File/storage operation
 - Error Handling:
@@ -3742,13 +4370,17 @@ Endpoints: `11`
   - Body: none
   - Success status: `200`
 - Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
-  - Depends/Security: none at function level
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
 - Logic Flow:
   - Internal calls:
     - `Query`
+    - `Depends`
+    - `authorize_storage_path`
     - `list_items`
-  - Side effects: No explicit side effects (read/transform path)
+  - Side effects: File/storage operation
 - Error Handling:
   - Explicit `HTTPException` not found in handler body
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
@@ -3765,14 +4397,18 @@ Endpoints: `11`
   - Body: none
   - Success status: `200`
 - Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
-  - Depends/Security: none at function level
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
 - Logic Flow:
   - Internal calls:
     - `Form`
+    - `Depends`
     - `HTTPException`
+    - `authorize_storage_path`
     - `publish`
-  - Side effects: No explicit side effects (read/transform path)
+  - Side effects: File/storage operation
 - Error Handling:
   - `400`: `Path is required`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
@@ -3789,14 +4425,19 @@ Endpoints: `11`
   - Body: none
   - Success status: `200`
 - Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
-  - Depends/Security: none at function level
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
 - Logic Flow:
   - Internal calls:
     - `Form`
     - `File`
+    - `Depends`
     - `storage_available`
     - `HTTPException`
+    - `upload_slot`
+    - `authorize_storage_path`
     - `ensure_path`
     - `upload.read`
     - `upload_bytes_with_safe_extension`
@@ -3984,7 +4625,7 @@ Source: `backend/app/routers/subcontractor_stages.py`
 
 Prefix: `/api/v1/subcontractor-stages`
 
-Endpoints: `8`
+Endpoints: `10`
 
 #### `GET /api/v1/subcontractor-stages`
 
@@ -4034,10 +4675,7 @@ Endpoints: `8`
     - `Depends`
     - `SubcontractorStage.create`
     - `HTTPException`
-    - `db.add`
-    - `db.commit`
-    - `db.execute`
-  - Side effects: DB write, DB read
+  - Side effects: DB write
 - Error Handling:
   - `400`: `f'???????????? ???????????????? ??????????: {str(e)}`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
@@ -4089,6 +4727,34 @@ Endpoints: `8`
     - `Depends`
     - `SubcontractorStage.get_by_subcontractor_card_id`
   - Side effects: No explicit side effects (read/transform path)
+- Error Handling:
+  - Explicit `HTTPException` not found in handler body
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/subcontractor-stages/subcontractor/{subcontractor_id}/dependencies`
+
+- Controller: `backend/app/routers/subcontractor_stages.py::get_stage_dependencies_by_subcontractor`
+- Summary: Get subcontractor stage dependencies for subcontractor card.
+- Data Contract:
+  - Path params: `subcontractor_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware)
+  - Depends/Security:
+    - `db: Depends(get_db)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `SubcontractorStage.get_by_subcontractor_card_id`
+    - `db.execute`
+    - `normalize_dependency_type`
+    - `SubcontractorStageDependency.successor_id.in_`
+  - Side effects: DB read
 - Error Handling:
   - Explicit `HTTPException` not found in handler body
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
@@ -4173,12 +4839,44 @@ Endpoints: `8`
     - `SubcontractorStage.get_by_id`
     - `HTTPException`
     - `SubcontractorStage.update`
-    - `db.execute`
-    - `db.commit`
-  - Side effects: DB write, DB read
+    - `SubcontractorGanttService.propagate_dates`
+  - Side effects: DB write
 - Error Handling:
   - `400`: `Error updating stage`; body schema `{"detail": "..."}`
   - `404`: `Stage not found`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `PUT /api/v1/subcontractor-stages/{stage_id}/dependency`
+
+- Controller: `backend/app/routers/subcontractor_stages.py::set_stage_dependency`
+- Summary: Set a single predecessor dependency for subcontractor stage.
+- Data Contract:
+  - Path params: `stage_id`: str (required, default=-, constraints=-)
+  - Query params: `payload`: dict (required, default=-, constraints=-)
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware)
+  - Depends/Security:
+    - `db: Depends(get_db)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `normalize_dependency_type`
+    - `SubcontractorStageDependency`
+    - `db.add`
+    - `SubcontractorStage.get_by_id`
+    - `HTTPException`
+    - `db.execute`
+    - `db.commit`
+    - `SubcontractorGanttService.propagate_dates`
+  - Side effects: DB write, DB read
+- Error Handling:
+  - `400`: `Stage cannot depend on itself`; `Predecessor stage must belong to the same subcontractor`; `Predecessor stage must belong to the same contract`; `Dependency cycle is not allowed`; body schema `{"detail": "..."}`
+  - `404`: `Stage not found`; `Predecessor stage not found`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 #### `POST /api/v1/subcontractor-stages/{stage_id}/propagate`
@@ -4357,14 +5055,14 @@ Source: `backend/app/routers/result_reviews.py`
 
 Prefix: `/api/v1`
 
-Endpoints: `2`
+Endpoints: `3`
 
 #### `GET /api/v1/result-reviews`
 
 - Controller: `backend/app/routers/result_reviews.py::list_result_reviews`
 - Data Contract:
   - Path params: none
-  - Query params: `deal_id`: Optional[str] (optional, default=None, constraints=-); `product_name`: Optional[str] (optional, default=None, constraints=-); `status`: Optional[str] (optional, default=None, constraints=-); `only_assigned`: bool (optional, default=False, constraints=-); `gip_user_id`: Optional[str] (optional, default=None, constraints=-)
+  - Query params: `deal_id`: Optional[str] (optional, default=None, constraints=-); `product_name`: Optional[str] (optional, default=None, constraints=-); `status`: Optional[str] (optional, default=None, constraints=-); `only_assigned`: bool (optional, default=False, constraints=-); `gip_user_id`: Optional[str] (optional, default=None, constraints=-); `limit`: Optional[int] (optional, default=None, constraints=ge=1, le=1000); `offset`: int (optional, default=0, constraints=ge=0)
   - Header params: none
   - Form params: none
   - File params: none
@@ -4383,6 +5081,34 @@ Endpoints: `2`
     - `or_`
     - `StageResult.created_at.desc`
     - `StageResult.status.is_`
+  - Side effects: DB write, DB read
+- Error Handling:
+  - Explicit `HTTPException` not found in handler body
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/result-reviews/versions`
+
+- Controller: `backend/app/routers/result_reviews.py::list_result_versions`
+- Data Contract:
+  - Path params: none
+  - Query params: `stage_id`: str (required, default=-, constraints=-); `product_name`: str (required, default=-, constraints=-)
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware)
+  - Depends/Security:
+    - `db: Depends(get_db)`
+- Logic Flow:
+  - Internal calls:
+    - `Query`
+    - `Depends`
+    - `StageResult.created_at.desc`
+    - `db.execute`
+    - `or_`
+    - `select`
   - Side effects: DB write, DB read
 - Error Handling:
   - Explicit `HTTPException` not found in handler body
@@ -4476,12 +5202,13 @@ Endpoints: `8`
 - Logic Flow:
   - Internal calls:
     - `Depends`
-    - `KpDocument`
-    - `db.add`
     - `db.get`
     - `HTTPException`
-    - `db.commit`
+    - `sequence_lock`
+    - `KpDocument`
+    - `db.add`
     - `db.refresh`
+    - `db.commit`
   - Side effects: DB write
 - Error Handling:
   - `404`: `Lead not found`; body schema `{"detail": "..."}`
@@ -4715,9 +5442,9 @@ curl -X GET http://localhost:8000/api/v1/tasks -H "Authorization: Bearer $ACCESS
   "actual_hours": 0.0,
   "assigned_to_id": "00000000-0000-0000-0000-000000000000",
   "assigned_to_name": "string",
+  "assigned_to_user_avatar_url": "string",
   "assigned_to_user_id": "00000000-0000-0000-0000-000000000000",
-  "assigned_to_user_name": "string",
-  "attachments": []
+  "assigned_to_user_name": "string"
 }
 ```
 
@@ -4745,7 +5472,7 @@ curl -X POST http://localhost:8000/api/v1/deals -H "Authorization: Bearer $ACCES
 ### `POST /api/v1/tasks`
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/tasks -H "Authorization: Bearer $ACCESS_TOKEN" -H "Content-Type: application/json" -d '{"title": "string", "actual_hours": 0.0, "assigned_to_id": "00000000-0000-0000-0000-000000000000", "assigned_to_user_id": "00000000-0000-0000-0000-000000000000", "attachments": [], "budget": 0.0, "category_code": "string", "created_by_id": "00000000-0000-0000-0000-000000000000"}'
+curl -X POST http://localhost:8000/api/v1/tasks -H "Authorization: Bearer $ACCESS_TOKEN" -H "Content-Type: application/json" -d '{"title": "string", "actual_hours": 0.0, "assigned_to_id": "00000000-0000-0000-0000-000000000000", "assigned_to_user_id": "00000000-0000-0000-0000-000000000000", "assignee_ids": "00000000-0000-0000-0000-000000000000", "attachments": {}, "budget": 0.0, "category_code": "string"}'
 ```
 
 ```json
@@ -4755,8 +5482,8 @@ curl -X POST http://localhost:8000/api/v1/tasks -H "Authorization: Bearer $ACCES
   "actual_hours": 0.0,
   "assigned_to_id": "00000000-0000-0000-0000-000000000000",
   "assigned_to_user_id": "00000000-0000-0000-0000-000000000000",
-  "attachments": [],
-  "budget": 0.0,
-  "category_code": "string"
+  "assignee_ids": "00000000-0000-0000-0000-000000000000",
+  "attachments": {},
+  "budget": 0.0
 }
 ```

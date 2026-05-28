@@ -1,12 +1,12 @@
 # Legal & Compliance API
 
-Сгенерировано из `docs/API.md` на 2026-02-15 03:22:39 (local time).
+Сгенерировано из `docs/API.md` на 2026-05-19 01:30:03 (local time).
 
 ## Scope
 - Домен: `legal_compliance`
 - Описание: Юридическая работа и аккредитации.
 - Routers: `2`
-- Endpoints: `23`
+- Endpoints: `26`
 - Список роутеров: `legal_work`, `accreditations`
 
 ## Common Rules
@@ -15,7 +15,7 @@
 
 ## Data Contract Catalog (Domain)
 
-Модели, используемые в домене: `16`.
+Модели, используемые в домене: `17`.
 
 ### Model `LegalCaseCreate`
 
@@ -157,6 +157,18 @@ Source: `backend/app/schemas/legal_work.py`
 | description | Optional[str] | no | None | - |
 
 
+### Model `AccreditationBulkAction`
+
+Source: `backend/app/schemas/accreditation.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| ids | List[str] | yes | - | - |
+| status | str | yes | - | - |
+| comment | Optional[str] | no | None | - |
+
+
 ### Model `AccreditationCreate`
 
 Source: `backend/app/schemas/accreditation.py`
@@ -216,11 +228,14 @@ Source: `backend/app/schemas/company_document.py`
 | Field | Type | Required | Default | Constraints |
 | --- | --- | --- | --- | --- |
 | company_id | str | yes | - | - |
+| our_company_id | Optional[str] | no | None | - |
 | doc_type | str | yes | - | - |
 | doc_value | Optional[str] | no | None | - |
 | file_name | Optional[str] | no | None | - |
 | file_url | Optional[str] | no | None | - |
 | storage_path | Optional[str] | no | None | - |
+| file_size | Optional[int] | no | None | - |
+| content_type | Optional[str] | no | None | - |
 | parent_id | Optional[str] | no | None | - |
 | status | Optional[str] | no | None | - |
 | comment | Optional[str] | no | None | - |
@@ -235,11 +250,15 @@ Source: `backend/app/schemas/company_document.py`
 | --- | --- | --- | --- | --- |
 | id | str | yes | - | - |
 | company_id | str | yes | - | - |
+| our_company_id | Optional[str] | no | None | - |
+| our_company_name | Optional[str] | no | None | - |
 | doc_type | str | yes | - | - |
 | doc_value | Optional[str] | no | None | - |
 | file_name | Optional[str] | no | None | - |
 | file_url | Optional[str] | no | None | - |
 | storage_path | Optional[str] | no | None | - |
+| file_size | Optional[int] | no | None | - |
+| content_type | Optional[str] | no | None | - |
 | parent_id | Optional[str] | no | None | - |
 | status | str | yes | - | - |
 | comment | Optional[str] | no | None | - |
@@ -254,10 +273,13 @@ Source: `backend/app/schemas/company_document.py`
 
 | Field | Type | Required | Default | Constraints |
 | --- | --- | --- | --- | --- |
+| our_company_id | Optional[str] | no | None | - |
 | doc_value | Optional[str] | no | None | - |
 | file_name | Optional[str] | no | None | - |
 | file_url | Optional[str] | no | None | - |
 | storage_path | Optional[str] | no | None | - |
+| file_size | Optional[int] | no | None | - |
+| content_type | Optional[str] | no | None | - |
 | parent_id | Optional[str] | no | None | - |
 | status | Optional[str] | no | None | - |
 | comment | Optional[str] | no | None | - |
@@ -692,7 +714,7 @@ Source: `backend/app/routers/accreditations.py`
 
 Prefix: `/api/v1/accreditations`
 
-Endpoints: `10`
+Endpoints: `13`
 
 #### `GET /api/v1/accreditations`
 
@@ -750,6 +772,95 @@ Endpoints: `10`
   - Side effects: DB write
 - Error Handling:
   - Explicit `HTTPException` not found in handler body
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/accreditations/accredited-company-ids`
+
+- Controller: `backend/app/routers/accreditations.py::accredited_company_ids`
+- Summary: Company ids that have `status` accreditation in **every** direction
+- Data Contract:
+  - Path params: none
+  - Query params: `direction_ids`: str (required, default=-, constraints=-); `status`: str (optional, default='approved', constraints=-)
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Response model: `List[str]`
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware)
+  - Depends/Security:
+    - `db: Depends(get_db)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `db.execute`
+    - `and_`
+    - `select`
+    - `CompanyAccreditation.direction_id.in_`
+  - Side effects: DB read
+- Error Handling:
+  - Explicit `HTTPException` not found in handler body
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/accreditations/bulk`
+
+- Controller: `backend/app/routers/accreditations.py::bulk_update_accreditations`
+- Summary: Bulk approve/reject accreditation records by id.
+- Data Contract:
+  - Path params: none
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body models: [`AccreditationBulkAction`](#model-accreditationbulkaction)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware)
+  - Depends/Security:
+    - `db: Depends(get_db)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `HTTPException`
+    - `db.execute`
+    - `db.commit`
+    - `CompanyAccreditation.id.in_`
+    - `select`
+  - Side effects: DB write, DB read
+- Error Handling:
+  - `400`: `status must be approved or rejected`; `Comment is required for rejection`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/accreditations/bulk-directions`
+
+- Controller: `backend/app/routers/accreditations.py::bulk_set_company_directions`
+- Summary: Admin bulk approve/reject several DIRECTIONS for one company,
+- Data Contract:
+  - Path params: none
+  - Query params: `status`: str (optional, default='approved', constraints=-); `comment`: Optional[str] (optional, default=None, constraints=-)
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body models: [`AccreditationRequest`](#model-accreditationrequest)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware)
+  - Depends/Security:
+    - `db: Depends(get_db)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `HTTPException`
+    - `db.commit`
+    - `db.execute`
+    - `db.add`
+    - `CompanyAccreditation`
+    - `and_`
+    - `select`
+  - Side effects: DB write, DB read
+- Error Handling:
+  - `400`: `status must be approved or rejected`; `Comment is required for rejection`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 #### `GET /api/v1/accreditations/companies/{company_id}/documents`

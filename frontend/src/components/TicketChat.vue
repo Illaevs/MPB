@@ -133,6 +133,7 @@ import { api } from '@/services/api'
 import { getActiveUser } from '../utils/permissions'
 import { useToast } from '../composables/useToast'
 import { downloadFromApi } from '../utils/download'
+import { formatDateTime } from '../utils/format'
 
 const THEMES = [
   { background: 'linear-gradient(135deg,#d7e7ff,#b4d0ff)', color: '#2563eb' },
@@ -179,7 +180,7 @@ export default {
     }
     const fmtTime = (v) => {
       if (!v) return ''
-      try { return new Date(v).toLocaleString('ru-RU', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) }
+      try { return formatDateTime(v, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) }
       catch { return v }
     }
     const fmtSize = (b) => {

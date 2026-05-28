@@ -66,9 +66,8 @@
                   <button class="chip" :class="{ active: filters.types.tasks }" @click="filters.types.tasks = !filters.types.tasks">
                     <i class="fas fa-check-square mr-1"></i>Задачи
                   </button>
-                  <button v-if="canSeeHearings" class="chip" :class="{ active: filters.types.hearings }" @click="filters.types.hearings = !filters.types.hearings">
-                    <i class="fas fa-gavel mr-1"></i>Заседания
-                  </button>
+                  <!-- «Заседания» убраны из календаря — для юр-практики
+                       свой раздел LegalWork. Здесь только задачи. -->
                 </div>
               </div>
               <div class="filter-row">
@@ -360,7 +359,7 @@
     </div>
 
     <!-- Day detail modal -->
-    <div v-if="expandedDay" class="modal-overlay" @click="expandedDay = null" @keydown.escape="expandedDay = null">
+    <div v-if="expandedDay" class="modal-overlay" v-modal-close="() => expandedDay = null" @keydown.escape="expandedDay = null">
       <div class="modal-content modal-sm" @click.stop>
         <div class="modal-header">
           <h3>{{ expandedDayLabel }}</h3>
@@ -381,7 +380,7 @@
     </div>
 
     <!-- Quick create modal -->
-    <div v-if="showQuickCreate" class="modal-overlay" @click="showQuickCreate = false" @keydown.escape="showQuickCreate = false">
+    <div v-if="showQuickCreate" class="modal-overlay" v-modal-close="() => showQuickCreate = false" @keydown.escape="showQuickCreate = false">
       <div class="modal-content modal-sm" @click.stop>
         <div class="modal-header">
           <h3>Новая задача</h3>
@@ -431,7 +430,7 @@
 
     <!-- Edit drawer -->
     <transition name="drawer">
-      <div v-if="editingTask" class="drawer-overlay" @click.self="closeEditDrawer">
+      <div v-if="editingTask" class="drawer-overlay" v-modal-close="closeEditDrawer">
         <div class="drawer">
           <div class="drawer-head">
             <div>
@@ -528,6 +527,7 @@ import { useToast } from '../composables/useToast'
 import { useUsersStore } from '../stores/users'
 import SkeletonLoader from '../components/ui/SkeletonLoader.vue'
 import Tooltip from '../components/ui/Tooltip.vue'
+import { formatDate as fmtDate } from '../utils/format'
 
 const STORAGE_KEY = 'crm-calendar-prefs-v2'
 
@@ -561,18 +561,27 @@ export default {
 
     const activeUser = ref(getActiveUser())
     const activeUserId = computed(() => activeUser.value?.id || '')
-    const canSeeHearings = computed(() => hasSectionAccess('legal_work'))
 
-    // Persisted prefs
+    // Persisted prefs.
+    //   _v=2 — миграция «убрали заседания + сброс stale-фильтров».
+    //   Прошлая версия (без _v) могла оставить пустые фильтры либо assignee
+    //   = '__me__' / непустые statuses, что выглядело как «задачи пропали».
+    //   При повышении _v сбрасываем calendar-фильтры в дефолтные.
+    const CAL_PREFS_VERSION = 2
     const loadPrefs = () => {
       try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') } catch (e) { return {} }
     }
-    const prefs = loadPrefs()
+    const rawPrefs = loadPrefs()
+    const needsMigration = (rawPrefs._v || 0) < CAL_PREFS_VERSION
+    const prefs = needsMigration
+      ? { viewMode: rawPrefs.viewMode, showUnscheduled: !!rawPrefs.showUnscheduled }  // оставляем только безобидное
+      : rawPrefs
 
     const viewMode = ref(prefs.viewMode || 'month')
     const showUnscheduled = ref(!!prefs.showUnscheduled)
     const filters = reactive({
-      types: { tasks: prefs.types?.tasks ?? true, hearings: prefs.types?.hearings ?? true },
+      // 'Заседания' убраны полностью — оставляем только tasks.
+      types: { tasks: prefs.types?.tasks ?? true },
       statuses: prefs.statuses ?? [],   // empty = all
       priorities: prefs.priorities ?? [], // empty = all
       assignee: prefs.assignee ?? '',     // '', '__me__', or user_id
@@ -580,6 +589,7 @@ export default {
 
     const persist = () => {
       const data = {
+        _v: CAL_PREFS_VERSION,
         viewMode: viewMode.value,
         showUnscheduled: showUnscheduled.value,
         types: filters.types,
@@ -589,6 +599,8 @@ export default {
       }
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
     }
+    // Сразу запишем миграцию (если была), чтоб второй load не повторил.
+    if (needsMigration) persist()
     watch([viewMode, showUnscheduled, filters], persist, { deep: true })
 
     // Period state
@@ -597,7 +609,6 @@ export default {
     const currentDay = ref(new Date(today.value.getFullYear(), today.value.getMonth(), today.value.getDate()))
 
     const tasks = ref([])
-    const hearings = ref([])
     const unscheduledTasks = ref([])
     const loading = ref(false)
     const loadingUnscheduled = ref(false)
@@ -665,7 +676,20 @@ export default {
       return `${y}-${m}-${d}`
     }
     const formatDateISO = formatDateKey
-    const formatDateRu = (d) => d ? new Date(d).toLocaleDateString('ru-RU', { day: '2-digit', month: 'long', year: 'numeric' }) : '—'
+    /** Извлечь ключ-дату "YYYY-MM-DD" из API-значения due_date.
+     *  Раньше делали `formatDateKey(new Date(item.due_date))` — но
+     *  `new Date("2026-06-10")` парсится как UTC-полночь, а
+     *  `getDate()` возвращает локальный день. На таймзонах UTC-X
+     *  ключ съезжал на сутки назад и задача попадала не в ту ячейку
+     *  (или вообще выпадала за пределы grid). Простой regex по строке
+     *  убирает зависимость от tz и работает для "2026-06-10",
+     *  "2026-06-10T00:00:00Z" и "2026-06-10 00:00:00". */
+    const taskDateKey = (dueStr) => {
+      if (!dueStr) return ''
+      const m = String(dueStr).match(/^(\d{4}-\d{2}-\d{2})/)
+      return m ? m[1] : ''
+    }
+    const formatDateRu = (d) => d ? fmtDate(d, { day: '2-digit', month: 'long', year: 'numeric' }) : '—'
     const normalizeId = (v) => v ? String(v).replace(/-/g, '').toLowerCase() : ''
 
     // Date range
@@ -720,7 +744,7 @@ export default {
         }
         list.push(...pool)
       }
-      if (filters.types.hearings && canSeeHearings.value) list.push(...hearings.value)
+      // Заседания убраны из календаря — отдельный раздел LegalWork.
       return list
     })
 
@@ -728,7 +752,8 @@ export default {
       const map = {}
       visibleItems.value.forEach(item => {
         if (!item.due_date) return
-        const key = formatDateKey(new Date(item.due_date))
+        const key = taskDateKey(item.due_date)
+        if (!key) return
         if (!map[key]) map[key] = []
         map[key].push(item)
       })
@@ -761,14 +786,13 @@ export default {
 
     // Active filters count
     const hasActiveFilters = computed(() => {
-      return !filters.types.tasks || (canSeeHearings.value && !filters.types.hearings)
+      return !filters.types.tasks
         || filters.statuses.length > 0 || filters.priorities.length > 0
         || (filters.assignee && filters.assignee !== '')
     })
     const activeFiltersCount = computed(() => {
       let n = 0
       if (!filters.types.tasks) n += 1
-      if (canSeeHearings.value && !filters.types.hearings) n += 1
       n += filters.statuses.length
       n += filters.priorities.length
       if (filters.assignee) n += 1
@@ -776,11 +800,34 @@ export default {
     })
     const resetFilters = () => {
       filters.types.tasks = true
-      filters.types.hearings = true
       filters.statuses = []
       filters.priorities = []
       filters.assignee = ''
     }
+
+    // Watchdog: если API вернул задачи, но фильтры режут все — авто-сброс.
+    // Сценарий: у пользователя в localStorage остался залипший фильтр
+    // (`assignee: '__me__'` от другого юзера, `statuses: ['completed']` и т.п.),
+    // а в API сейчас 8 задач. Пользователь видит ничего, думает что баг.
+    // Лучше один раз молча сбросить и показать всё, чем заставлять копаться
+    // в LS. Срабатывает максимум 1 раз за загрузку — после reset фильтры
+    // дефолтные, hasActiveFilters=false → следующий цикл watch'а ничего
+    // не делает.
+    let _autoResetDone = false
+    watch([tasks, visibleItems], () => {
+      if (_autoResetDone) return
+      if (tasks.value.length > 0
+          && visibleItems.value.length === 0
+          && hasActiveFilters.value) {
+        // eslint-disable-next-line no-console
+        console.warn('[Calendar] auto-resetting stale filters', {
+          tasksCount: tasks.value.length,
+          filtersBeforeReset: JSON.parse(JSON.stringify(filters)),
+        })
+        resetFilters()
+        _autoResetDone = true
+      }
+    }, { flush: 'post' })
     const toggleArrayFilter = (key, value) => {
       const arr = filters[key]
       const idx = arr.indexOf(value)
@@ -884,8 +931,12 @@ export default {
     const loadTasks = async () => {
       try {
         const range = dateRange.value
+        // api._client.request уже разворачивает axios-response → возвращает
+        // body напрямую (return response.data). Здесь `res` уже массив
+        // задач, обращаться к .data нельзя — старый код `res.data || []`
+        // всегда давал [] и календарь оставался пустым.
         const res = await api.calendar.listTasks({ limit: 500, due_date_from: range.from, due_date_to: range.to })
-        tasks.value = res.data || []
+        tasks.value = Array.isArray(res) ? res : []
       } catch (err) {
         console.error('Tasks load error:', err)
         tasks.value = []
@@ -893,26 +944,7 @@ export default {
       }
     }
 
-    const loadHearings = async () => {
-      if (!canSeeHearings.value || !filters.types.hearings) {
-        hearings.value = []
-        return
-      }
-      try {
-        const data = await api.calendar.listLegalCases()
-        hearings.value = (data || []).flatMap((c) => (c.events || [])
-          .filter(e => e.event_type === 'Заседание' && e.event_date)
-          .map(e => ({
-            id: `hearing-${e.id}`, item_type: 'hearing',
-            title: `${c.case_number || 'Дело'} — Заседание`,
-            due_date: e.event_date, status: 'hearing', priority: 'normal',
-            case_id: c.id, event_id: e.id, event_time: e.event_time, courtroom: e.courtroom,
-          })))
-      } catch (err) {
-        console.error('Hearings load error:', err)
-        hearings.value = []
-      }
-    }
+    // loadHearings удалён — заседания не входят в календарь.
 
     const loadUnscheduled = async () => {
       if (!showUnscheduled.value) return
@@ -922,7 +954,9 @@ export default {
         if (filters.assignee === '__me__' && activeUserId.value) params.assigned_to_user_id = activeUserId.value
         else if (filters.assignee) params.assigned_to_user_id = filters.assignee
         const res = await api.calendar.listTasks(params)
-        unscheduledTasks.value = (res.data || []).filter(t => !t.due_date && t.status !== 'completed' && t.status !== 'cancelled')
+        // res — массив напрямую (см. комментарий выше).
+        const arr = Array.isArray(res) ? res : []
+        unscheduledTasks.value = arr.filter(t => !t.due_date && t.status !== 'completed' && t.status !== 'cancelled')
       } catch (err) {
         console.error('Unscheduled load error:', err)
         unscheduledTasks.value = []
@@ -931,7 +965,7 @@ export default {
 
     const loadAll = async () => {
       loading.value = true
-      await Promise.all([loadTasks(), loadHearings(), loadUnscheduled()])
+      await Promise.all([loadTasks(), loadUnscheduled()])
       loading.value = false
     }
 
@@ -974,7 +1008,7 @@ export default {
     watch(dateRange, () => loadTasks())
     watch(showUnscheduled, () => { if (showUnscheduled.value) loadUnscheduled() })
     watch(() => filters.assignee, () => loadUnscheduled())
-    watch(() => filters.types.hearings, () => loadHearings())
+    // watch на filters.types.hearings удалён — заседания убраны.
 
     // Task helpers
     const truncateTitle = (value, max = 20) => {
@@ -1210,7 +1244,7 @@ export default {
       calendarRoot, weekDays, hours,
       loading, viewMode, viewModes,
       periodLabel, todayDayNumber, weekTodayIdx,
-      activeUserId, canSeeHearings, users,
+      activeUserId, users,
       todayStats, todaySummaryTooltip,
       filters, filtersOpen, hasActiveFilters, activeFiltersCount, statusFilterOptions, priorityFilterOptions,
       legendOpen, colorLegend,

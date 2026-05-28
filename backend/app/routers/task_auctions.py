@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from app.database.session import get_db
 from app.models import TaskAuction, TaskAuctionBid, Task, User, Company, IncomeExpenseEntry
+from app.services.event_outbox import emit_event_safe
 
 
 router = APIRouter(prefix="/task-auctions", tags=["Task Auctions"])
@@ -252,6 +253,20 @@ async def create_auction(
         created_by_id=created_by_id,
         is_block=False,
         block_id=None,
+    )
+    await emit_event_safe(
+        db,
+        event_type="task_auction.after_open",
+        entity_type="task_auction",
+        entity_id=str(auction.id),
+        payload={
+            "id": str(auction.id),
+            "title": auction.title,
+            "budget": float(auction.budget or 0),
+            "deal_id": str(auction.deal_id) if auction.deal_id else None,
+            "is_block": False,
+        },
+        payload_version=1,
     )
     return _build_auction_response(auction)
 
@@ -594,11 +609,25 @@ async def create_bid(
         comment=data.comment,
         covers_children=covers_children,
     )
-    
+    await emit_event_safe(
+        db,
+        event_type="task_auction_bid.after_place",
+        entity_type="task_auction_bid",
+        entity_id=str(bid.id),
+        payload={
+            "id": str(bid.id),
+            "auction_id": str(auction_id),
+            "user_id": str(user_id),
+            "bid_price": float(bid_price or 0),
+            "covers_children": bool(covers_children),
+        },
+        payload_version=1,
+    )
+
     # Reload with user relationship
     bids = await TaskAuctionBid.get_by_auction(db, auction_id)
     bid = next((b for b in bids if b.id == bid.id), bid)
-    
+
     return _build_bid_response(bid)
 
 

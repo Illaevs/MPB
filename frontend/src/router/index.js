@@ -31,7 +31,21 @@ const routes = [
     path: '/data-health',
     name: 'DataHealth',
     component: lazy(() => import('../views/DataHealth.vue')),
-    meta: { section: 'projects' }
+    meta: { section: 'data_health' }
+  },
+  {
+    path: '/search',
+    name: 'Search',
+    component: lazy(() => import('../views/Search.vue')),
+    // section не указан — поиск доступен любому авторизованному;
+    // per-entity ACL применяется внутри backend search-роутера.
+  },
+  {
+    path: '/reglaments',
+    name: 'Reglaments',
+    component: lazy(() => import('../views/Reglaments.vue')),
+    // Нормативная база — общесправочник, доступ любому авторизованному.
+    // Backend сам гейтит запись (upload/admin) через CurrentUser.
   },
   {
     path: '/leads',
@@ -80,6 +94,20 @@ const routes = [
     name: 'Companies',
     component: lazy(() => import('../views/Companies.vue')),
     meta: { section: 'companies' }
+  },
+  // Event bus admin routes — для observability outbox-пайплайна
+  // (counts, DLQ, retry, causation chains). Доступ резолвится бэком
+  // через is_superuser; в nav.js access='roles' ограничивает видимость
+  // ссылки только пользователям с правом на матрицу ролей.
+  {
+    path: '/integrations/outbox',
+    name: 'IntegrationsOutbox',
+    component: lazy(() => import('../views/IntegrationsOutbox.vue')),
+  },
+  {
+    path: '/integrations/subscriptions',
+    name: 'IntegrationsSubscriptions',
+    component: lazy(() => import('../views/IntegrationsSubscriptions.vue')),
   },
   {
     path: '/contracts',
@@ -258,6 +286,26 @@ const routes = [
     name: 'AuditLogs',
     component: lazy(() => import('../views/AuditLogs.vue')),
     meta: { section: 'roles' }
+  },
+  {
+    path: '/workday',
+    name: 'Workday',
+    component: lazy(() => import('../views/Workday.vue')),
+    // Гард по секции не ставим: страница сама фильтрует — обычный
+    // юзер видит только свои сессии, admin (workday_admin) — всех.
+  },
+  {
+    path: '/me',
+    name: 'MyProfile',
+    component: lazy(() => import('../views/MyProfile.vue')),
+    // Профиль доступен любому авторизованному; гарда по секции нет.
+  },
+  {
+    path: '/absences',
+    name: 'Absences',
+    component: lazy(() => import('../views/Absences.vue')),
+    // Раздел `absences` — collection-gate включён на бэке; страница
+    // сама показывает только релевантные пользователю записи.
   }
 ]
 
@@ -270,7 +318,12 @@ router.beforeEach(async (to, from, next) => {
   const auth = useAuthStore()
   const isPublic = to.meta?.public
 
-  if (!auth.sessionChecked && !auth.pendingTwoFactor && !auth.pendingTwoFactorSetup) {
+  // Первая проверка сессии: всегда дёргаем бэк, чтобы он подтвердил
+  // или опроверг pending-флоу (2FA challenge/setup). Раньше условие
+  // включало `!pendingTwoFactorSetup` — из-за этого зомби-pending
+  // из sessionStorage прошлой попытки переживал смену БД/REQUIRE_2FA
+  // и фронт упорно гнал юзера на форму setup, минуя бэк.
+  if (!auth.sessionChecked) {
     await auth.restoreSession()
   } else if (!isPublic && !auth.accessToken && !auth.pendingTwoFactor && !auth.pendingTwoFactorSetup) {
     try {
@@ -280,9 +333,16 @@ router.beforeEach(async (to, from, next) => {
     }
   }
 
+  // Доверяем бэку: setup нужен ровно тогда, когда бэк его явно
+  // запросил (через login/session → pendingTwoFactorSetup в стор).
+  // Раньше тут была дополнительная «защита» по `user.two_factor_enabled
+  // === false`, которая загоняла любого пользователя без 2FA в форму
+  // setup — даже если бэк отключил требование (REQUIRE_TWO_FACTOR=false
+  // на локалке). Это формировало мёртвую петлю: TOTP-код с
+  // короткоживущим серверным секретом не сходился, фронт не выпускал.
   const requiresTwoFactorSetup = isTestPortalVariant
     ? false
-    : Boolean(auth.pendingTwoFactorSetup || (auth.accessToken && auth.user && auth.user.two_factor_enabled === false))
+    : Boolean(auth.pendingTwoFactorSetup)
   if (!isPublic && !auth.accessToken) {
     return next({ path: '/login', query: { redirect: to.fullPath } })
   }

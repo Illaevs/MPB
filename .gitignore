@@ -28,10 +28,15 @@ __pycache__/
 # Databases (никогда не должны попадать в публичный репо)
 # ============================================================
 *.db
+*.db-shm
+*.db-wal
+*.db.bak*
 *.sqlite
 *.sqlite3
 test_portal/*.db
 test_portal/*.db-*
+test_portal/*.bak*
+test_portal/*.err
 
 # ============================================================
 # Backups / generated dumps
@@ -111,5 +116,71 @@ _exports/
 /tmp-debug-*.docx
 /tmp-debug-*.xml
 
-# Логи в корне
+# Логи где угодно
 *.log
+logs/
+
+# Локальный runtime storage
+_storage/
+backend/_storage/
+
+# Deploy-конфиги с кредами и серверные конфиги
+*.sftp
+*.conf
+fix_nginx_*.sh
+
+# Локальные backup-файлы любого вида (точка и дефис)
+*.bak
+*.bak_*
+*.bak-*
+*-bak-*
+*-bak_*
+*.dashboard-bak
+
+# Debug-выгрузки фронта
+frontend/debug_*.xml
+frontend/debug_*.json
+
+# Архивы
+*.rar
+*.7z
+
+# Windows-артефакт
+nul
+
+# Одноразовые скрипты и данные в корне репо (не в подпапках —
+# чтобы не зацепить настоящие test_*.py внутри backend/tests/)
+/check_*.py
+/cleanup_*.py
+/create_stress_*.py
+/stress_test.py
+/fix_tasks_table.py
+/test_*.py
+/temp_*.py
+/import_book3_*.py
+
+# Ad-hoc SQL в корне
+/dealprod_*.sql
+/drop_*.sql
+/create_test_task.sql
+/link_*.sql
+/links_query.sql
+/spa_*.sql
+/stage_*.sql
+
+# Excel/CSV и data-импорт в корне
+/book3*
+/lists*.xlsx
+/temp.csv
+/letterhtml.html
+
+# Junk-документы в корне
+/backend_filelist.txt
+/newdocs.txt
+/tmp.docx
+/tmp.pdf
+
+# Локальные старт-скрипты
+/run_frontend.bat
+/run_backend.bat
+frontend/run_*.bat

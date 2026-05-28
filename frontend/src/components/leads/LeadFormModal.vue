@@ -1,5 +1,5 @@
 <template>
-  <div v-if="modelValue" class="modal-overlay" @click.self="cancel">
+  <div v-if="modelValue" class="modal-overlay" v-modal-close="cancel">
     <div class="modal-content lead-form-modal" @click.stop>
       <div class="modal-header">
         <h3 class="m-0">{{ isEditing ? 'Редактировать лид' : 'Новый лид' }}</h3>
@@ -51,10 +51,6 @@
             <label>Заказчик</label>
             <CompanySmartSelect v-model="form.customer_id" :options="companies" placeholder="Найти заказчика" />
           </div>
-          <div class="form-group">
-            <label>Наша компания</label>
-            <CompanySmartSelect v-model="form.our_company_id" :options="internalCompanies" placeholder="Найти нашу компанию" />
-          </div>
         </div>
 
         <div class="form-row">
@@ -80,19 +76,16 @@
               class="form-control"
               min="0"
               max="100"
-              step="0.1"
+              step="1"
               @blur="clampAdvance"
             />
           </div>
-          <div class="form-group">
-            <label>НДС</label>
-            <select v-model.number="form.vat_rate" class="form-control">
-              <option :value="0">0%</option>
-              <option :value="10">10%</option>
-              <option :value="20">20%</option>
-              <option :value="22">22%</option>
-            </select>
-          </div>
+          <!-- НДС больше не выбирается на уровне лида — он определяется
+               автоматически по составу товаров (per-line tax_rate). Это
+               держит лид и КП консистентными. vat_rate в form-data
+               остаётся со значением по умолчанию (22), бэк его получит,
+               но пользователь не видит и не меняет. -->
+          <div class="form-group"></div>
         </div>
       </form>
 
@@ -136,10 +129,11 @@ const blank = () => ({
   object_type: '',
   object_area: null,
   customer_id: '',
-  our_company_id: '',
   responsible_user_id: '',
   advance_percent: 0,
-  vat_rate: 20,
+  // НДС больше не выбирается в UI — лид имеет дефолт 22% для бэка,
+  // фактическая ставка считается по составу товаров (per-line tax_rate).
+  vat_rate: 22,
   status: 'incoming',
 })
 
@@ -150,7 +144,6 @@ export default {
     modelValue: { type: Boolean, default: false },
     lead: { type: Object, default: null },
     companies: { type: Array, default: () => [] },
-    internalCompanies: { type: Array, default: () => [] },
     users: { type: Array, default: () => [] },
     statuses: { type: Array, default: () => [] },
     saving: { type: Boolean, default: false },
@@ -182,7 +175,6 @@ export default {
           ...blank(),
           ...props.lead,
           customer_id: matchCompanyId(props.lead.customer_id),
-          our_company_id: matchCompanyId(props.lead.our_company_id),
           responsible_user_id: matchUserId(props.lead.responsible_user_id),
         }
       } else {

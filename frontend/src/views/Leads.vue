@@ -42,10 +42,6 @@
               </div>
               <div class="advanced-filters">
                 <div class="form-group form-group--full">
-                  <label>Наша компания</label>
-                  <CompanySmartSelect v-model="filters.our_company_id" :options="internalCompanies" placeholder="Любая" @update:modelValue="resetAndLoad" />
-                </div>
-                <div class="form-group form-group--full">
                   <label>Заказчик</label>
                   <CompanySmartSelect v-model="filters.customer_id" :options="customerCompanies" placeholder="Любой" @update:modelValue="resetAndLoad" />
                 </div>
@@ -110,10 +106,6 @@
         <span v-if="filters.status" class="filter-pill" :class="`lead-status-${filters.status}`">
           {{ statusLabel(filters.status) }}
           <button type="button" @click="setStatus('')"><i class="fas fa-times"></i></button>
-        </span>
-        <span v-if="filters.our_company_id" class="filter-pill">
-          Наша: {{ getCompanyName(filters.our_company_id) }}
-          <button type="button" @click="filters.our_company_id = ''; resetAndLoad()"><i class="fas fa-times"></i></button>
         </span>
         <span v-if="filters.customer_id" class="filter-pill">
           Заказчик: {{ getCompanyName(filters.customer_id) }}
@@ -264,9 +256,11 @@
               <td class="text-muted">{{ getCompanyName(lead.customer_id) || '—' }}</td>
               <td class="leads-assignee-cell">
                 <template v-if="lead.responsible_user_id">
-                  <span class="user-avatar xs" :class="`avatar-${avatarColor(getUserName(lead.responsible_user_id))}`">
-                    {{ initials(getUserName(lead.responsible_user_id)) }}
-                  </span>
+                  <UiAvatar
+                    :name="getUserName(lead.responsible_user_id)"
+                    :src="getUserAvatarUrl(lead.responsible_user_id)"
+                    size="xs"
+                  />
                   <span class="text-muted small">{{ getUserName(lead.responsible_user_id) }}</span>
                 </template>
                 <span v-else class="text-muted">—</span>
@@ -310,6 +304,7 @@
               v-for="lead in leadsByStatus[status.key]"
               :key="lead.id"
               class="kanban-card"
+              :class="{ 'kanban-card--dragging': draggingLeadId === lead.id }"
               draggable="true"
               @dragstart="onDragStart($event, lead)"
               @click="openDetail(lead)"
@@ -328,9 +323,13 @@
               </div>
               <div class="kanban-card__foot">
                 <span class="kanban-card__amount">{{ lead.total_value ? formatCurrency(lead.total_value) : '—' }}</span>
-                <span v-if="lead.responsible_user_id" class="user-avatar xs" :class="`avatar-${avatarColor(getUserName(lead.responsible_user_id))}`" :title="getUserName(lead.responsible_user_id)">
-                  {{ initials(getUserName(lead.responsible_user_id)) }}
-                </span>
+                <UiAvatar
+                  v-if="lead.responsible_user_id"
+                  :name="getUserName(lead.responsible_user_id)"
+                  :src="getUserAvatarUrl(lead.responsible_user_id)"
+                  size="xs"
+                  tooltip
+                />
               </div>
             </div>
             <div v-if="!leadsByStatus[status.key].length" class="kanban-empty">Перетащите сюда</div>
@@ -381,7 +380,6 @@
       v-model="showFormModal"
       :lead="editingLead"
       :companies="companies"
-      :internal-companies="internalCompanies"
       :users="users"
       :statuses="KANBAN_STATUSES_FOR_FORM"
       :saving="saving"
@@ -398,6 +396,8 @@ import { api, rawRequest } from '@/services/api'
 import SkeletonLoader from '../components/ui/SkeletonLoader.vue'
 import CompanySmartSelect from '../components/ui/CompanySmartSelect.vue'
 import UiChipFilter from '../components/ui/UiChipFilter.vue'
+import UiAvatar from '../components/ui/UiAvatar.vue'
+import { normalizeAvatarUrl } from '../utils/avatar'
 import LeadFormModal from '../components/leads/LeadFormModal.vue'
 import {
   UiButton,
@@ -444,7 +444,7 @@ const clickOutside = {
 export default {
   name: 'Leads',
   components: {
-    SkeletonLoader, CompanySmartSelect, UiChipFilter, LeadFormModal,
+    SkeletonLoader, CompanySmartSelect, UiChipFilter, UiAvatar, LeadFormModal,
     UiButton, UiIconButton, UiInput, UiEmptyState,
   },
   directives: { 'click-outside': clickOutside },
@@ -466,7 +466,6 @@ export default {
     const filters = ref({
       search: '',
       status: '',
-      our_company_id: '',
       customer_id: '',
     })
 
@@ -488,17 +487,17 @@ export default {
     const openRowMenuId = ref(null)
     const rowMenuCoords = ref({ top: 0, left: 0 })
     const dragOverStatus = ref(null)
+    const draggingLeadId = ref(null)
     let draggedLead = null
     let searchTimer = null
 
     const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
-    const internalCompanies = computed(() => companies.value.filter(c => c.type === 'internal'))
     const customerCompanies = computed(() => companies.value.filter(c => c.type === 'customer'))
 
     const KANBAN_STATUSES_FOR_FORM = KANBAN_STATUSES.filter(s => s.key !== 'converted')
 
-    const hasMoreFilters = computed(() => !!(filters.value.our_company_id || filters.value.customer_id))
-    const activeMoreFiltersCount = computed(() => (filters.value.our_company_id ? 1 : 0) + (filters.value.customer_id ? 1 : 0))
+    const hasMoreFilters = computed(() => !!(filters.value.customer_id))
+    const activeMoreFiltersCount = computed(() => (filters.value.customer_id ? 1 : 0))
     const hasActiveFilters = computed(() => !!(
       filters.value.search || filters.value.status || hasMoreFilters.value
     ))
@@ -514,6 +513,17 @@ export default {
       if (!id) return ''
       const u = users.value.find(x => normalizeId(x.id) === normalizeId(id))
       return u ? (u.full_name || u.email || '—') : ''
+    }
+    // Резолвим avatar_url пользователя по id для рендера в UiAvatar.
+    // normalizeAvatarUrl даёт корректный относительный URL под нашу
+    // storage-проксю (с правильным временным querystring).
+    const getUserAvatarUrl = (id) => {
+      if (!id) return null
+      const u = users.value.find(x => normalizeId(x.id) === normalizeId(id))
+      const raw = u?.avatar_url || ''
+      if (!raw) return null
+      try { return normalizeAvatarUrl(raw, u.id) || null }
+      catch { return raw }
     }
     const initials = (name) => {
       if (!name) return '?'
@@ -539,7 +549,6 @@ export default {
       const q = {}
       if (filters.value.search) q.q = filters.value.search
       if (filters.value.status) q.status = filters.value.status
-      if (filters.value.our_company_id) q.our = filters.value.our_company_id
       if (filters.value.customer_id) q.customer = filters.value.customer_id
       if (page.value > 1) q.page = String(page.value)
       if (pageSize.value !== 20) q.size = String(pageSize.value)
@@ -551,7 +560,6 @@ export default {
       const q = route.query || {}
       if (q.q) filters.value.search = String(q.q)
       if (q.status) filters.value.status = String(q.status)
-      if (q.our) filters.value.our_company_id = String(q.our)
       if (q.customer) filters.value.customer_id = String(q.customer)
       if (q.page) page.value = parseInt(q.page, 10) || 1
       if (q.size) pageSize.value = parseInt(q.size, 10) || pageSize.value
@@ -575,7 +583,6 @@ export default {
         const f = filters.value
         if (f.search) params.search = f.search
         if (f.status) params.status = f.status
-        if (f.our_company_id) params.our_company_id = f.our_company_id
         if (f.customer_id) params.customer_id = f.customer_id
 
         const permissions = getStoredPermissions()
@@ -625,9 +632,9 @@ export default {
     }
     const resetAndLoad = () => { page.value = 1; loadLeads() }
     const setStatus = (s) => { filters.value.status = s; resetAndLoad() }
-    const clearAdvancedFilters = () => { filters.value.our_company_id = ''; filters.value.customer_id = ''; resetAndLoad() }
+    const clearAdvancedFilters = () => { filters.value.customer_id = ''; resetAndLoad() }
     const clearAllFilters = () => {
-      filters.value = { search: '', status: '', our_company_id: '', customer_id: '' }
+      filters.value = { search: '', status: '', customer_id: '' }
       resetAndLoad()
     }
     const onPageSizeChange = () => {
@@ -803,11 +810,20 @@ export default {
     })
     const onDragStart = (e, lead) => {
       draggedLead = lead
+      draggingLeadId.value = lead.id
       e.dataTransfer.effectAllowed = 'move'
       try { e.dataTransfer.setData('text/plain', lead.id) } catch (_) {}
+      // Сбрасываем визуальный флаг по окончании drag — независимо от того,
+      // дроп ли это, отмена или escape. dragend срабатывает в любом случае.
+      const onEnd = () => {
+        draggingLeadId.value = null
+        e.target.removeEventListener('dragend', onEnd)
+      }
+      e.target.addEventListener('dragend', onEnd)
     }
     const onKanbanDrop = async (event, newStatus) => {
       dragOverStatus.value = null
+      draggingLeadId.value = null
       const lead = draggedLead || leads.value.find(l => l.id === event.dataTransfer.getData('text/plain'))
       draggedLead = null
       if (!lead || lead.status === newStatus) return
@@ -853,17 +869,17 @@ export default {
 
     return {
       KANBAN_STATUSES, KANBAN_STATUSES_FOR_FORM, LEAD_STATUS_OPTIONS,
-      leads, companies, users, internalCompanies, customerCompanies,
+      leads, companies, users, customerCompanies,
       total, totalPages, loading, saving,
       filters, page, pageSize, sortBy, sortDir, viewMode,
       statusFilterOpen, moreFiltersOpen, showFormModal, editingLead,
       selectedIds, bulkBusy, inlineStatusOpenId, inlineStatusBusyId,
-      openRowMenuId, rowMenuCoords, rowMenuTarget, dragOverStatus,
+      openRowMenuId, rowMenuCoords, rowMenuTarget, dragOverStatus, draggingLeadId,
       hasMoreFilters, activeMoreFiltersCount, hasActiveFilters,
       allOnPageSelected, someOnPageSelected,
       leadsByStatus,
       // helpers
-      statusLabel, getCompanyName, getUserName, initials, avatarColor, formatCurrency, formatDate,
+      statusLabel, getCompanyName, getUserName, getUserAvatarUrl, initials, avatarColor, formatCurrency, formatDate,
       // actions
       debouncedSearch, resetAndLoad, setStatus, clearAdvancedFilters, clearAllFilters,
       onPageSizeChange, goToPage, toggleSort, setViewMode,
@@ -1425,10 +1441,19 @@ export default {
   min-height: 100%;
   transition: background var(--dur-fast) ease, outline-color var(--dur-fast) ease;
 }
+/* Раньше при dragover выделялся ВЕСЬ контейнер колонки (фон + outline) —
+   столбец сам выглядел «выбранным», как будто пользователь тащит колонку,
+   а не карточку. Делаем тоньше: подсветка живёт в `.kanban-items`,
+   рамка/фон колонки не двигаются. */
 .kanban-column--drop {
+  background: var(--color-surface-2);
+  outline: none;
+}
+.kanban-column--drop .kanban-items {
   background: var(--color-primary-soft);
   outline: 2px dashed var(--color-primary);
   outline-offset: -4px;
+  border-radius: var(--radius-sm);
 }
 .kanban-header {
   display: flex;
@@ -1439,6 +1464,12 @@ export default {
   border-radius: var(--radius-sm);
   font-weight: var(--fw-semibold);
   font-size: var(--text-base);
+  /* Sticky header — название колонки прилипает к верху при скролле
+     длинного списка. top: 0 от scrollable ancestor — обычно kanban-board.
+     z-index выше карточек, чтобы перекрывать их при наезде. */
+  position: sticky;
+  top: 0;
+  z-index: 3;
 }
 .kanban-header__label {
   flex: 1;
@@ -1459,7 +1490,12 @@ export default {
   flex-direction: column;
   gap: var(--space-2);
   overflow-y: auto;
-  flex: 1;
+  /* Drop-zone — на всю оставшуюся высоту колонки. Без min-height пустое
+     место под последней карточкой не реагирует на drop (мёртвая зона). */
+  flex: 1 1 auto;
+  min-height: 240px;
+  padding: 4px 0 8px;
+  transition: background var(--dur-fast) ease, outline-color var(--dur-fast) ease;
 }
 .kanban-card {
   background: var(--color-surface);
@@ -1471,6 +1507,14 @@ export default {
 }
 .kanban-card:hover { border-color: var(--color-primary); box-shadow: var(--shadow-xs); }
 .kanban-card:active { cursor: grabbing; }
+/* Source-card во время DnD: приглушаем — пользователь видит, что именно
+   эта карточка перетаскивается. Браузер на месте курсора рисует
+   собственный полупрозрачный «снимок» — этого достаточно как drag image. */
+.kanban-card--dragging {
+  opacity: 0.45;
+  border: 2px dashed var(--color-primary) !important;
+  background: var(--color-primary-soft) !important;
+}
 .kanban-card__head {
   display: flex;
   justify-content: space-between;

@@ -1,5 +1,5 @@
 <template>
-  <div v-if="show" class="modal-overlay" @click="$emit('close')">
+  <div v-if="show" class="modal-overlay" v-modal-close="() => $emit('close')">
     <div class="modal-content" style="max-width: 540px;" @click.stop>
       <div class="modal-header">
         <h3 class="m-0">Массовое создание расходов</h3>

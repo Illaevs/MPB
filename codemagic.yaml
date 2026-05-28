@@ -1,0 +1,82 @@
+workflows:
+  ios-unsigned-check:
+    name: iOS unsigned check
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      vars:
+        PROJECT_DIR: mobile_app
+        BUNDLE_ID: ru.mpb.erp.mobile
+    scripts:
+      - name: Install Flutter dependencies
+        script: |
+          cd "$CM_BUILD_DIR/$PROJECT_DIR"
+          flutter pub get
+      - name: Static checks
+        script: |
+          cd "$CM_BUILD_DIR/$PROJECT_DIR"
+          flutter analyze
+          flutter test
+      - name: Install CocoaPods dependencies
+        script: |
+          cd "$CM_BUILD_DIR/$PROJECT_DIR/ios"
+          pod install
+      - name: Build unsigned iOS app
+        script: |
+          cd "$CM_BUILD_DIR/$PROJECT_DIR"
+          flutter build ios --release --no-codesign
+    artifacts:
+      - mobile_app/build/ios/iphoneos/*.app
+      - /tmp/xcodebuild_logs/*.log
+
+  ios-testflight:
+    name: iOS TestFlight
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    integrations:
+      app_store_connect: codemagic-app-store-connect
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      vars:
+        PROJECT_DIR: mobile_app
+        BUNDLE_ID: ru.mpb.erp.mobile
+        APP_STORE_APPLE_ID: ""
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: ru.mpb.erp.mobile
+    scripts:
+      - name: Install Flutter dependencies
+        script: |
+          cd "$CM_BUILD_DIR/$PROJECT_DIR"
+          flutter pub get
+      - name: Static checks
+        script: |
+          cd "$CM_BUILD_DIR/$PROJECT_DIR"
+          flutter analyze
+          flutter test
+      - name: Install CocoaPods dependencies
+        script: |
+          cd "$CM_BUILD_DIR/$PROJECT_DIR/ios"
+          pod install
+      - name: Apply provisioning profiles
+        script: |
+          xcode-project use-profiles
+      - name: Build signed IPA
+        script: |
+          cd "$CM_BUILD_DIR/$PROJECT_DIR"
+          BUILD_NUMBER="${CM_BUILD_ID}"
+          flutter build ipa --release --build-number="$BUILD_NUMBER"
+    artifacts:
+      - mobile_app/build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        beta_groups:
+          - Internal

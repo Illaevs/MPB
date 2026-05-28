@@ -341,6 +341,18 @@ const submit = async () => {
     if (data?.requires_2fa_setup) {
       password.value = ''
       twoFactorCode.value = ''
+      if (!auth.pendingTwoFactorSetup) {
+        auth.setPendingTwoFactorSetup({ email: data?.user?.email || email.value })
+      }
+      await startRequiredTwoFactorSetup()
+      return
+    }
+    // Authenticated but 2FA not yet set up while the backend enforces it:
+    // route straight into the mandatory setup form instead of leaving the
+    // user stuck on the "Сессия активна / Продолжить работу" screen
+    // (previously only handled on a full page reload via onMounted).
+    if (!isTestPortalVariant && auth.accessToken && auth.user?.two_factor_enabled === false) {
+      auth.setPendingTwoFactorSetup({ email: auth.user?.email || email.value })
       await startRequiredTwoFactorSetup()
       return
     }
@@ -449,8 +461,15 @@ watch(pendingTwoFactorSetup, async (value) => {
 })
 
 onMounted(async () => {
-  if (!isTestPortalVariant && auth.accessToken && auth.user?.two_factor_enabled === false) {
-    auth.setPendingTwoFactorSetup({ email: auth.user?.email || '' })
+  // Бэк — единственный источник истины: ставит pendingTwoFactorSetup
+  // только в login() при ответе requires_2fa_setup=true. Раньше тут
+  // был жёсткий ре-набрасывание pending'а при каждом монтировании /login
+  // для любого юзера без 2FA — из-за этого в браузерах с сохранённой
+  // сессией (или REQUIRE_TWO_FACTOR=false на бэке) форма setup всё
+  // равно «оживала», и пользователь зацикливался на 400 на TOTP.
+  // Если pendingTwoFactorSetup действительно нужен — он уже стоит из
+  // login(). Если бэк настройку не требует, ничего не делаем.
+  if (pendingTwoFactorSetup.value && !setupSecret.value && !loading.value) {
     await startRequiredTwoFactorSetup()
     return
   }
@@ -656,9 +675,12 @@ onMounted(async () => {
 /* ---------- Right panel ---------- */
 .login-main {
   display: flex;
-  align-items: center;
+  align-items: safe center;
   justify-content: center;
   padding: var(--space-10);
+  min-height: 0;
+  max-height: 100%;
+  overflow-y: auto;
   background: linear-gradient(180deg, var(--color-surface) 0%, var(--color-surface-2) 100%);
 }
 
@@ -867,13 +889,22 @@ onMounted(async () => {
 
 /* 2FA setup */
 .login-setup {
-  display: grid;
-  grid-template-columns: 200px 1fr;
+  display: flex;
+  flex-direction: column;
   gap: var(--space-5);
   padding: var(--space-5);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface-2);
+  min-width: 0;
+}
+
+.login-setup__meta {
+  min-width: 0;
+}
+
+.login-secret {
+  overflow-wrap: anywhere;
 }
 
 .login-setup__qr {

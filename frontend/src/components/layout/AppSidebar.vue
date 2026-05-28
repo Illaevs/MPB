@@ -2,7 +2,7 @@
   <button class="hamburger-btn" @click="toggleMobileMenu">
     <i class="fas" :class="isMobileMenuOpen ? 'fa-times' : 'fa-bars'"></i>
   </button>
-  <div class="mobile-overlay" :class="{ active: isMobileMenuOpen }" @click="closeMobileMenu"></div>
+  <div class="mobile-overlay" :class="{ active: isMobileMenuOpen }" v-modal-close="closeMobileMenu"></div>
 
   <aside class="sidebar" :class="sidebarClasses">
     <div class="sidebar-header">
@@ -519,13 +519,19 @@ export default {
 
 .nav-link.router-link-active {
   background: #e7f0ff;
-  border-left-color: var(--color-primary);
+  border-left-color: transparent;
   color: var(--color-primary);
   font-weight: var(--fw-semibold);
 }
 
 .sidebar.collapsed .nav-link.router-link-active {
   border-left-color: transparent;
+}
+
+.nav-link:focus,
+.nav-link:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
 /* ============================================================

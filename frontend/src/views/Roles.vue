@@ -199,6 +199,27 @@
             <small>Глава узла видит/правит записи всего своего поддерева. По умолчанию выкл.</small>
           </span>
         </label>
+        <label class="access-subtree-toggle">
+          <input type="checkbox" v-model="roleForm.track_work_time" />
+          <span>
+            Учитывать рабочее время
+            <small>Включает блокирующий модал «Начать рабочий день» и счётчик в шапке. Customer-роли не отмечаем.</small>
+          </span>
+        </label>
+        <div v-if="roleForm.track_work_time" class="access-role-numeric">
+          <label>
+            Авто-стоп при бездействии (мин)
+            <input
+              type="number"
+              min="5"
+              max="240"
+              step="5"
+              v-model.number="roleForm.idle_timeout_minutes"
+              placeholder="30"
+            />
+          </label>
+          <small>Через сколько минут без активности сессия закрывается автоматически. Пусто = по умолчанию 30.</small>
+        </div>
       </div>
 
       <template #footer>
@@ -226,7 +247,8 @@ import {
 } from '../components/ui'
 
 const SECTION_LABELS = {
-  projects: 'Сделки',
+  projects: 'Проекты',
+  data_health: 'Контроль данных',
   leads: 'Лиды',
   companies: 'Контрагенты',
   customer_portal: 'Кабинет заказчика',
@@ -240,6 +262,7 @@ const SECTION_LABELS = {
   tasks: 'Задачи',
   task_chat: 'Чат по задачам',
   global_chat: 'Общий чат',
+  feed: 'Лента новостей (публикация — edit_all)',
   calendar: 'Календарь',
   executor: 'Панель исполнителя',
   work_results_reviews: 'Согласования результатов',
@@ -257,14 +280,16 @@ const SECTION_LABELS = {
   users: 'Пользователи',
   roles: 'Роли и права',
   org_structure: 'Структура организации',
-  support: 'Тех. поддержка'
+  support: 'Тех. поддержка',
+  workday_admin: 'Учёт времени (статистика)',
+  absences: 'Отсутствия (отпуска/больничные/командировки)'
 }
 
 const SECTION_GROUPS = [
   {
     key: 'crm',
     label: 'CRM',
-    sections: ['projects', 'leads', 'companies', 'customer_portal']
+    sections: ['projects', 'data_health', 'leads', 'companies', 'customer_portal']
   },
   {
     key: 'documents',
@@ -274,7 +299,7 @@ const SECTION_GROUPS = [
   {
     key: 'planning',
     label: 'Задачи и коммуникации',
-    sections: ['tasks', 'task_chat', 'global_chat', 'calendar', 'executor', 'work_results_reviews', 'support']
+    sections: ['tasks', 'task_chat', 'global_chat', 'feed', 'calendar', 'executor', 'work_results_reviews', 'support']
   },
   {
     key: 'legal',
@@ -294,7 +319,7 @@ const SECTION_GROUPS = [
   {
     key: 'admin',
     label: 'Администрирование',
-    sections: ['users', 'roles', 'org_structure']
+    sections: ['users', 'roles', 'org_structure', 'workday_admin', 'absences']
   }
 ]
 
@@ -309,7 +334,9 @@ const PERMISSION_COLUMNS = [
 // Для остальных разделов «свои» ≡ «все» (per-record владельца нет).
 const OWNABLE_SECTIONS = new Set([
   'projects', 'contracts', 'income_expense',
-  'outgoing_registry', 'leads', 'tasks'
+  'outgoing_registry', 'leads', 'tasks', 'task_chat', 'support',
+  // Свои отсутствия — `edit_assigned` (создать/править отпуск себе).
+  'absences'
 ])
 const ASSIGNED_COLUMNS = new Set(['read_assigned', 'edit_assigned'])
 
@@ -346,7 +373,9 @@ export default {
       id: '',
       name: '',
       description: '',
-      subtree_scope: false
+      subtree_scope: false,
+      track_work_time: false,
+      idle_timeout_minutes: null
     })
 
     const selectedRole = computed(() => roles.value.find((role) => role.id === selectedRoleId.value) || null)
@@ -559,7 +588,12 @@ export default {
     const openCreate = () => {
       showModal.value = true
       isEditing.value = false
-      roleForm.value = { id: '', name: '', description: '', subtree_scope: false }
+      roleForm.value = {
+        id: '', name: '', description: '',
+        subtree_scope: false,
+        track_work_time: false,
+        idle_timeout_minutes: null
+      }
     }
 
     const editRole = (role) => {
@@ -570,7 +604,9 @@ export default {
         id: role.id,
         name: role.name,
         description: role.description || '',
-        subtree_scope: Boolean(role.subtree_scope)
+        subtree_scope: Boolean(role.subtree_scope),
+        track_work_time: Boolean(role.track_work_time),
+        idle_timeout_minutes: role.idle_timeout_minutes ?? null
       }
     }
 
@@ -584,7 +620,13 @@ export default {
         const payload = {
           name: roleForm.value.name,
           description: roleForm.value.description,
-          subtree_scope: Boolean(roleForm.value.subtree_scope)
+          subtree_scope: Boolean(roleForm.value.subtree_scope),
+          track_work_time: Boolean(roleForm.value.track_work_time),
+          idle_timeout_minutes: (
+            roleForm.value.track_work_time && Number.isFinite(Number(roleForm.value.idle_timeout_minutes))
+              ? Number(roleForm.value.idle_timeout_minutes)
+              : null
+          )
         }
         const saved = isEditing.value
           ? await api.roles.update(roleForm.value.id, payload)
@@ -1009,6 +1051,35 @@ export default {
   color: var(--color-text-muted, #7d8592);
   font-size: 11px;
   margin-top: 2px;
+}
+
+.access-role-numeric {
+  margin-left: 26px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--color-surface-2, #f6f8fb);
+  border: 1px solid var(--color-border, rgba(0,0,0,0.06));
+}
+.access-role-numeric label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--color-text, #0a1629);
+}
+.access-role-numeric input[type="number"] {
+  width: 80px;
+  padding: 4px 8px;
+  font-size: 13px;
+  border: 1px solid var(--color-border, rgba(0,0,0,0.1));
+  border-radius: 6px;
+  background: var(--color-surface, #fff);
+}
+.access-role-numeric small {
+  display: block;
+  color: var(--color-text-muted, #7d8592);
+  font-size: 11px;
+  margin-top: 4px;
 }
 
 @media (max-width: 980px) {

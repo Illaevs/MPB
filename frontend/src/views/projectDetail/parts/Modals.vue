@@ -2,7 +2,7 @@
   <div>
     <!-- Modals -->
     <!-- Add Product Modal -->
-    <div v-if="showAddProductModal" class="modal-overlay" @click="closeModal">
+    <div v-if="showAddProductModal" class="modal-overlay" v-modal-close="closeModal">
       <div class="modal-content modal-product" @click.stop style="max-width: 860px;">
         <div class="modal-header">
            <h4>Добавить товар в смету</h4>
@@ -66,7 +66,7 @@
     </div>
 
     <!-- Create Stage Modal -->
-    <div v-if="showCreateStageModal" class="modal-overlay" @click="closeCreateStageModal">
+    <div v-if="showCreateStageModal" class="modal-overlay" v-modal-close="closeCreateStageModal">
       <div class="modal-content" @click.stop style="max-width: 640px;">
         <div class="modal-header">
            <h4>{{ stageEditingId ? 'Редактировать этап' : 'Новый этап' }}</h4>
@@ -173,7 +173,7 @@
     </div>
 
     <!-- GIP Selection Modal -->
-    <div v-if="showGipDialog" class="modal-overlay" @click="closeGipDialog">
+    <div v-if="showGipDialog" class="modal-overlay" v-modal-close="closeGipDialog">
       <div class="modal-content" @click.stop style="max-width: 520px;">
         <div class="modal-header">
            <h4>Выбор ГИПа</h4>
@@ -212,7 +212,7 @@
     </div>
 
     <!-- Edit Product Modal -->
-    <div v-if="showEditProductModal" class="modal-overlay" @click="closeEditModal">
+    <div v-if="showEditProductModal" class="modal-overlay" v-modal-close="closeEditModal">
        <div class="modal-content" @click.stop style="max-width: 600px;">
           <div class="modal-header">
              <h4>Редактировать товар</h4>
@@ -267,7 +267,7 @@
     </div>
 
     <!-- Stage Products Modal -->
-    <div v-if="showStageProductsModal" class="modal-overlay" @click="closeStageProductsModal">
+    <div v-if="showStageProductsModal" class="modal-overlay" v-modal-close="closeStageProductsModal">
        <div class="modal-content" @click.stop style="max-width: 500px;">
           <div class="modal-header">
              <h4>Тома/работы для этапа</h4>
@@ -293,7 +293,7 @@
     </div>
 
     <!-- Subcontractor Stage Modal -->
-    <div v-if="showSubStageModal" class="modal-overlay" @click="closeSubStageModal">
+    <div v-if="showSubStageModal" class="modal-overlay" v-modal-close="closeSubStageModal">
        <div class="modal-content" @click.stop style="max-width: 600px;">
           <div class="modal-header">
              <h4>{{ subStageEditingId ? 'Редактировать этап субподрядчика' : 'Новый этап субподрядчика' }}</h4>
@@ -413,7 +413,7 @@
 
     <!-- Confirm Modal -->
     <Teleport to="body">
-      <div v-if="confirmModalOpen" class="modal-overlay confirm-overlay" @click.self="confirmModalOpen = false">
+      <div v-if="confirmModalOpen" class="modal-overlay confirm-overlay" v-modal-close="() => confirmModalOpen = false">
         <div class="modal-glass">
           <div class="modal-glass-header">
             <h5 class="m-0">{{ confirmModalTitle }}</h5>
@@ -435,7 +435,7 @@
     </Teleport>
 
     <Teleport to="body">
-      <div v-if="stageCloseModalOpen" class="modal-overlay" @click.self="closeStageCloseModal">
+      <div v-if="stageCloseModalOpen" class="modal-overlay" v-modal-close="closeStageCloseModal">
         <div class="modal-glass stage-close-modal" @click.stop>
           <div class="modal-glass-header">
             <div>
@@ -506,7 +506,7 @@
     </Teleport>
     <!-- Edit Project Modal -->
     <Teleport to="body">
-      <div v-if="showEditProjectModal" class="modal-overlay" @click.self="showEditProjectModal = false">
+      <div v-if="showEditProjectModal" class="modal-overlay" v-modal-close="() => showEditProjectModal = false">
         <div class="modal-content modal-glass" @click.stop style="max-width: 640px;">
           <div class="modal-glass-header">
             <h4 class="m-0">Редактировать сделку</h4>
@@ -532,11 +532,7 @@
                 <label>Тип объекта</label>
                 <select v-model="editProjectForm.object_type" class="form-control">
                   <option value="">Не указан</option>
-                  <option value="Жилой комплекс">Жилой комплекс</option>
-                  <option value="Офисное здание">Офисное здание</option>
-                  <option value="Производство">Производство</option>
-                  <option value="Торговый центр">Торговый центр</option>
-                  <option value="Другое">Другое</option>
+                  <option v-for="t in PROJECT_OBJECT_TYPES" :key="t" :value="t">{{ t }}</option>
                 </select>
               </div>
               <div class="form-group w-50">
@@ -544,21 +540,12 @@
                 <input v-model.number="editProjectForm.object_area" type="number" class="form-control" step="0.01">
               </div>
             </div>
-            <div class="d-flex gap-2 mb-2">
-              <div class="form-group w-50">
-                <label>Заказчик</label>
-                <select v-model="editProjectForm.customer_id" class="form-control">
-                  <option value="">Не выбран</option>
-                  <option v-for="c in companies" :key="c.id" :value="c.id">{{ c.name }}</option>
-                </select>
-              </div>
-              <div class="form-group w-50">
-                <label>Наша компания</label>
-                <select v-model="editProjectForm.our_company_id" class="form-control">
-                  <option value="">Не выбрана</option>
-                  <option v-for="c in internalCompanies" :key="c.id" :value="c.id">{{ c.name }}</option>
-                </select>
-              </div>
+            <div class="form-group mb-2">
+              <label>Заказчик</label>
+              <select v-model="editProjectForm.customer_id" class="form-control">
+                <option value="">Не выбран</option>
+                <option v-for="c in companies" :key="c.id" :value="c.id">{{ c.name }}</option>
+              </select>
             </div>
             <div class="form-group mb-2">
               <label>Статус</label>

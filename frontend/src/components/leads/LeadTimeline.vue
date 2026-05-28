@@ -240,6 +240,8 @@ import { useToast } from '../../composables/useToast'
 import { useConfirm } from '../../composables/useConfirm'
 import { normalizeAvatarUrl } from '../../utils/avatar'
 import { downloadFromApi } from '../../utils/download'
+import { formatDate as fmtDate, formatTime as fmtTime } from '../../utils/format'
+import { parseServerDate } from '../../composables/useServerClock'
 
 const COMPOSER_MODES = [
   { value: 'comment', label: 'Комментарий', icon: 'fas fa-comment' },
@@ -340,14 +342,14 @@ export default {
       const yesterday = new Date(today.getTime() - 86400000)
 
       filtered.value.forEach((item) => {
-        const d = new Date(item.created_at)
+        const d = parseServerDate(item.created_at) || new Date(item.created_at)
         const day = new Date(d.getFullYear(), d.getMonth(), d.getDate())
         const key = day.getTime()
         if (!map.has(key)) {
           let label
           if (key === today.getTime()) label = 'Сегодня'
           else if (key === yesterday.getTime()) label = 'Вчера'
-          else label = d.toLocaleDateString('ru-RU', { day: '2-digit', month: 'long', year: 'numeric' })
+          else label = fmtDate(d, { day: '2-digit', month: 'long', year: 'numeric' })
           const group = { key, label, items: [] }
           map.set(key, group)
           groups.push(group)
@@ -499,8 +501,8 @@ export default {
       return palette[Math.abs(h) % palette.length]
     }
     const resolveAvatar = (url, userId) => normalizeAvatarUrl(url, userId)
-    const formatTime = (v) => v ? new Date(v).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : ''
-    const formatDate = (v) => v ? new Date(v).toLocaleDateString('ru-RU') : ''
+    const formatTime = (v) => v ? fmtTime(v) : ''
+    const formatDate = (v) => v ? fmtDate(v) : ''
     const formatBytes = (b) => {
       const v = Number(b || 0)
       if (!v) return ''

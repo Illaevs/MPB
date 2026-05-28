@@ -63,6 +63,7 @@
     <div class="flex-grow-1 overflow-hidden position-relative">
        <div ref="contentScrollRef" class="h-100 overflow-auto scroll-container p-1">
           <Overview v-if="activeTab === 'overview'" :state="state" />
+          <Contracts v-if="activeTab === 'contracts'" :state="state" />
           <Products v-if="activeTab === 'products'" :state="state" />
           <Stages v-if="activeTab === 'stages'" :state="state" />
           <GanttPanel v-if="activeTab === 'gantt'" :state="state" />
@@ -74,7 +75,6 @@
     <Files v-if="activeTab === 'files'" :state="state" />
     <Problems v-if="activeTab === 'problems'" :state="state" />
     <Letters v-if="activeTab === 'letters'" :state="state" />
-    <Activity v-if="activeTab === 'activity'" :state="state" />
 
     <Modals :state="state" />
   </div>
@@ -102,6 +102,7 @@
  */
 import { useProjectDetailState } from './projectDetail/composables/useProjectDetailState'
 import Overview from './projectDetail/parts/Overview.vue'
+import Contracts from './projectDetail/parts/Contracts.vue'
 import Products from './projectDetail/parts/Products.vue'
 import Stages from './projectDetail/parts/Stages.vue'
 import GanttPanel from './projectDetail/parts/GanttPanel.vue'
@@ -110,14 +111,15 @@ import Defacto from './projectDetail/parts/Defacto.vue'
 import Files from './projectDetail/parts/Files.vue'
 import Problems from './projectDetail/parts/Problems.vue'
 import Letters from './projectDetail/parts/Letters.vue'
-import Activity from './projectDetail/parts/Activity.vue'
 import Modals from './projectDetail/parts/Modals.vue'
+// Activity.vue (полноэкранный таймлайн) — оставлен в parts/, но больше
+// не подключён: таймлайн отображается в правой колонке Overview.
 
 export default {
   name: 'ProjectDetail',
   components: {
-    Overview, Products, Stages, GanttPanel, Dejure, Defacto,
-    Files, Problems, Letters, Activity, Modals
+    Overview, Contracts, Products, Stages, GanttPanel, Dejure, Defacto,
+    Files, Problems, Letters, Modals
   },
   setup() {
     const state = useProjectDetailState()
@@ -595,11 +597,8 @@ export default {
   color: var(--md-sys-color-on-surface);
 }
 
-.overview-layout {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
+/* .overview-layout больше не используется — Overview переехал на
+   .project-overview-shell (единая «коробка» как у лидов). См. ниже. */
 
 .overview-kpis {
   align-items: stretch;
@@ -763,6 +762,184 @@ export default {
 .separator {
   height: 1px;
   background: var(--md-sys-color-outline-variant);
+}
+
+/* ============================================================
+   Единая «коробка» Обзора (1-в-1 с .lead-detail-body у лидов).
+   Обе колонки + все .card внутри получают одну общую рамку 12px,
+   индивидуальные рамки/тени снимаются.
+   ============================================================ */
+.project-overview-shell {
+  border: 1px solid var(--md-sys-color-outline-variant, rgba(15, 23, 42, 0.08));
+  border-radius: 12px;
+  background: var(--md-sys-color-surface, #fff);
+  overflow: hidden;
+  /* scroll-container оборачивает Overview с p-1 (4px), у лидов это
+     убирается через .lead-detail-body .scroll-container { padding:0 }
+     — у нас shell ВНУТРИ scroll-container, поэтому компенсируем
+     negative-margin'ом, чтобы рамка прилегала к самой границе. */
+  margin: -4px;
+  height: calc(100% + 8px);
+}
+.project-overview-shell .card,
+.project-overview-shell .dashboard-left .card,
+.project-overview-shell .dashboard-right,
+.project-overview-shell .glass-card,
+.project-overview-shell .composer {
+  border: none;
+  border-radius: 0;
+  /* !important нужен, чтобы перебить .card { box-shadow: var(--shadow-sm) }
+     из main.css (там без префикса селектора, повышенная специфичность
+     даёт shell-селектор, но дочерние .card.composer внутри scoped-стилей
+     DealTimeline могут перебивать обратно). */
+  box-shadow: none !important;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+/* НЕ задаём grid-template-columns — наследуем из main.css `450px 1fr`,
+   ровно как у лидов. Иначе колонки превращаются в 50:50, что и было
+   причиной "разной ширины блоков с лидом". */
+.project-overview-shell .dashboard-grid {
+  gap: 0;
+  height: 100%;
+}
+.project-overview-shell .dashboard-grid .dashboard-right {
+  border-left: 1px solid var(--md-sys-color-outline-variant, rgba(15, 23, 42, 0.08));
+}
+.project-overview-shell .dashboard-left {
+  gap: 0;
+}
+.project-overview-shell .dashboard-left > .card + .card {
+  border-top: 1px solid var(--md-sys-color-outline-variant, rgba(15, 23, 42, 0.08));
+}
+
+/* В контексте Overview-shell базовый info-grid/info-row из main.css
+   (gap:12px, align-items:baseline, без padding/border) — но локальные
+   правила .info-row { padding:8px 0; border-bottom } ниже в этом же
+   файле перебивают их для других вкладок ProjectDetail. Здесь отменяем
+   эти переопределения, чтобы строки выглядели как у лидов. */
+.project-overview-shell .info-grid {
+  gap: 12px;
+}
+.project-overview-shell .info-row {
+  align-items: baseline;
+  padding: 0;
+  border-bottom: none;
+}
+
+/* Блок «Привязанные ГИПы» встроен в общую info-grid — без подложки,
+   без рамки. */
+.project-gip-actions {
+  padding-top: 4px;
+}
+.project-gip-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 0;
+}
+
+@media (max-width: 992px) {
+  .project-overview-shell .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+  .project-overview-shell .dashboard-grid .dashboard-right {
+    border-left: none;
+    border-top: 1px solid var(--md-sys-color-outline-variant, rgba(15, 23, 42, 0.08));
+  }
+}
+
+/* ============================================================
+   Inline-edit стиль (тот же, что в LeadDetail)
+   ============================================================ */
+.info-row--editable {
+  cursor: text;
+  border-radius: 6px;
+  padding: 2px 6px;
+  margin: 0 -6px;
+  transition: background 0.12s ease;
+}
+.info-row--editable:hover {
+  background: var(--md-sys-color-surface-container-low, rgba(15, 23, 42, 0.04));
+}
+.info-row--editable:hover .info-row__value::after {
+  content: '\f303';  /* fa-pen */
+  font-family: 'Font Awesome 6 Free';
+  font-weight: 900;
+  margin-left: 8px;
+  font-size: 0.7rem;
+  opacity: 0.45;
+}
+.info-edit-input {
+  flex: 1;
+  min-width: 0;
+  max-width: 60%;
+  margin-left: auto;
+  text-align: right;
+  padding: 3px 8px;
+  border: 1px solid var(--md-sys-color-primary, #1976d2);
+  border-radius: 6px;
+  font: inherit;
+  font-weight: 500;
+  background: var(--md-sys-color-surface, #fff);
+  color: inherit;
+  outline: none;
+}
+.info-edit-input:focus {
+  box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.15);
+}
+.info-edit-input:disabled { opacity: 0.6; }
+
+/* ============================================================
+   Финансовый мини-виджет в шапке правой колонки Обзора
+   3 цифры строкой + единая плашка-прогресс под ними.
+   ============================================================ */
+.project-money-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.project-money-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.project-money-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.project-money-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--md-sys-color-on-surface-variant);
+}
+.project-money-value {
+  font-size: 1.05rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.project-money-progress {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  /* Серый = неоплаченная часть (фон всей плашки). */
+  background: var(--md-sys-color-surface-container-high, rgba(15, 23, 42, 0.12));
+  overflow: hidden;
+}
+.project-money-progress__fill {
+  /* Зелёный = оплаченная часть, ширина = paymentProgressPercent%. */
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--color-success, #2e7d32);
+  border-radius: 999px;
+  transition: width 0.25s ease;
 }
 
 /* Tables */
@@ -2702,6 +2879,9 @@ export default {
   box-shadow: var(--shadow-sm);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
+  /* .project-detail-view .glass-card задаёт padding:0 — возвращаем
+     внутренний отступ KPI-карточкам (у них нет утилитарного p-4). */
+  padding: 18px 20px;
 }
 .project-detail-view .card-header {
   padding: 14px 20px;

@@ -1,12 +1,12 @@
 # Document Flow & Storage API
 
-Сгенерировано из `docs/API.md` на 2026-02-15 03:22:39 (local time).
+Сгенерировано из `docs/API.md` на 2026-05-19 01:30:03 (local time).
 
 ## Scope
 - Домен: `documents`
 - Описание: Реестры документов, исходящие, загрузки, хранилище и файловый каталог.
 - Routers: `5`
-- Endpoints: `54`
+- Endpoints: `72`
 - Список роутеров: `document_registry`, `outgoing_registry`, `uploads`, `storage`, `files_catalog`
 
 ## Common Rules
@@ -15,7 +15,7 @@
 
 ## Data Contract Catalog (Domain)
 
-Модели, используемые в домене: `21`.
+Модели, используемые в домене: `22`.
 
 ### Model `DocumentCreate`
 
@@ -250,27 +250,46 @@ Source: `backend/app/schemas/outgoing_document.py`
 
 | Field | Type | Required | Default | Constraints |
 | --- | --- | --- | --- | --- |
+| document_kind | Optional[str] | no | 'letter' | - |
+| editor_mode | Optional[str] | no | 'classic' | - |
+| editor_schema_version | Optional[int] | no | 1 | - |
+| editor_draft | Optional[Any] | no | None | - |
+| editor_validation | Optional[Any] | no | None | - |
+| editor_render_context | Optional[Any] | no | None | - |
 | recipient_company_id | Union[str, UUID] | yes | - | - |
 | deal_id | Optional[Union[str, UUID]] | no | None | - |
+| contract_id | Optional[Union[str, UUID]] | no | None | - |
 | letter_date | date | yes | - | - |
 | subject | str | yes | - | - |
 | body | Optional[str] | no | '' | - |
 | attachments_list | Optional[str] | no | '' | - |
+| bank_account_index | Optional[int] | no | None | - |
+| bank_account_snapshot | Optional[Any] | no | None | - |
+| linked_stage_ids | Optional[Any] | no | None | - |
+| linked_payment_items | Optional[Any] | no | None | - |
+| act_contract_document_id | Optional[Union[str, UUID]] | no | None | - |
 | recipient_short_name | Optional[str] | no | None | - |
 | recipient_to_name | Optional[str] | no | None | - |
 | recipient_appeal | Optional[str] | no | None | - |
 | recipient_eio | Optional[str] | no | None | - |
+| recipient_genitive_name | Optional[str] | no | None | - |
 | recipient_salutation | Optional[str] | no | None | - |
 | status | Optional[str] | no | 'draft' | - |
 | id | Union[str, UUID] | yes | - | - |
 | outgoing_number | str | yes | - | - |
 | outgoing_number_seq | int | yes | - | - |
 | outgoing_number_display | Optional[str] | no | None | - |
+| document_kind_label | Optional[str] | no | None | - |
 | our_company_key | Optional[str] | no | None | - |
 | created_at | Optional[datetime] | no | None | - |
 | updated_at | Optional[datetime] | no | None | - |
 | recipient_company_name | Optional[str] | no | None | - |
 | deal_title | Optional[str] | no | None | - |
+| contract_number | Optional[str] | no | None | - |
+| selected_bank_account | Optional[Any] | no | None | - |
+| bank_accounts_count | Optional[int] | no | 0 | - |
+| files_count | Optional[int] | no | 0 | - |
+| versions_count | Optional[int] | no | 0 | - |
 | versions | List[OutgoingDocumentVersionResponse] | no | [] | - |
 | files | List[OutgoingDocumentFileResponse] | no | [] | - |
 
@@ -292,6 +311,40 @@ Source: `backend/app/schemas/outgoing_document.py`
 | created_at | Optional[datetime] | no | None | - |
 
 
+### Model `OutgoingDocumentResolveRequest`
+
+Source: `backend/app/schemas/outgoing_document.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| document_id | Optional[Union[str, UUID]] | no | None | - |
+| document_kind | Optional[str] | no | 'letter' | - |
+| editor_mode | Optional[str] | no | 'classic' | - |
+| editor_schema_version | Optional[int] | no | 1 | - |
+| editor_draft | Optional[Any] | no | None | - |
+| editor_validation | Optional[Any] | no | None | - |
+| editor_render_context | Optional[Any] | no | None | - |
+| recipient_company_id | Optional[Union[str, UUID]] | no | None | - |
+| deal_id | Optional[Union[str, UUID]] | no | None | - |
+| contract_id | Optional[Union[str, UUID]] | no | None | - |
+| letter_date | Optional[date] | no | None | - |
+| subject | Optional[str] | no | None | - |
+| body | Optional[str] | no | '' | - |
+| attachments_list | Optional[str] | no | '' | - |
+| bank_account_index | Optional[int] | no | None | - |
+| linked_stage_ids | Optional[Any] | no | None | - |
+| linked_payment_items | Optional[Any] | no | None | - |
+| recipient_short_name | Optional[str] | no | None | - |
+| recipient_to_name | Optional[str] | no | None | - |
+| recipient_appeal | Optional[str] | no | None | - |
+| recipient_eio | Optional[str] | no | None | - |
+| recipient_genitive_name | Optional[str] | no | None | - |
+| recipient_salutation | Optional[str] | no | None | - |
+| status | Optional[str] | no | 'draft' | - |
+| our_company_key | Optional[str] | no | None | - |
+
+
 ### Model `OutgoingDocumentResponse`
 
 Source: `backend/app/schemas/outgoing_document.py`
@@ -299,27 +352,46 @@ Source: `backend/app/schemas/outgoing_document.py`
 
 | Field | Type | Required | Default | Constraints |
 | --- | --- | --- | --- | --- |
+| document_kind | Optional[str] | no | 'letter' | - |
+| editor_mode | Optional[str] | no | 'classic' | - |
+| editor_schema_version | Optional[int] | no | 1 | - |
+| editor_draft | Optional[Any] | no | None | - |
+| editor_validation | Optional[Any] | no | None | - |
+| editor_render_context | Optional[Any] | no | None | - |
 | recipient_company_id | Union[str, UUID] | yes | - | - |
 | deal_id | Optional[Union[str, UUID]] | no | None | - |
+| contract_id | Optional[Union[str, UUID]] | no | None | - |
 | letter_date | date | yes | - | - |
 | subject | str | yes | - | - |
 | body | Optional[str] | no | '' | - |
 | attachments_list | Optional[str] | no | '' | - |
+| bank_account_index | Optional[int] | no | None | - |
+| bank_account_snapshot | Optional[Any] | no | None | - |
+| linked_stage_ids | Optional[Any] | no | None | - |
+| linked_payment_items | Optional[Any] | no | None | - |
+| act_contract_document_id | Optional[Union[str, UUID]] | no | None | - |
 | recipient_short_name | Optional[str] | no | None | - |
 | recipient_to_name | Optional[str] | no | None | - |
 | recipient_appeal | Optional[str] | no | None | - |
 | recipient_eio | Optional[str] | no | None | - |
+| recipient_genitive_name | Optional[str] | no | None | - |
 | recipient_salutation | Optional[str] | no | None | - |
 | status | Optional[str] | no | 'draft' | - |
 | id | Union[str, UUID] | yes | - | - |
 | outgoing_number | str | yes | - | - |
 | outgoing_number_seq | int | yes | - | - |
 | outgoing_number_display | Optional[str] | no | None | - |
+| document_kind_label | Optional[str] | no | None | - |
 | our_company_key | Optional[str] | no | None | - |
 | created_at | Optional[datetime] | no | None | - |
 | updated_at | Optional[datetime] | no | None | - |
 | recipient_company_name | Optional[str] | no | None | - |
 | deal_title | Optional[str] | no | None | - |
+| contract_number | Optional[str] | no | None | - |
+| selected_bank_account | Optional[Any] | no | None | - |
+| bank_accounts_count | Optional[int] | no | 0 | - |
+| files_count | Optional[int] | no | 0 | - |
+| versions_count | Optional[int] | no | 0 | - |
 
 
 ### Model `OutgoingDocumentUpdate`
@@ -329,16 +401,29 @@ Source: `backend/app/schemas/outgoing_document.py`
 
 | Field | Type | Required | Default | Constraints |
 | --- | --- | --- | --- | --- |
+| document_kind | Optional[str] | no | None | - |
+| editor_mode | Optional[str] | no | None | - |
+| editor_schema_version | Optional[int] | no | None | - |
+| editor_draft | Optional[Any] | no | None | - |
+| editor_validation | Optional[Any] | no | None | - |
+| editor_render_context | Optional[Any] | no | None | - |
 | recipient_company_id | Optional[Union[str, UUID]] | no | None | - |
 | deal_id | Optional[Union[str, UUID]] | no | None | - |
+| contract_id | Optional[Union[str, UUID]] | no | None | - |
 | letter_date | Optional[date] | no | None | - |
 | subject | Optional[str] | no | None | - |
 | body | Optional[str] | no | None | - |
 | attachments_list | Optional[str] | no | None | - |
+| bank_account_index | Optional[int] | no | None | - |
+| bank_account_snapshot | Optional[Any] | no | None | - |
+| linked_stage_ids | Optional[Any] | no | None | - |
+| linked_payment_items | Optional[Any] | no | None | - |
+| act_contract_document_id | Optional[Union[str, UUID]] | no | None | - |
 | recipient_short_name | Optional[str] | no | None | - |
 | recipient_to_name | Optional[str] | no | None | - |
 | recipient_appeal | Optional[str] | no | None | - |
 | recipient_eio | Optional[str] | no | None | - |
+| recipient_genitive_name | Optional[str] | no | None | - |
 | recipient_salutation | Optional[str] | no | None | - |
 | status | Optional[str] | no | None | - |
 | our_company_key | Optional[str] | no | None | - |
@@ -699,7 +784,6 @@ Endpoints: `27`
     - `select`
   - Side effects: DB read, File/storage operation
 - Error Handling:
-  - `400`: `Invalid file path`; body schema `{"detail": "..."}`
   - `404`: `Channel not found`; `Files not found`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
@@ -728,7 +812,6 @@ Endpoints: `27`
     - `select`
   - Side effects: DB read
 - Error Handling:
-  - `400`: `Invalid file path`; body schema `{"detail": "..."}`
   - `404`: `Channel not found`; `Files not found`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
@@ -1217,14 +1300,14 @@ Source: `backend/app/routers/outgoing_registry.py`
 
 Prefix: `/api/v1/outgoing-registry`
 
-Endpoints: `9`
+Endpoints: `27`
 
 #### `GET /api/v1/outgoing-registry`
 
 - Controller: `backend/app/routers/outgoing_registry.py::get_outgoing_documents`
 - Data Contract:
   - Path params: none
-  - Query params: `skip`: int (optional, default=0, constraints=-); `limit`: int (optional, default=20, constraints=-); `recipient_company_id`: Optional[str] (optional, default=None, constraints=-); `deal_id`: Optional[str] (optional, default=None, constraints=-); `search`: Optional[str] (optional, default=None, constraints=-); `status`: Optional[str] (optional, default=None, constraints=-); `our_company_key`: Optional[str] (optional, default=None, constraints=-); `date_from`: Optional[str] (optional, default=None, constraints=-); `date_to`: Optional[str] (optional, default=None, constraints=-)
+  - Query params: `skip`: int (optional, default=0, constraints=-); `limit`: int (optional, default=20, constraints=-); `recipient_company_id`: Optional[str] (optional, default=None, constraints=-); `deal_id`: Optional[str] (optional, default=None, constraints=-); `search`: Optional[str] (optional, default=None, constraints=-); `status`: Optional[str] (optional, default=None, constraints=-); `document_kind`: Optional[str] (optional, default=None, constraints=-); `our_company_key`: Optional[str] (optional, default=None, constraints=-); `date_from`: Optional[str] (optional, default=None, constraints=-); `date_to`: Optional[str] (optional, default=None, constraints=-)
   - Header params: none
   - Form params: none
   - File params: none
@@ -1263,7 +1346,7 @@ Endpoints: `9`
   - Path params: none
   - Query params: none
   - Header params: none
-  - Form params: `recipient_company_id`: str (required, default=-, constraints=-); `deal_id`: Optional[str] (optional, default=None, constraints=-); `letter_date`: Optional[str] (optional, default=None, constraints=-); `subject`: str (required, default=-, constraints=-); `body`: Optional[str] (optional, default='', constraints=-); `attachments_list`: Optional[str] (optional, default='', constraints=-); `recipient_short_name`: Optional[str] (optional, default='', constraints=-); `recipient_to_name`: Optional[str] (optional, default='', constraints=-); `recipient_appeal`: Optional[str] (optional, default='', constraints=-); `recipient_eio`: Optional[str] (optional, default='', constraints=-); `recipient_salutation`: Optional[str] (optional, default='', constraints=-); `status`: Optional[str] (optional, default='draft', constraints=-); `our_company_key`: Optional[str] (optional, default=None, constraints=-)
+  - Form params: `document_kind`: Optional[str] (optional, default='letter', constraints=-); `editor_mode`: Optional[str] (optional, default='classic', constraints=-); `editor_schema_version`: Optional[int] (optional, default=1, constraints=-); `editor_draft`: Optional[str] (optional, default=None, constraints=-); `editor_validation`: Optional[str] (optional, default=None, constraints=-); `editor_render_context`: Optional[str] (optional, default=None, constraints=-); `recipient_company_id`: str (required, default=-, constraints=-); `deal_id`: Optional[str] (optional, default=None, constraints=-); `contract_id`: Optional[str] (optional, default=None, constraints=-); `letter_date`: Optional[str] (optional, default=None, constraints=-); `subject`: Optional[str] (optional, default=None, constraints=-); `body`: Optional[str] (optional, default='', constraints=-); `attachments_list`: Optional[str] (optional, default='', constraints=-); `bank_account_index`: Optional[int] (optional, default=None, constraints=-); `linked_stage_ids`: Optional[str] (optional, default=None, constraints=-); `linked_payment_items`: Optional[str] (optional, default=None, constraints=-); `recipient_short_name`: Optional[str] (optional, default='', constraints=-); `recipient_to_name`: Optional[str] (optional, default='', constraints=-); `recipient_appeal`: Optional[str] (optional, default='', constraints=-); `recipient_eio`: Optional[str] (optional, default='', constraints=-); `recipient_genitive_name`: Optional[str] (optional, default='', constraints=-); `recipient_salutation`: Optional[str] (optional, default='', constraints=-); `status`: Optional[str] (optional, default='draft', constraints=-); `our_company_key`: Optional[str] (optional, default=None, constraints=-)
   - File params: `attachments_files`: Optional[List[UploadFile]] (optional, default=None, constraints=-)
   - Body: none
   - Response model: `OutgoingDocumentDetailResponse`
@@ -1281,26 +1364,27 @@ Endpoints: `9`
     - `Depends`
     - `Company.get_by_id`
     - `HTTPException`
+    - `safe_refresh_deal_health_issues`
     - `Deal.get_by_id`
+    - `sequence_lock`
+    - `OutgoingDocument.update`
     - `storage_available`
     - `ensure_path`
     - `clean_name`
-    - `log_event`
-    - `OutgoingDocument.create`
-    - `upload.read`
   - Side effects: DB write, Audit/Event logging, File/storage operation
 - Error Handling:
+  - `400`: `Act requires selected contract`; body schema `{"detail": "..."}`
   - `404`: `Recipient company not found`; `Deal not found`; body schema `{"detail": "..."}`
   - `409`: `Unable to allocate unique outgoing number, retry`; body schema `{"detail": "..."}`
   - `500`: `Storage is not configured`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
-#### `GET /api/v1/outgoing-registry/sequences`
+#### `GET /api/v1/outgoing-registry/deal-intro/{deal_id}`
 
-- Controller: `backend/app/routers/outgoing_registry.py::get_outgoing_sequences`
+- Controller: `backend/app/routers/outgoing_registry.py::get_outgoing_deal_intro`
 - Data Contract:
-  - Path params: none
-  - Query params: none
+  - Path params: `deal_id`: str (required, default=-, constraints=-)
+  - Query params: `recipient_short_name`: Optional[str] (optional, default=None, constraints=-); `recipient_company_id`: Optional[str] (optional, default=None, constraints=-); `our_company_key`: Optional[str] (optional, default=None, constraints=-)
   - Header params: none
   - Form params: none
   - File params: none
@@ -1313,6 +1397,171 @@ Endpoints: `9`
     - `user: Depends(CurrentUser)`
 - Logic Flow:
   - Internal calls:
+    - `Query`
+    - `Depends`
+    - `HTTPException`
+    - `Company.get_by_id`
+  - Side effects: No explicit side effects (read/transform path)
+- Error Handling:
+  - `400`: `Recipient short name is required`; `Deal object name is empty`; body schema `{"detail": "..."}`
+  - `404`: `Primary deal contract not found`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/outgoing-registry/deal/{deal_id}/closing-documents`
+
+- Controller: `backend/app/routers/outgoing_registry.py::get_deal_closing_documents`
+- Data Contract:
+  - Path params: `deal_id`: str (required, default=-, constraints=-)
+  - Query params: `exclude_document_id`: Optional[str] (optional, default=None, constraints=-)
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Query`
+    - `Depends`
+    - `db.execute`
+    - `OutgoingDocument.letter_date.desc`
+    - `OutgoingDocument.created_at.desc`
+    - `and_`
+    - `select`
+    - `OutgoingDocument.document_kind.in_`
+  - Side effects: DB write, DB read
+- Error Handling:
+  - Explicit `HTTPException` not found in handler body
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/outgoing-registry/editor/preview-docx`
+
+- Controller: `backend/app/routers/outgoing_registry.py::preview_outgoing_editor_docx`
+- Data Contract:
+  - Path params: none
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body models: [`OutgoingDocumentResolveRequest`](#model-outgoingdocumentresolverequest)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `clean_name`
+    - `Response`
+    - `HTTPException`
+  - Side effects: No explicit side effects (read/transform path)
+- Error Handling:
+  - `400`: `Recipient company is required for preview`; body schema `{"detail": "..."}`
+  - `409`: `Preview DOCX generation failed`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/outgoing-registry/editor/preview-pdf`
+
+- Controller: `backend/app/routers/outgoing_registry.py::preview_outgoing_editor_pdf`
+- Data Contract:
+  - Path params: none
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body models: [`OutgoingDocumentResolveRequest`](#model-outgoingdocumentresolverequest)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `clean_name`
+    - `Response`
+    - `HTTPException`
+  - Side effects: No explicit side effects (read/transform path)
+- Error Handling:
+  - `400`: `Recipient company is required for preview`; body schema `{"detail": "..."}`
+  - `409`: `Preview PDF generation failed`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/outgoing-registry/editor/resolve`
+
+- Controller: `backend/app/routers/outgoing_registry.py::resolve_outgoing_editor_context`
+- Data Contract:
+  - Path params: none
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body models: [`OutgoingDocumentResolveRequest`](#model-outgoingdocumentresolverequest)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+  - Side effects: No explicit side effects (read/transform path)
+- Error Handling:
+  - Explicit `HTTPException` not found in handler body
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/outgoing-registry/editor/schema`
+
+- Controller: `backend/app/routers/outgoing_registry.py::get_outgoing_editor_schema`
+- Data Contract:
+  - Path params: none
+  - Query params: `document_kind`: Optional[str] (optional, default='letter', constraints=-)
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware)
+  - Depends/Security: none at function level
+- Logic Flow:
+  - Internal calls:
+    - `Query`
+    - `default_editor_draft`
+    - `get_editor_block_catalog`
+    - `get_template_fields`
+  - Side effects: No explicit side effects (read/transform path)
+- Error Handling:
+  - Explicit `HTTPException` not found in handler body
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/outgoing-registry/sequences`
+
+- Controller: `backend/app/routers/outgoing_registry.py::get_outgoing_sequences`
+- Data Contract:
+  - Path params: none
+  - Query params: `document_kind`: Optional[str] (optional, default='letter', constraints=-); `sequence_date`: Optional[str] (optional, default=None, constraints=-)
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Query`
     - `Depends`
     - `db.execute`
     - `select`
@@ -1330,7 +1579,7 @@ Endpoints: `9`
   - Header params: none
   - Form params: none
   - File params: none
-  - Body: `next_seq`: int
+  - Body: `next_seq`: int; `document_kind`: Optional[str]; `sequence_date`: Optional[str]
   - Success status: `200`
 - Authentication & Authorization:
   - Access mode: JWT (AuthMiddleware) + current user context
@@ -1345,13 +1594,158 @@ Endpoints: `9`
     - `db.execute`
     - `OutgoingNumberSequence`
     - `db.add`
+    - `OutgoingDailyNumberSequence`
     - `db.commit`
     - `db.rollback`
+    - `and_`
     - `select`
   - Side effects: DB write, DB read
 - Error Handling:
-  - `400`: `next_seq must be >= 1`; body schema `{"detail": "..."}`
+  - `400`: `next_seq must be >= 1`; `Selected document kind does not use manual global sequence`; body schema `{"detail": "..."}`
   - `409`: `Sequence update busy, retry`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/outgoing-registry/templates/v2`
+
+- Controller: `backend/app/routers/outgoing_registry.py::list_template_v2`
+- Summary: List template_v2 templates (with layout_html populated) for the outgoing registry.
+- Data Contract:
+  - Path params: none
+  - Query params: `document_kind`: Optional[str] (optional, default=None, constraints=-)
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Query`
+    - `Depends`
+    - `DocumentTemplate.layout_html.isnot`
+    - `db.execute`
+    - `and_`
+  - Side effects: DB read
+- Error Handling:
+  - Explicit `HTTPException` not found in handler body
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/outgoing-registry/templates/v2`
+
+- Controller: `backend/app/routers/outgoing_registry.py::create_template_v2`
+- Summary: Create a new template_v2 (layout_html-driven).
+- Data Contract:
+  - Path params: none
+  - Query params: `payload`: dict (required, default=-, constraints=-)
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `DocumentTemplate`
+    - `db.add`
+    - `HTTPException`
+    - `db.commit`
+    - `db.refresh`
+  - Side effects: DB write
+- Error Handling:
+  - `400`: `Укажите название шаблона`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `DELETE /api/v1/outgoing-registry/templates/v2/{template_id}`
+
+- Controller: `backend/app/routers/outgoing_registry.py::delete_template_v2`
+- Data Contract:
+  - Path params: `template_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `HTTPException`
+    - `db.delete`
+    - `db.commit`
+    - `db.execute`
+  - Side effects: DB write, DB read
+- Error Handling:
+  - `404`: `Шаблон не найден`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/outgoing-registry/templates/v2/{template_id}`
+
+- Controller: `backend/app/routers/outgoing_registry.py::get_template_v2`
+- Summary: Get a single template_v2 by id with full layout/fields payload.
+- Data Contract:
+  - Path params: `template_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `HTTPException`
+    - `db.execute`
+  - Side effects: DB read
+- Error Handling:
+  - `404`: `Шаблон не найден`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `PUT /api/v1/outgoing-registry/templates/v2/{template_id}`
+
+- Controller: `backend/app/routers/outgoing_registry.py::update_template_v2`
+- Summary: Update a template_v2 layout / fields / meta.
+- Data Contract:
+  - Path params: `template_id`: str (required, default=-, constraints=-)
+  - Query params: `payload`: dict (required, default=-, constraints=-)
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `HTTPException`
+    - `db.commit`
+    - `db.refresh`
+    - `db.execute`
+  - Side effects: DB write, DB read
+- Error Handling:
+  - `404`: `Шаблон не найден`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 #### `DELETE /api/v1/outgoing-registry/{document_id}`
@@ -1366,17 +1760,21 @@ Endpoints: `9`
   - Body: none
   - Success status: `200`
 - Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
+  - Access mode: JWT (AuthMiddleware) + current user context
   - Depends/Security:
     - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
 - Logic Flow:
   - Internal calls:
     - `Depends`
     - `storage_available`
     - `OutgoingDocument.get_by_id`
     - `HTTPException`
+    - `ensure_can_edit_record`
     - `db.execute`
     - `db.commit`
+    - `safe_refresh_deal_health_issues`
+    - `safe_refresh_orphan_health_issues`
     - `delete_path`
     - `and_`
     - `delete`
@@ -1406,13 +1804,9 @@ Endpoints: `9`
 - Logic Flow:
   - Internal calls:
     - `Depends`
-    - `OutgoingDocument.get_by_id`
-    - `HTTPException`
-    - `get_section_permissions`
-    - `allowed_deal_ids`
   - Side effects: No explicit side effects (read/transform path)
 - Error Handling:
-  - `404`: `Document not found`; body schema `{"detail": "..."}`
+  - Explicit `HTTPException` not found in handler body
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 #### `PUT /api/v1/outgoing-registry/{document_id}`
@@ -1429,17 +1823,22 @@ Endpoints: `9`
   - Response contracts: [`OutgoingDocumentDetailResponse`](#model-outgoingdocumentdetailresponse)
   - Success status: `200`
 - Authentication & Authorization:
-  - Access mode: JWT (AuthMiddleware)
+  - Access mode: JWT (AuthMiddleware) + current user context
   - Depends/Security:
     - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
 - Logic Flow:
   - Internal calls:
     - `Depends`
     - `OutgoingDocument.get_by_id`
     - `HTTPException`
+    - `ensure_can_edit_record`
+    - `safe_refresh_deal_health_issues`
     - `Company.get_by_id`
     - `Deal.get_by_id`
+    - `ensure_entity_action_allowed`
     - `OutgoingDocument.update`
+    - `safe_refresh_orphan_health_issues`
   - Side effects: DB write
 - Error Handling:
   - `404`: `Document not found`; `Recipient company not found`; `Deal not found`; body schema `{"detail": "..."}`
@@ -1485,10 +1884,176 @@ Endpoints: `9`
   - `500`: `Storage is not configured`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
+#### `GET /api/v1/outgoing-registry/{document_id}/editor-context`
+
+- Controller: `backend/app/routers/outgoing_registry.py::get_outgoing_editor_context`
+- Data Contract:
+  - Path params: `document_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+  - Side effects: No explicit side effects (read/transform path)
+- Error Handling:
+  - Explicit `HTTPException` not found in handler body
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/outgoing-registry/{document_id}/preview-pdf`
+
+- Controller: `backend/app/routers/outgoing_registry.py::preview_outgoing_document_pdf`
+- Data Contract:
+  - Path params: `document_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `clean_name`
+    - `Response`
+    - `HTTPException`
+  - Side effects: No explicit side effects (read/transform path)
+- Error Handling:
+  - `409`: `Current render cache is missing. Save the document to regenerate preview.`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/outgoing-registry/{document_id}/preview-uploaded-docx-pdf`
+
+- Controller: `backend/app/routers/outgoing_registry.py::preview_uploaded_outgoing_docx_pdf`
+- Data Contract:
+  - Path params: `document_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: `file`: UploadFile (required, default=-, constraints=-)
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `File`
+    - `Depends`
+    - `clean_name`
+    - `Response`
+    - `HTTPException`
+    - `run_in_threadpool`
+  - Side effects: File/storage operation
+- Error Handling:
+  - `400`: `Expected .docx file`; `DOCX file is empty`; body schema `{"detail": "..."}`
+  - `500`: `Не удалось сформировать PDF из Word-файла`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/outgoing-registry/{document_id}/render-cache`
+
+- Controller: `backend/app/routers/outgoing_registry.py::update_outgoing_document_render_cache`
+- Data Contract:
+  - Path params: `document_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: `file`: UploadFile (required, default=-, constraints=-)
+  - Body: none
+  - Response model: `OutgoingDocumentDetailResponse`
+  - Response contracts: [`OutgoingDocumentDetailResponse`](#model-outgoingdocumentdetailresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `File`
+    - `Depends`
+    - `HTTPException`
+    - `run_in_threadpool`
+  - Side effects: File/storage operation
+- Error Handling:
+  - `400`: `Expected .docx file`; `DOCX file is empty`; body schema `{"detail": "..."}`
+  - `500`: `Не удалось сформировать PDF из Word-файла`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/outgoing-registry/{document_id}/render-cache/generate`
+
+- Controller: `backend/app/routers/outgoing_registry.py::generate_outgoing_document_render_cache`
+- Data Contract:
+  - Path params: `document_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Response model: `OutgoingDocumentDetailResponse`
+  - Response contracts: [`OutgoingDocumentDetailResponse`](#model-outgoingdocumentdetailresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `HTTPException`
+  - Side effects: No explicit side effects (read/transform path)
+- Error Handling:
+  - `500`: `Не удалось сформировать файлы документа`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/outgoing-registry/{document_id}/render-docx`
+
+- Controller: `backend/app/routers/outgoing_registry.py::render_outgoing_document_docx`
+- Data Contract:
+  - Path params: `document_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `clean_name`
+    - `Response`
+    - `HTTPException`
+  - Side effects: No explicit side effects (read/transform path)
+- Error Handling:
+  - `409`: `Current render cache is missing. Save the document to regenerate Word file.`; body schema `{"detail": "..."}`
+  - `500`: `Не удалось сформировать Word-файл`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
 #### `POST /api/v1/outgoing-registry/{document_id}/versions`
 
 - Controller: `backend/app/routers/outgoing_registry.py::create_outgoing_version`
-- Summary: Create a new version from uploaded DOCX file (converts to PDF).
+- Summary: Create a new version from uploaded DOCX file or from canonical HTML render.
 - Data Contract:
   - Path params: `document_id`: str (required, default=-, constraints=-)
   - Query params: none
@@ -1509,19 +2074,52 @@ Endpoints: `9`
     - `File`
     - `Form`
     - `Depends`
-    - `clean_name`
     - `OutgoingDocumentVersionResponse.model_validate`
     - `OutgoingDocument.get_by_id`
     - `HTTPException`
+    - `ensure_entity_action_allowed`
+    - `sequence_lock`
+    - `clean_name`
+    - `OutgoingDocumentFile.create`
     - `OutgoingDocumentVersion.get_by_document`
     - `storage_available`
-    - `ensure_path`
-    - `upload_bytes_with_safe_extension`
-    - `publish`
   - Side effects: DB write, Audit/Event logging, File/storage operation
 - Error Handling:
-  - `404`: `Document not found`; `Recipient company not found`; body schema `{"detail": "..."}`
+  - `404`: `Document not found`; body schema `{"detail": "..."}`
+  - `409`: `Current render cache is missing. Save the document to regenerate version files.`; body schema `{"detail": "..."}`
   - `500`: `Storage is not configured`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/outgoing-registry/{document_id}/versions/{version_id}/download`
+
+- Controller: `backend/app/routers/outgoing_registry.py::download_outgoing_version`
+- Summary: Stream a stored version file (pdf or docx) by version id.
+- Data Contract:
+  - Path params: `document_id`: str (required, default=-, constraints=-); `version_id`: str (required, default=-, constraints=-)
+  - Query params: `format`: str (optional, default='pdf', constraints=-)
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Query`
+    - `Depends`
+    - `Response`
+    - `HTTPException`
+    - `OutgoingDocumentFile.get_by_document`
+    - `read_file_bytes`
+    - `quote`
+  - Side effects: File/storage operation
+- Error Handling:
+  - `400`: `format must be pdf or docx`; body schema `{"detail": "..."}`
+  - `404`: `DOCX-снимок для этой версии не сохранён' if fmt == 'docx' else 'PDF-снимок для этой версии не найден`; `Файл версии не найден в хранилище`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 
@@ -1588,6 +2186,7 @@ Endpoints: `9`
     - `Form`
     - `File`
     - `Depends`
+    - `_upload_tmp_max_bytes`
     - `clean_name`
     - `UploadJob`
     - `db.add`
@@ -1596,7 +2195,6 @@ Endpoints: `9`
     - `db.refresh`
     - `db.execute`
     - `HTTPException`
-    - `settings.STORAGE_LOCAL_ROOT.rstrip`
   - Side effects: DB write, DB read, File/storage operation
 - Error Handling:
   - `400`: `Invalid parent document`; body schema `{"detail": "..."}`
@@ -1609,7 +2207,7 @@ Endpoints: `9`
   - Path params: none
   - Query params: none
   - Header params: none
-  - Form params: `contract_id`: str (required, default=-, constraints=-); `doc_type`: Optional[str] (optional, default=None, constraints=-); `status`: Optional[str] (optional, default='draft', constraints=-); `document_id`: Optional[str] (optional, default=None, constraints=-); `file_kind`: str (required, default=-, constraints=-)
+  - Form params: `contract_id`: str (required, default=-, constraints=-); `doc_type`: Optional[str] (optional, default=None, constraints=-); `status`: Optional[str] (optional, default='draft', constraints=-); `document_id`: Optional[str] (optional, default=None, constraints=-); `file_kind`: str (required, default=-, constraints=-); `amount`: Optional[float] (optional, default=None, constraints=-); `product_ids`: Optional[str] (optional, default=None, constraints=-)
   - File params: `file`: UploadFile (required, default=-, constraints=-)
   - Body: none
   - Response model: `UploadJobResponse`
@@ -1625,6 +2223,7 @@ Endpoints: `9`
     - `Form`
     - `File`
     - `Depends`
+    - `_upload_tmp_max_bytes`
     - `clean_name`
     - `is_local_storage`
     - `UploadJob`
@@ -1633,7 +2232,6 @@ Endpoints: `9`
     - `Contract.get_by_id`
     - `_write_upload_to_tmp`
     - `db.commit`
-    - `db.refresh`
   - Side effects: DB write, File/storage operation
 - Error Handling:
   - `400`: `Invalid file_kind`; `Invalid status`; `Document does not belong to contract`; `Invalid doc_type`; body schema `{"detail": "..."}`
@@ -1663,6 +2261,7 @@ Endpoints: `9`
   - Internal calls:
     - `File`
     - `Depends`
+    - `_upload_tmp_max_bytes`
     - `clean_name`
     - `UploadJob`
     - `db.add`
@@ -1672,7 +2271,6 @@ Endpoints: `9`
     - `db.commit`
     - `db.refresh`
     - `_resolve_dispatch_path`
-    - `select`
   - Side effects: DB write, DB read, File/storage operation
 - Error Handling:
   - `404`: `Dispatch not found`; `Channel not found`; body schema `{"detail": "..."}`
@@ -1702,10 +2300,10 @@ Endpoints: `9`
     - `File`
     - `Depends`
     - `_build_root_paths`
+    - `_upload_tmp_max_bytes`
     - `HTTPException`
     - `SubcontractorCard.get_by_id`
-    - `db.execute`
-    - `StageResult.create`
+    - `sequence_lock`
     - `clean_name`
     - `UploadJob`
     - `db.add`
@@ -1739,6 +2337,7 @@ Endpoints: `9`
     - `Form`
     - `File`
     - `Depends`
+    - `_upload_tmp_max_bytes`
     - `clean_name`
     - `UploadJob`
     - `db.add`
@@ -1774,6 +2373,7 @@ Endpoints: `9`
     - `Form`
     - `File`
     - `Depends`
+    - `_upload_tmp_max_bytes`
     - `clean_name`
     - `settings.STORAGE_LOCAL_ROOT.rstrip`
     - `KpVersion`
@@ -1782,7 +2382,6 @@ Endpoints: `9`
     - `db.get`
     - `HTTPException`
     - `_write_upload_to_tmp`
-    - `LeadProduct.get_by_lead`
   - Side effects: DB write, File/storage operation
 - Error Handling:
   - `404`: `KP not found`; body schema `{"detail": "..."}`
@@ -1810,6 +2409,7 @@ Endpoints: `9`
   - Internal calls:
     - `File`
     - `Depends`
+    - `_upload_tmp_max_bytes`
     - `clean_name`
     - `(settings.STORAGE_LOCAL_ROOT or '').rstrip`
     - `UploadJob`
@@ -1819,7 +2419,6 @@ Endpoints: `9`
     - `LegalCase.get_by_id`
     - `_write_upload_to_tmp`
     - `db.commit`
-    - `db.refresh`
   - Side effects: DB write, File/storage operation
 - Error Handling:
   - `404`: `Event not found`; `Case not found`; body schema `{"detail": "..."}`
@@ -1847,6 +2446,7 @@ Endpoints: `9`
   - Internal calls:
     - `File`
     - `Depends`
+    - `_upload_tmp_max_bytes`
     - `clean_name`
     - `UploadJob`
     - `db.add`
@@ -1885,6 +2485,7 @@ Endpoints: `2`
   - Access mode: JWT (AuthMiddleware) + current user context; route may enforce role/section checks
   - Depends/Security:
     - `user: Depends(CurrentUser)`
+    - `db: Depends(get_db)`
 - Logic Flow:
   - Internal calls:
     - `Query`
@@ -1896,9 +2497,9 @@ Endpoints: `2`
     - `Response`
     - `storage_available`
     - `HTTPException`
+    - `authorize_storage_path`
     - `_local_path`
     - `tempfile.mkdtemp`
-    - `os.path.join`
   - Side effects: Background task trigger, File/storage operation
 - Error Handling:
   - `403`: `Invalid path`; body schema `{"detail": "..."}`
@@ -1966,6 +2567,7 @@ Endpoints: `7`
     - `Depends`
     - `storage_available`
     - `HTTPException`
+    - `authorize_storage_path`
     - `delete_path`
   - Side effects: File/storage operation
 - Error Handling:
@@ -1995,6 +2597,7 @@ Endpoints: `7`
     - `Depends`
     - `storage_available`
     - `HTTPException`
+    - `authorize_storage_path`
     - `get_download_href`
     - `RedirectResponse`
   - Side effects: File/storage operation
@@ -2024,6 +2627,7 @@ Endpoints: `7`
     - `Depends`
     - `storage_available`
     - `HTTPException`
+    - `authorize_storage_path`
     - `search_items`
     - `list_items`
   - Side effects: File/storage operation
@@ -2053,6 +2657,7 @@ Endpoints: `7`
     - `clean_name`
     - `storage_available`
     - `HTTPException`
+    - `authorize_storage_path`
     - `ensure_path`
   - Side effects: File/storage operation
 - Error Handling:
@@ -2081,6 +2686,7 @@ Endpoints: `7`
     - `Depends`
     - `storage_available`
     - `HTTPException`
+    - `authorize_storage_path`
     - `move_path`
   - Side effects: File/storage operation
 - Error Handling:
@@ -2110,6 +2716,7 @@ Endpoints: `7`
     - `clean_name`
     - `storage_available`
     - `HTTPException`
+    - `authorize_storage_path`
     - `move_path`
   - Side effects: File/storage operation
 - Error Handling:
@@ -2139,14 +2746,14 @@ Endpoints: `7`
     - `Depends`
     - `storage_available`
     - `HTTPException`
+    - `authorize_storage_path`
     - `ensure_path`
+    - `validate_upload_metadata`
     - `is_local_storage`
     - `clean_name`
     - `local_path`
     - `(upload.filename or '').split('/')[-1].split`
     - `upload.close`
-    - `_write_upload_to_tmp`
-    - `upload_file_with_safe_extension`
   - Side effects: File/storage operation
 - Error Handling:
   - `400`: `Files are required`; body schema `{"detail": "..."}`
@@ -2191,8 +2798,8 @@ curl -X GET http://localhost:8000/api/v1/outgoing-registry -H "Authorization: Be
   "outgoing_number_seq": 0,
   "recipient_company_id": "00000000-0000-0000-0000-000000000000",
   "subject": "string",
-  "attachments_list": "string",
-  "body": "string"
+  "act_contract_document_id": "00000000-0000-0000-0000-000000000000",
+  "attachments_list": "string"
 }
 ```
 
@@ -2231,8 +2838,8 @@ curl -X POST http://localhost:8000/api/v1/outgoing-registry -H "Authorization: B
   "outgoing_number_seq": 0,
   "recipient_company_id": "00000000-0000-0000-0000-000000000000",
   "subject": "string",
-  "attachments_list": "string",
-  "body": "string"
+  "act_contract_document_id": "00000000-0000-0000-0000-000000000000",
+  "attachments_list": "string"
 }
 ```
 

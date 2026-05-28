@@ -106,7 +106,7 @@
               <h3>{{ issue.title }}</h3>
               <p>{{ issue.description }}</p>
               <div class="data-health-issue__meta">
-                <span v-if="issue.deal_title">Сделка: {{ issue.deal_title }}</span>
+                <span v-if="issue.deal_title">Проект: {{ issue.deal_title }}</span>
                 <span v-if="issue.payload?.stage_name">Этап: {{ issue.payload.stage_name }}</span>
                 <span v-if="issue.payload?.product_name">Товар: {{ issue.payload.product_name }}</span>
                 <span v-if="issue.payload?.contract_number">Договор: {{ issue.payload.contract_number }}</span>
@@ -273,7 +273,7 @@ const SEVERITY_OPTIONS = [
 
 const MODULE_OPTIONS = [
   { value: '', label: 'Все' },
-  { value: 'projects', label: 'Сделки' },
+  { value: 'projects', label: 'Проекты' },
   { value: 'stages', label: 'Этапы' },
   { value: 'contracting', label: 'Контрактация' },
   { value: 'outgoing', label: 'Письма' },
@@ -507,7 +507,7 @@ const severityBadgeVariant = (value) => {
 }
 
 const moduleLabel = (value) => {
-  if (value === 'projects') return 'Сделки'
+  if (value === 'projects') return 'Проекты'
   if (value === 'stages') return 'Этапы'
   if (value === 'contracting') return 'Контрактация'
   if (value === 'outgoing') return 'Письма'

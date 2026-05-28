@@ -35,9 +35,11 @@
             :class="{ 'is-selected': selectedIdSet.has(String(user.id)) }"
             @click="pick(user)"
           >
-            <span class="user-picker__avatar">
-              {{ initialOf(user) }}
-            </span>
+            <UiAvatar
+              :name="user.full_name || user.email || ''"
+              :src="user.avatar_url || null"
+              size="sm"
+            />
             <span class="user-picker__copy">
               <strong>{{ user.full_name || user.email || user.id }}</strong>
               <small v-if="user.email">{{ user.email }}</small>
@@ -58,9 +60,11 @@
 
 <script>
 import { ref, computed, onBeforeUnmount, nextTick, watch } from 'vue'
+import UiAvatar from './UiAvatar.vue'
 
 export default {
   name: 'UserPickerButton',
+  components: { UiAvatar },
   props: {
     users: { type: Array, default: () => [] },
     selectedIds: { type: Array, default: () => [] },

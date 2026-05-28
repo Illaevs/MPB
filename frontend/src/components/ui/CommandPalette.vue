@@ -2,7 +2,7 @@
 
 
 
-  <div v-if="isOpen" class="palette-overlay" @click="close">
+  <div v-if="isOpen" class="palette-overlay" v-modal-close="close">
 
 
 
@@ -34,7 +34,7 @@
 
 
 
-          placeholder="Поиск сделок, контрагентов или команд..."
+          placeholder="Поиск проектов, контрагентов или команд..."
 
 
 
@@ -297,7 +297,7 @@ export default {
         const staticItems = [
       // Navigation
       { id: 'home', label: 'Главная', desc: 'Переход на главную страницу', icon: 'fas fa-home', type: 'Перейти', action: () => router.push('/') },
-      { id: 'projects', label: 'Сделки', desc: 'Список всех сделок', icon: 'fas fa-project-diagram', type: 'Перейти', section: 'projects', action: () => router.push('/projects') },
+      { id: 'projects', label: 'Проекты', desc: 'Список всех проектов', icon: 'fas fa-project-diagram', type: 'Перейти', section: 'projects', action: () => router.push('/projects') },
       { id: 'tasks', label: 'Задачи', desc: 'Управление задачами', icon: 'fas fa-tasks', type: 'Перейти', section: 'tasks', action: () => router.push('/tasks') },
       { id: 'users', label: 'Пользователи', desc: 'Управление пользователями', icon: 'fas fa-user-cog', type: 'Перейти', section: 'users', action: () => router.push('/users') },
       { id: 'roles', label: 'Роли и права', desc: 'Настройка ролей и прав', icon: 'fas fa-shield-alt', type: 'Перейти', section: 'roles', action: () => router.push('/roles') },
@@ -309,7 +309,7 @@ export default {
       
       // Actions
       { id: 'theme', label: 'Переключить тему', desc: 'Светлая / тёмная', icon: 'fas fa-adjust', type: 'Действие', action: () => document.querySelector('.sidebar button.w-100')?.click() },
-      { id: 'create_project', label: 'Новая сделка', desc: 'Создать новую сделку', icon: 'fas fa-plus', type: 'Действие', action: () => { router.push('/projects'); setTimeout(() => document.querySelector('.btn-primary')?.click(), 500) } },
+      { id: 'create_project', label: 'Новый проект', desc: 'Создать новый проект', icon: 'fas fa-plus', type: 'Действие', action: () => { router.push('/projects'); setTimeout(() => document.querySelector('.btn-primary')?.click(), 500) } },
     ]
 
     const allItems = computed(() => {
@@ -392,67 +392,72 @@ export default {
 
 
 
+    // Маппинг entity_type из глобального поиска → UI-элементы
+    // (иконка, метка типа, роутинг). Для каждого типа — функция
+    // построения route'а (опционально с детальной страницей).
+    // Маппинг entity_type → UI + функция роутинга. route() принимает
+    // (id, parent_id) — parent_id используется для дочерних сущностей
+    // (task_message/task_subtask → открыть РОДИТЕЛЬСКУЮ задачу).
+    const ENTITY_UI = {
+      deal: { icon: 'fas fa-project-diagram', type: 'Проект', route: (id) => `/projects/${id}` },
+      contract: { icon: 'fas fa-file-contract', type: 'Договор', route: () => `/contracts` },
+      lead: { icon: 'fas fa-bullseye', type: 'Лид', route: (id) => `/leads/${id}` },
+      company: { icon: 'fas fa-building', type: 'Контрагент', route: () => `/companies` },
+      task: { icon: 'fas fa-tasks', type: 'Задача', route: (id) => `/tasks?task_id=${id}` },
+      document: { icon: 'fas fa-folder-open', type: 'Документ', route: () => `/document-registry` },
+      outgoing_document: { icon: 'fas fa-paper-plane', type: 'Исходящий', route: () => `/outgoing-registry` },
+      kp_document: { icon: 'fas fa-file-invoice-dollar', type: 'КП', route: () => `/leads` },
+      mail_message: { icon: 'fas fa-envelope', type: 'Письмо', route: () => `/mail` },
+      legal_case: { icon: 'fas fa-balance-scale', type: 'Юр. дело', route: () => `/legal-work` },
+      support_ticket: { icon: 'fas fa-life-ring', type: 'Тикет', route: () => `/support` },
+      task_message: { icon: 'fas fa-comment', type: 'Сообщение', route: (id, parent_id) => parent_id ? `/tasks?task_id=${parent_id}` : `/tasks` },
+      task_subtask: { icon: 'fas fa-check-square', type: 'Пункт чек-листа', route: (id, parent_id) => parent_id ? `/tasks?task_id=${parent_id}` : `/tasks` },
+      subcontractor_card: { icon: 'fas fa-hammer', type: 'Субподрядчик', route: () => `/subcontractors` },
+    }
+
+    const stripMarks = (s) => (s || '').replace(/<\/?mark>/g, '')
+
     const searchApi = async () => {
-
-
-
        if (!query.value || query.value.length < 2) {
-
-
-
           fetchedItems.value = []
-
-
-
           isSearching.value = false
-
-
-
           return
-
-
-
        }
 
 
 
 
-
-
-
        try {
+          // Глобальный поиск через FTS5 — backend сам отфильтрует по
+          // секциям доступа, нам не надо знать какие именно. Если
+          // пользователь без прав ни на одну секцию — backend вернёт
+          // пустой items[].
+          const resp = await api.search.search({ query: query.value, limit: 30 })
+          const items = (resp && resp.items) || []
 
+          fetchedItems.value = items.map((hit) => {
+            const ui = ENTITY_UI[hit.entity_type] || {
+              icon: 'fas fa-search',
+              type: hit.entity_type,
+              route: () => '/',
+            }
+            return {
+              uniqueId: `${hit.entity_type}_${hit.entity_id}`,
+              label: stripMarks(hit.title) || '(без названия)',
+              // snippet содержит <mark>...</mark>, рендерим через v-html
+              // в существующем шаблоне; здесь храним plain-обрезку для
+              // нерендерящих секций.
+              desc: stripMarks(hit.snippet).slice(0, 80) || ui.type,
+              icon: ui.icon,
+              type: ui.type,
+              isRemote: true,
+              action: () => router.push(ui.route(hit.entity_id, hit.parent_id)),
+            }
+          })
 
-
-          const canSearchProjects = hasSectionAccess('projects')
-
-
-
-          const canSearchCompanies = hasSectionAccess('companies')
-
-
-
-          if (!canSearchProjects && !canSearchCompanies) {
-
-
-
-             fetchedItems.value = []
-
-
-
-             isSearching.value = false
-
-
-
-             return
-
-
-
-          }
-
-
-
-
+          isSearching.value = false
+          selectedIndex.value = 0
+          return
 
 
 
@@ -552,7 +557,7 @@ export default {
 
 
 
-             type: 'Сделка',
+             type: 'Проект',
 
 
 
