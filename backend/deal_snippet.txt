@@ -1,0 +1,15 @@
+26:     # ÐÐ¾Ð½ÑÑÐ°Ð³ÐµÐ½ÑÑ
+27:     customer_id = Column(String(36), ForeignKey("companies.id"))
+28:     general_contractor_id = Column(String(36), ForeignKey("companies.id"))
+29: 
+30:     # ÐÐ¾Ð½ÑÐ¸Ð³ÑÑÐ°ÑÐ¸Ñ Ð½ÐµÑÑÑÐ¾ÐµÐº (JSONB Ð² PostgreSQL, JSON Ð² SQLite)
+31:     penalty_config = Column(JSON, default=dict)
+32: 
+33:     # ÐÑÑÐ¸ Ðº ÑÐ°Ð¹Ð»Ð°Ð¼ Ð² S3
+34:     s3_prefix_tz = Column(String(500))    # Ð¢ÐµÑ
+35:     s3_prefix_docs = Column(String(500))  # ÐÑÐ¾ÐµÐºÑÐ½Ð°Ñ Ð´Ð¾ÐºÑÐ¼ÐµÐ½ÑÐ°ÑÐ¸Ñ
+36: 
+37:     # Ð¡ÑÐ°ÑÑÑ Ð¿ÑÐ¾ÐµÐºÑÐ°
+38:     status = Column(String(50), default="active")
+39: 
+40:     # Ð¤Ð¸Ð½Ð°Ð½ÑÐ¾Ð²ÑÐµ Ð¸ÑÐ¾Ð³Ð¸

@@ -1,0 +1,20 @@
+# Минстрой URL-ы для batch-наполнения нормативной базы из PDF.
+#
+# Формат:
+#   - doc_type / doc_number — должны совпадать с записью в `reglaments`
+#   - minstroy_page — URL страницы документа (получен через WebSearch)
+#   - pdf_hint — опционально: ожидаемое имя PDF (например "SP-63.pdf").
+#     Если не указано — скрипт ищет `SP-{number_short}.pdf` в HTML по regex.
+#
+# URL'ы собраны через `site:minstroyrf.gov.ru "СП X.13330.YYYY"` и
+# подтверждены ручной проверкой первого результата.
+
+norms:
+  - {doc_type: 'СП', doc_number: '63.13330.2018', minstroy_page: 'https://www.minstroyrf.gov.ru/docs/18227/', pdf_hint: 'SP-63.pdf'}
+  - {doc_type: 'СП', doc_number: '16.13330.2017', minstroy_page: 'https://www.minstroyrf.gov.ru/docs/14474/', pdf_hint: 'SP-16.pdf'}
+  - {doc_type: 'СП', doc_number: '20.13330.2016', minstroy_page: 'https://www.minstroyrf.gov.ru/docs/13673/', pdf_hint: 'SP-20.pdf'}
+  - {doc_type: 'СП', doc_number: '22.13330.2016', minstroy_page: 'https://www.minstroyrf.gov.ru/docs/14627/', pdf_hint: 'SP-22.pdf'}
+  - {doc_type: 'СП', doc_number: '28.13330.2017', minstroy_page: 'https://www.minstroyrf.gov.ru/docs/14473/', pdf_hint: 'SP-28.pdf'}
+  - {doc_type: 'СП', doc_number: '60.13330.2020', minstroy_page: 'https://www.minstroyrf.gov.ru/docs/120025/', pdf_hint: 'SP-60.pdf'}
+  - {doc_type: 'СП', doc_number: '70.13330.2012', minstroy_page: 'https://www.minstroyrf.gov.ru/docs/1888/', pdf_hint: 'SP-70.pdf'}
+  - {doc_type: 'СП', doc_number: '118.13330.2022', minstroy_page: 'https://www.minstroyrf.gov.ru/docs/223331/', pdf_hint: 'SP-118.pdf'}

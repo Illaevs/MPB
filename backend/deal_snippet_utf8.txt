@@ -1,0 +1,15 @@
+31:     penalty_config = Column(JSON, default=dict)
+32: 
+33:     # Пути к файлам в S3
+34:     s3_prefix_tz = Column(String(500))    # Те�
+35:     s3_prefix_docs = Column(String(500))  # Проектная документация
+36: 
+37:     # Статус проекта
+38:     status = Column(String(50), default="active")
+39: 
+40:     # Финансовые итоги
+41:     total_contract_value = Column(Float, default=0.0)
+42:     total_paid = Column(Float, default=0.0)
+43: 
+44:     # Настройки НДС
+45:     vat_rate = Column(Float, default=20.0)  # Ставка НДС (%)

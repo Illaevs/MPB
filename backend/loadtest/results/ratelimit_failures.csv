@@ -1,0 +1,9 @@
+Method,Name,Error,Occurrences,First Seen,Last Seen
+GET,GET /data-health/issues,LocustBadStatusCode(code=429),471,2026-05-18T13:50:17Z,2026-05-18T13:50:28Z
+GET,GET /dashboard/summary,LocustBadStatusCode(code=429),1186,2026-05-18T13:50:17Z,2026-05-18T13:50:28Z
+GET,GET /finance/cashflow,LocustBadStatusCode(code=429),472,2026-05-18T13:50:17Z,2026-05-18T13:50:28Z
+GET,GET /deals/,LocustBadStatusCode(code=429),1184,2026-05-18T13:50:17Z,2026-05-18T13:50:28Z
+GET,GET /dashboard/activity,LocustBadStatusCode(code=429),1191,2026-05-18T13:50:17Z,2026-05-18T13:50:28Z
+GET,GET /document-registry/,LocustBadStatusCode(code=429),1209,2026-05-18T13:50:17Z,2026-05-18T13:50:28Z
+GET,GET /contracts/,LocustBadStatusCode(code=429),1191,2026-05-18T13:50:17Z,2026-05-18T13:50:28Z
+GET,GET /finance/overview,LocustBadStatusCode(code=429),469,2026-05-18T13:50:17Z,2026-05-18T13:50:28Z

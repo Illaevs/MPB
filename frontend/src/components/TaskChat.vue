@@ -1,0 +1,1647 @@
+<template>
+  <div class="task-chat">
+    <div class="task-chat__header">
+      <div class="task-chat__title">
+        <i class="far fa-comment"></i>
+        <span>Чат задачи</span>
+      </div>
+      <div class="task-chat__header-actions">
+        <button
+          type="button"
+          class="task-chat__icon-btn"
+          :class="{ 'is-active': searchOpen }"
+          :title="searchOpen ? 'Скрыть поиск' : 'Поиск по чату (/)'"
+          @click="toggleSearch"
+        >
+          <i class="fas fa-magnifying-glass"></i>
+        </button>
+        <button
+          type="button"
+          class="task-chat__refresh"
+          :disabled="loading"
+          @click="refreshMessages"
+        >
+          <i class="fas fa-sync-alt" :class="{ 'fa-spin': loading }"></i>
+          <span>Обновить</span>
+        </button>
+      </div>
+    </div>
+
+    <div v-if="searchOpen" class="task-chat__search-bar">
+      <i class="fas fa-magnifying-glass"></i>
+      <input
+        ref="searchInput"
+        v-model="searchQuery"
+        type="text"
+        class="task-chat__search-input"
+        placeholder="Найти в чате…"
+        @keydown.esc.prevent="closeSearch"
+      />
+      <span v-if="searchQuery" class="task-chat__search-count">
+        {{ filteredMessageCount }} {{ pluralMatch(filteredMessageCount) }}
+      </span>
+      <button
+        v-if="searchQuery"
+        type="button"
+        class="task-chat__icon-btn"
+        title="Очистить"
+        @click="searchQuery = ''"
+      >
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+
+    <div class="task-chat__body">
+      <div class="task-chat__list" ref="listRef">
+        <div v-if="loading" class="task-chat__placeholder">
+          <i class="fas fa-spinner fa-spin mr-1"></i> Загружаем сообщения...
+        </div>
+        <div v-else-if="!chatItems.length" class="task-chat__placeholder">
+          Сообщений пока нет. Начните обсуждение задачи.
+        </div>
+        <div v-else-if="!chatItems.length && searchQuery" class="task-chat__placeholder">
+          <i class="fas fa-magnifying-glass mr-1"></i>
+          По запросу «{{ searchQuery }}» ничего не найдено
+        </div>
+        <div v-else class="task-chat__messages">
+          <template v-for="item in chatItems" :key="item.key">
+            <div v-if="item.type === 'day'" class="task-chat__day-chip">
+              {{ item.label }}
+            </div>
+            <div
+              v-else
+              class="task-chat__message-row"
+              :class="{ 'is-own': isOwn(item.message), 'is-deleted': item.message.is_deleted }"
+            >
+              <div
+                class="task-chat__avatar"
+                :class="{ 'task-chat__avatar--image': !!getMessageAvatarUrl(item.message) }"
+                :style="getMessageAvatarUrl(item.message) ? null : getMessageAvatarStyle(item.message)"
+              >
+                <img
+                  v-if="getMessageAvatarUrl(item.message) && !isAvatarBroken(getMessageAvatarUrl(item.message))"
+                  :src="getMessageAvatarUrl(item.message)"
+                  :alt="item.message.user_name || 'Пользователь'"
+                  class="task-chat__avatar-image"
+                  @error="markAvatarBroken(getMessageAvatarUrl(item.message))"
+                >
+                <span v-else>{{ getMessageInitial(item.message) }}</span>
+              </div>
+
+              <div class="task-chat__message-main">
+                <div class="task-chat__meta">
+                  <span class="task-chat__author">{{ item.message.user_name || 'Пользователь' }}</span>
+                  <span class="task-chat__time">{{ formatTime(item.message.created_at) }}</span>
+                  <span v-if="item.message.edited_at" class="task-chat__edited">изменено</span>
+                </div>
+
+                <div class="task-chat__bubble" :class="{ 'is-own': isOwn(item.message) }">
+                  <template v-if="item.message.is_deleted">
+                    <span class="task-chat__deleted">Сообщение удалено</span>
+                  </template>
+                  <template v-else>
+                    <div v-if="editingId === item.message.id" class="task-chat__edit">
+                      <textarea v-model="editingBody" class="form-control" rows="4"></textarea>
+                      <div class="task-chat__edit-actions">
+                        <button type="button" class="btn btn-sm btn-primary" @click="saveEdit(item.message)">
+                          Сохранить
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" @click="cancelEdit">
+                          Отмена
+                        </button>
+                      </div>
+                    </div>
+                    <template v-else>
+                      <div
+                        v-if="item.message.body"
+                        class="task-chat__text"
+                        v-html="renderBodyHtml(item.message)"
+                      ></div>
+                      <div v-if="item.message.attachments?.length" class="task-chat__attachments">
+                        <template v-for="file in item.message.attachments" :key="file.path || file.name">
+                          <button
+                            v-if="isImageAttachment(file)"
+                            type="button"
+                            class="task-chat__image-attachment"
+                            :title="file.name || 'Изображение'"
+                            @click="openImageLightbox(file)"
+                          >
+                            <img
+                              :src="file.download_url || file.url || ''"
+                              :alt="file.name || 'Изображение'"
+                              loading="lazy"
+                            />
+                          </button>
+                          <button
+                            v-else
+                            type="button"
+                            class="task-chat__attachment"
+                            @click="downloadAttachment(file)"
+                          >
+                            <span class="task-chat__attachment-icon">
+                              <i :class="fileIconClass(file)"></i>
+                            </span>
+                            <span class="task-chat__attachment-content">
+                              <span class="task-chat__attachment-name">{{ file.name || 'Файл' }}</span>
+                              <span v-if="file.size" class="task-chat__attachment-size">{{ formatSize(file.size) }}</span>
+                            </span>
+                          </button>
+                        </template>
+                      </div>
+                    </template>
+                  </template>
+                </div>
+
+                <div v-if="canEdit(item.message) && editingId !== item.message.id" class="task-chat__message-actions">
+                  <button type="button" class="task-chat__link-btn" @click="startEdit(item.message)">Редактировать</button>
+                  <button type="button" class="task-chat__link-btn is-danger" @click="deleteMessage(item.message)">Удалить</button>
+                </div>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <div v-if="canWrite" class="task-chat__composer">
+        <div v-if="selectedMentions.length" class="task-chat__mentions">
+          <span v-for="mention in selectedMentions" :key="mention.id" class="task-chat__mention-chip">
+            @{{ mention.name }}
+            <button type="button" @click="removeMention(mention.id)">
+              <i class="fas fa-times"></i>
+            </button>
+          </span>
+        </div>
+
+        <div v-if="pendingFiles.length" class="task-chat__file-list">
+          <div v-for="(file, idx) in pendingFiles" :key="file.name + idx" class="task-chat__pending-file">
+            <span class="task-chat__pending-file-main">
+              <i class="fas fa-paperclip"></i>
+              <span>{{ file.name }}</span>
+            </span>
+            <span class="task-chat__pending-file-meta">{{ formatSize(file.size) }}</span>
+            <button type="button" class="task-chat__pending-remove" @click="removeFile(idx)">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="task-chat__composer-bar">
+          <textarea
+            v-model="draft"
+            class="task-chat__input"
+            rows="1"
+            placeholder="Напишите сообщение… (Ctrl+Enter — отправить)"
+            @keydown.ctrl.enter.prevent.stop="sendMessage"
+            @keydown.meta.enter.prevent.stop="sendMessage"
+          ></textarea>
+
+          <div class="task-chat__composer-actions">
+            <button type="button" class="task-chat__tool-btn" title="Прикрепить файл" @click="openFilePicker">
+              <i class="fas fa-paperclip"></i>
+            </button>
+            <button type="button" class="task-chat__tool-btn" title="Упомянуть" @click="toggleMentions">
+              <i class="fas fa-at"></i>
+            </button>
+            <button type="button" class="task-chat__send-btn" :disabled="sending" @click="sendMessage">
+              <i v-if="sending" class="fas fa-spinner fa-spin"></i>
+              <i v-else class="fas fa-paper-plane"></i>
+            </button>
+          </div>
+        </div>
+
+        <input ref="fileInput" type="file" class="d-none" multiple @change="onFilesPicked" />
+
+        <div v-if="mentionPickerOpen" class="task-chat__mention-picker">
+          <div class="task-chat__mention-header">
+            <input
+              v-model="mentionQuery"
+              class="form-control form-control-sm"
+              placeholder="Поиск пользователя"
+            >
+            <button type="button" class="task-chat__link-btn" @click="mentionPickerOpen = false">Закрыть</button>
+          </div>
+          <div class="task-chat__mention-list">
+            <button
+              v-for="user in mentionOptions"
+              :key="user.id"
+              type="button"
+              class="task-chat__mention-option"
+              @click="addMention(user)"
+            >
+              <span
+                class="task-chat__mention-avatar"
+                :class="{ 'task-chat__mention-avatar--image': !!String(user.avatar_url || '').trim() }"
+                :style="String(user.avatar_url || '').trim() ? null : getAvatarTheme(`${user.id}${user.full_name || ''}`)"
+              >
+                <img
+                  v-if="String(user.avatar_url || '').trim() && !isAvatarBroken(user.avatar_url)"
+                  :src="user.avatar_url"
+                  :alt="user.full_name || user.email || user.id"
+                  class="task-chat__mention-avatar-image"
+                  @error="markAvatarBroken(user.avatar_url)"
+                >
+                <span v-else>{{ getMessageInitial({ user_name: user.full_name || user.email || user.id }) }}</span>
+              </span>
+              <span class="task-chat__mention-copy">
+                <strong>{{ user.full_name || user.email || user.id }}</strong>
+                <small>{{ user.email || 'Пользователь ERP' }}</small>
+              </span>
+            </button>
+            <div v-if="!mentionOptions.length" class="task-chat__mention-empty">Никого не нашли</div>
+          </div>
+        </div>
+      </div>
+
+      <div v-else class="task-chat__readonly">Нет доступа к чату задачи</div>
+    </div>
+
+    <Teleport to="body">
+      <div
+        v-if="lightboxFile"
+        class="task-chat-lightbox"
+        @click.self="closeImageLightbox"
+      >
+        <button type="button" class="task-chat-lightbox__close" @click="closeImageLightbox">
+          <i class="fas fa-times"></i>
+        </button>
+        <img
+          :src="lightboxFile.download_url || lightboxFile.url || ''"
+          :alt="lightboxFile.name || 'Изображение'"
+          class="task-chat-lightbox__image"
+        />
+        <div class="task-chat-lightbox__caption">
+          <span>{{ lightboxFile.name || 'Изображение' }}</span>
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-secondary task-chat-lightbox__download"
+            @click="downloadAttachment(lightboxFile)"
+          >
+            <i class="fas fa-download mr-1"></i> Скачать
+          </button>
+        </div>
+      </div>
+    </Teleport>
+
+    <Teleport to="body">
+      <div v-if="confirmModalOpen" class="task-chat-confirm-overlay" @click.self="confirmModalOpen = false">
+        <div class="task-chat-confirm-glass">
+          <div class="task-chat-confirm-header">
+            <h5 class="m-0">{{ confirmModalTitle }}</h5>
+            <button class="btn btn-sm btn-icon task-chat-confirm-close" @click="confirmModalOpen = false">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+          <div class="task-chat-confirm-body">
+            <p class="m-0">{{ confirmModalText }}</p>
+          </div>
+          <div class="task-chat-confirm-footer">
+            <button class="btn btn-outline-secondary btn-sm" @click="confirmModalOpen = false">Отмена</button>
+            <button class="btn btn-danger btn-sm" @click="executeConfirm">
+              <i class="fas fa-check mr-1"></i> Подтвердить
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+  </div>
+</template>
+
+<script>
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { api } from '@/services/api'
+import { getActiveUser } from '../utils/permissions'
+import { useToast } from '../composables/useToast'
+import { downloadFromApi } from '../utils/download'
+import { normalizeAvatarUrl } from '../utils/avatar'
+
+const AVATAR_THEMES = [
+  { background: 'linear-gradient(135deg, #d7e7ff 0%, #b4d0ff 100%)', color: '#2563eb' },
+  { background: 'linear-gradient(135deg, #ffe4d3 0%, #ffc79c 100%)', color: '#b45309' },
+  { background: 'linear-gradient(135deg, #e8ddff 0%, #c8b4ff 100%)', color: '#7c3aed' },
+  { background: 'linear-gradient(135deg, #d9f7ec 0%, #a9e7cb 100%)', color: '#0f8f5d' },
+  { background: 'linear-gradient(135deg, #ffe7ef 0%, #ffc3d3 100%)', color: '#be185d' }
+]
+
+export default {
+  name: 'TaskChat',
+  props: {
+    taskId: { type: [String, Number], required: false, default: '' },
+    users: { type: Array, default: () => [] },
+    canRead: { type: Boolean, default: false },
+    canWrite: { type: Boolean, default: false }
+  },
+  emits: ['message-count'],
+  setup(props, { emit }) {
+    const { error: toastError } = useToast()
+
+    const confirmModalOpen = ref(false)
+    const brokenAvatarUrls = ref(new Set())
+    const confirmModalTitle = ref('')
+    const confirmModalText = ref('')
+    const confirmModalAction = ref(null)
+    const showConfirm = (title, text, action) => {
+      confirmModalTitle.value = title
+      confirmModalText.value = text
+      confirmModalAction.value = action
+      confirmModalOpen.value = true
+    }
+    const executeConfirm = () => {
+      confirmModalOpen.value = false
+      if (confirmModalAction.value) confirmModalAction.value()
+    }
+
+    const messages = ref([])
+    watch(
+      messages,
+      (list) => emit('message-count', Array.isArray(list) ? list.length : 0),
+      { deep: false }
+    )
+    const loading = ref(false)
+
+    // Search ---------------------------------------------------
+    const searchOpen = ref(false)
+    const searchQuery = ref('')
+    const searchInput = ref(null)
+    const toggleSearch = () => {
+      searchOpen.value = !searchOpen.value
+      if (searchOpen.value) {
+        nextTick(() => searchInput.value?.focus())
+      } else {
+        searchQuery.value = ''
+      }
+    }
+    const closeSearch = () => {
+      searchOpen.value = false
+      searchQuery.value = ''
+    }
+    const pluralMatch = (n) => {
+      const mod10 = n % 10
+      const mod100 = n % 100
+      if (mod10 === 1 && mod100 !== 11) return 'совпадение'
+      if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return 'совпадения'
+      return 'совпадений'
+    }
+
+    // Lightbox (image preview) ---------------------------------
+    const lightboxFile = ref(null)
+    const openImageLightbox = (file) => { lightboxFile.value = file }
+    const closeImageLightbox = () => { lightboxFile.value = null }
+
+    const IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp|bmp|svg|avif|heic)$/i
+    const isImageAttachment = (file) => {
+      if (!file) return false
+      if (file.mime && String(file.mime).startsWith('image/')) return true
+      if (file.content_type && String(file.content_type).startsWith('image/')) return true
+      return IMAGE_EXT_RE.test(String(file.name || ''))
+    }
+    const fileIconClass = (file) => {
+      const name = String(file?.name || '').toLowerCase()
+      if (/\.(pdf)$/.test(name)) return 'far fa-file-pdf'
+      if (/\.(xlsx?|csv)$/.test(name)) return 'far fa-file-excel'
+      if (/\.(docx?)$/.test(name)) return 'far fa-file-word'
+      if (/\.(pptx?)$/.test(name)) return 'far fa-file-powerpoint'
+      if (/\.(zip|rar|7z|tar|gz)$/.test(name)) return 'far fa-file-zipper'
+      if (/\.(mp4|mov|avi|mkv|webm)$/.test(name)) return 'far fa-file-video'
+      if (/\.(mp3|wav|ogg|flac)$/.test(name)) return 'far fa-file-audio'
+      if (/\.(txt|md|log)$/.test(name)) return 'far fa-file-lines'
+      return 'far fa-file'
+    }
+
+    // Mention chips in rendered body ---------------------------
+    const escapeHtml = (str) => String(str || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;')
+    const linkifyUrl = (text) => {
+      return text.replace(
+        /(https?:\/\/[^\s<]+)/g,
+        (m) => `<a href="${m}" target="_blank" rel="noopener noreferrer" class="task-chat__link">${m}</a>`
+      )
+    }
+    const renderBodyHtml = (message) => {
+      const raw = String(message?.body || '')
+      if (!raw) return ''
+      let html = escapeHtml(raw)
+      // Replace @Имя Фамилия occurrences with chips. Match against props.users.
+      const usersList = props.users || []
+      const sorted = usersList.slice().sort((a, b) => {
+        return String(b.full_name || '').length - String(a.full_name || '').length
+      })
+      sorted.forEach((u) => {
+        const name = String(u.full_name || u.email || '').trim()
+        if (!name) return
+        const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        const re = new RegExp('@' + escaped, 'gi')
+        html = html.replace(re, `<span class="task-chat__mention-inline" data-user-id="${u.id}">@${escapeHtml(name)}</span>`)
+      })
+      html = linkifyUrl(html)
+      return html
+    }
+
+    // Computed: chatItems filters by search.
+    const matchesSearch = (text) => {
+      const q = (searchQuery.value || '').trim().toLowerCase()
+      if (!q) return true
+      return String(text || '').toLowerCase().includes(q)
+    }
+    const visibleMessages = computed(() => {
+      const q = (searchQuery.value || '').trim()
+      if (!q) return messages.value
+      return messages.value.filter((m) =>
+        matchesSearch(m.body) ||
+        (Array.isArray(m.attachments) && m.attachments.some((f) => matchesSearch(f.name)))
+      )
+    })
+    const filteredMessageCount = computed(() => visibleMessages.value.length)
+    const sending = ref(false)
+    const draft = ref('')
+    const pendingFiles = ref([])
+    const selectedMentions = ref([])
+    const mentionPickerOpen = ref(false)
+    const mentionQuery = ref('')
+    const editingId = ref(null)
+    const editingBody = ref('')
+    const pollingTimer = ref(null)
+    const listRef = ref(null)
+    const fileInput = ref(null)
+
+    const activeUser = computed(() => getActiveUser())
+    const pollingActive = computed(() => !!pollingTimer.value)
+
+    const mentionOptions = computed(() => {
+      const query = (mentionQuery.value || '').trim().toLowerCase()
+      const base = props.users || []
+      const filtered = query
+        ? base.filter((u) => (u.full_name || u.email || '').toLowerCase().includes(query))
+        : base
+      const selectedIds = new Set(selectedMentions.value.map((item) => item.id))
+      return filtered.filter((u) => u && !selectedIds.has(u.id))
+    })
+
+    const getAvatarTheme = (seed) => {
+      const key = String(seed || '?')
+      const index = key.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0) % AVATAR_THEMES.length
+      return AVATAR_THEMES[index]
+    }
+
+    const getUserRecord = (userId) => {
+      if (!userId) return null
+      return (props.users || []).find((item) => String(item.id) === String(userId)) || null
+    }
+
+    const getMessageAvatarUrl = (message) => {
+      const user = getUserRecord(message?.user_id)
+      return normalizeAvatarUrl(user?.avatar_url || '', user?.id || message?.user_id || '')
+    }
+    const isAvatarBroken = (url) => {
+      const normalized = String(url || '').trim()
+      return normalized ? brokenAvatarUrls.value.has(normalized) : false
+    }
+    const markAvatarBroken = (url) => {
+      const normalized = String(url || '').trim()
+      if (!normalized || brokenAvatarUrls.value.has(normalized)) return
+      brokenAvatarUrls.value = new Set([...brokenAvatarUrls.value, normalized])
+    }
+
+    const getMessageAvatarStyle = (message) => getAvatarTheme(`${message?.user_id || ''}${message?.user_name || ''}`)
+
+    const getMessageInitial = (message) => {
+      const value = String(message?.user_name || 'П').trim()
+      return value.charAt(0).toUpperCase() || 'П'
+    }
+
+    const isOwn = (message) => {
+      const userId = activeUser.value?.id
+      return !!(userId && String(message?.user_id) === String(userId))
+    }
+
+    const canEdit = (message) => {
+      if (!message || message.is_deleted) return false
+      const userId = activeUser.value?.id
+      if (activeUser.value?.is_superuser) return true
+      return !!(userId && String(message.user_id) === String(userId))
+    }
+
+    const formatTime = (value) => {
+      if (!value) return ''
+      try {
+        return new Date(value).toLocaleString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+      } catch (e) {
+        return value
+      }
+    }
+
+    const isSameDay = (left, right) => {
+      if (!left || !right) return false
+      const a = new Date(left)
+      const b = new Date(right)
+      return (
+        a.getFullYear() === b.getFullYear() &&
+        a.getMonth() === b.getMonth() &&
+        a.getDate() === b.getDate()
+      )
+    }
+
+    const formatDayLabel = (value) => {
+      if (!value) return ''
+      const date = new Date(value)
+      const today = new Date()
+      const yesterday = new Date()
+      yesterday.setDate(today.getDate() - 1)
+      const short = date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
+      if (isSameDay(date, today)) return `Сегодня, ${short}`
+      if (isSameDay(date, yesterday)) return `Вчера, ${short}`
+      return date.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'short' })
+    }
+
+    const chatItems = computed(() => {
+      const result = []
+      let previousDate = null
+      visibleMessages.value.forEach((message) => {
+        if (!isSameDay(message.created_at, previousDate)) {
+          result.push({
+            type: 'day',
+            key: `day-${message.id}`,
+            label: formatDayLabel(message.created_at)
+          })
+        }
+        result.push({
+          type: 'message',
+          key: message.id,
+          message
+        })
+        previousDate = message.created_at
+      })
+      return result
+    })
+
+    const formatSize = (bytes) => {
+      if (!bytes && bytes !== 0) return ''
+      const sizes = ['Б', 'КБ', 'МБ', 'ГБ']
+      let index = 0
+      let value = Number(bytes)
+      while (value >= 1024 && index < sizes.length - 1) {
+        value /= 1024
+        index += 1
+      }
+      return `${value.toFixed(value >= 10 || index === 0 ? 0 : 1)} ${sizes[index]}`
+    }
+
+    const scrollToBottom = async () => {
+      await nextTick()
+      const el = listRef.value
+      if (!el) return
+      el.scrollTop = el.scrollHeight
+    }
+
+    const shouldUpdateMessages = (nextItems, currentItems) => {
+      if (nextItems.length !== currentItems.length) return true
+      for (let i = 0; i < nextItems.length; i += 1) {
+        const next = nextItems[i]
+        const current = currentItems[i]
+        if (!current) return true
+        if (next.id !== current.id) return true
+        if (next.updated_at !== current.updated_at) return true
+        if (next.is_deleted !== current.is_deleted) return true
+        const nextFiles = Array.isArray(next.attachments) ? next.attachments.length : 0
+        const currFiles = Array.isArray(current.attachments) ? current.attachments.length : 0
+        if (nextFiles !== currFiles) return true
+      }
+      return false
+    }
+
+    const loadMessages = async ({ silent = false } = {}) => {
+      if (!props.taskId || !props.canRead) return
+      if (!silent) loading.value = true
+      try {
+        const res = await api.tasks.listMessages(props.taskId)
+        const nextItems = res || []
+        if (shouldUpdateMessages(nextItems, messages.value)) {
+          const hadNew = nextItems.length > messages.value.length
+          messages.value = nextItems
+          if (hadNew) {
+            await scrollToBottom()
+          }
+        }
+      } catch (e) {
+        toastError('Ошибка загрузки сообщений')
+      } finally {
+        if (!silent) loading.value = false
+      }
+    }
+
+    const refreshMessages = () => {
+      if (loading.value) return
+      return loadMessages()
+    }
+
+    const startPolling = () => {
+      if (pollingTimer.value || !props.taskId || !props.canRead) return
+      pollingTimer.value = setInterval(() => loadMessages({ silent: true }), 10000)
+    }
+
+    const stopPolling = () => {
+      if (pollingTimer.value) {
+        clearInterval(pollingTimer.value)
+        pollingTimer.value = null
+      }
+    }
+
+    const openFilePicker = () => {
+      if (fileInput.value) fileInput.value.click()
+    }
+
+    const onFilesPicked = (event) => {
+      const files = Array.from(event.target.files || [])
+      if (!files.length) return
+      pendingFiles.value = [...pendingFiles.value, ...files]
+      event.target.value = ''
+    }
+
+    const removeFile = (idx) => {
+      pendingFiles.value.splice(idx, 1)
+    }
+
+    const toggleMentions = () => {
+      mentionPickerOpen.value = !mentionPickerOpen.value
+      mentionQuery.value = ''
+    }
+
+    const addMention = (user) => {
+      if (!user) return
+      selectedMentions.value.push({
+        id: user.id,
+        name: user.full_name || user.email || user.id
+      })
+      draft.value = `${draft.value.trim()} @${user.full_name || user.email || ''} `.trim() + ' '
+    }
+
+    const removeMention = (userId) => {
+      selectedMentions.value = selectedMentions.value.filter((item) => item.id !== userId)
+    }
+
+    const sendMessage = async () => {
+      if (!props.taskId || sending.value) return
+      const text = (draft.value || '').trim()
+      if (!text && !pendingFiles.value.length) return
+      sending.value = true
+      try {
+        const form = new FormData()
+        if (text) form.append('body', text)
+        if (selectedMentions.value.length) {
+          form.append('mentions', JSON.stringify(selectedMentions.value.map((item) => item.id)))
+        }
+        pendingFiles.value.forEach((file) => form.append('files', file, file.name))
+        const res = await api.tasks.sendMessage(props.taskId, form)
+        if (res) {
+          messages.value = [...messages.value, res]
+        }
+        draft.value = ''
+        saveDraft(props.taskId, '')
+        pendingFiles.value = []
+        selectedMentions.value = []
+        mentionPickerOpen.value = false
+        await scrollToBottom()
+      } catch (e) {
+        toastError('Ошибка отправки сообщения')
+      } finally {
+        sending.value = false
+      }
+    }
+
+    const downloadAttachment = async (file) => {
+      try {
+        const url = file?.download_url
+        if (!url) return
+        await downloadFromApi(url, {}, file?.name || 'file', { module: 'task_chat', entityId: props.taskId })
+      } catch (e) {
+        toastError('Ошибка загрузки файла')
+      }
+    }
+
+    const startEdit = (message) => {
+      if (!message || !message.body) return
+      editingId.value = message.id
+      editingBody.value = message.body
+    }
+
+    const cancelEdit = () => {
+      editingId.value = null
+      editingBody.value = ''
+    }
+
+    const saveEdit = async (message) => {
+      if (!editingId.value || !editingBody.value.trim()) return
+      try {
+        const res = await api.tasks.updateMessage(message.id, {
+          body: editingBody.value.trim()
+        })
+        messages.value = messages.value.map((item) => (item.id === message.id ? res : item))
+        cancelEdit()
+      } catch (e) {
+        toastError('Ошибка редактирования')
+      }
+    }
+
+    const deleteMessage = (message) => {
+      if (!message) return
+      showConfirm('Удалить сообщение?', 'Сообщение будет удалено.', async () => {
+        try {
+          await api.tasks.deleteMessage(message.id)
+          messages.value = messages.value.map((item) =>
+            item.id === message.id ? { ...item, is_deleted: true, body: null } : item
+          )
+        } catch (e) {
+          toastError('Ошибка удаления сообщения')
+        }
+      })
+    }
+
+    // Draft persistence per task_id ----------------------------
+    const draftKey = (taskId) => `taskChat.draft.${taskId}`
+    const loadDraft = (taskId) => {
+      if (!taskId) return ''
+      try { return localStorage.getItem(draftKey(taskId)) || '' }
+      catch (_e) { return '' }
+    }
+    const saveDraft = (taskId, value) => {
+      if (!taskId) return
+      try {
+        if (value && value.trim()) localStorage.setItem(draftKey(taskId), value)
+        else localStorage.removeItem(draftKey(taskId))
+      } catch (_e) { /* quota or disabled */ }
+    }
+    watch(draft, (value) => saveDraft(props.taskId, value))
+
+    watch(
+      () => props.taskId,
+      async (newId) => {
+        messages.value = []
+        cancelEdit()
+        draft.value = loadDraft(newId)
+        if (!newId) return
+        await loadMessages()
+        startPolling()
+      }
+    )
+
+    watch(
+      () => props.canRead,
+      (value) => {
+        if (!value) {
+          stopPolling()
+          return
+        }
+        if (props.taskId) startPolling()
+      }
+    )
+
+    onMounted(async () => {
+      draft.value = loadDraft(props.taskId)
+      if (props.taskId && props.canRead) {
+        await loadMessages()
+        startPolling()
+      }
+    })
+
+    onBeforeUnmount(() => {
+      stopPolling()
+    })
+
+    return {
+      loading,
+      sending,
+      draft,
+      pendingFiles,
+      selectedMentions,
+      mentionPickerOpen,
+      mentionQuery,
+      mentionOptions,
+      editingId,
+      editingBody,
+      listRef,
+      fileInput,
+      pollingActive,
+      chatItems,
+      isOwn,
+      canEdit,
+      formatTime,
+      formatSize,
+      refreshMessages,
+      openFilePicker,
+      onFilesPicked,
+      removeFile,
+      toggleMentions,
+      addMention,
+      removeMention,
+      sendMessage,
+      downloadAttachment,
+      startEdit,
+      cancelEdit,
+      saveEdit,
+      deleteMessage,
+      getAvatarTheme,
+      getMessageAvatarUrl,
+      isAvatarBroken,
+      markAvatarBroken,
+      getMessageAvatarStyle,
+      getMessageInitial,
+      confirmModalOpen,
+      confirmModalTitle,
+      confirmModalText,
+      executeConfirm,
+      // search
+      searchOpen,
+      searchQuery,
+      searchInput,
+      toggleSearch,
+      closeSearch,
+      filteredMessageCount,
+      pluralMatch,
+      // attachments
+      isImageAttachment,
+      fileIconClass,
+      lightboxFile,
+      openImageLightbox,
+      closeImageLightbox,
+      // body rendering
+      renderBodyHtml
+    }
+  }
+}
+</script>
+
+<style scoped>
+/* ============================================================
+   TASK CHAT — token-based, dark mode via tokens (no !important).
+   All colors come from main.css (--color-*, --chat-*, --space-*).
+   ============================================================ */
+.task-chat {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.task-chat__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5) var(--space-3);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.task-chat__title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  color: var(--color-text);
+  font-size: var(--text-md);
+  font-weight: var(--fw-semibold);
+}
+.task-chat__title i {
+  color: var(--color-text-muted);
+  font-size: var(--text-lg);
+}
+
+.task-chat__status {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--color-success-soft);
+  color: var(--color-success);
+  font-size: var(--text-xs);
+  font-weight: var(--fw-bold);
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.task-chat__header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.task-chat__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.task-chat__icon-btn:hover { background: var(--color-surface-2); color: var(--color-text); }
+.task-chat__icon-btn.is-active {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+.task-chat__icon-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.task-chat__search-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+.task-chat__search-bar > i:first-child {
+  color: var(--color-text-subtle);
+}
+.task-chat__search-input {
+  flex: 1;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--color-text);
+  font-size: var(--text-md);
+}
+.task-chat__search-input::placeholder { color: var(--color-text-subtle); }
+.task-chat__search-count {
+  font-size: var(--text-sm);
+  color: var(--color-text-subtle);
+  white-space: nowrap;
+}
+
+.task-chat__refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: var(--text-base);
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.task-chat__refresh:hover {
+  background: var(--color-surface-2);
+  color: var(--color-text);
+}
+.task-chat__refresh:disabled { opacity: 0.6; cursor: default; }
+.task-chat__refresh:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.task-chat__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  /* Wallpaper from /public/wallpapers/task-chat.jpg, with a soft tint
+     so chat bubbles remain readable on any part of the image. */
+  background-image:
+    linear-gradient(rgba(248, 250, 252, 0.55), rgba(248, 250, 252, 0.55)),
+    url('/wallpapers/task-chat.jpg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: local;
+}
+:root[data-theme="dark"] .task-chat__body {
+  background-image:
+    linear-gradient(rgba(15, 23, 42, 0.78), rgba(15, 23, 42, 0.78)),
+    url('/wallpapers/task-chat.jpg');
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .task-chat__body {
+    background-image:
+      linear-gradient(rgba(15, 23, 42, 0.78), rgba(15, 23, 42, 0.78)),
+      url('/wallpapers/task-chat.jpg');
+  }
+}
+
+.task-chat__list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-5) var(--space-4) var(--space-4);
+}
+
+.task-chat__placeholder {
+  color: var(--color-text-subtle);
+  font-size: var(--text-md);
+  text-align: center;
+  padding: var(--space-12) var(--space-4);
+}
+
+.task-chat__messages {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.task-chat__day-chip {
+  align-self: center;
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-3);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: var(--fw-medium);
+  line-height: 1;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.task-chat__message-row {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+}
+.task-chat__message-row.is-own {
+  grid-template-columns: minmax(0, 1fr) 36px;
+}
+.task-chat__message-row.is-own .task-chat__avatar { order: 2; }
+.task-chat__message-row.is-own .task-chat__message-main {
+  order: 1;
+  align-items: flex-end;
+}
+
+.task-chat__message-main {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.task-chat__avatar,
+.task-chat__mention-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-md);
+  font-weight: var(--fw-bold);
+  line-height: 1;
+}
+.task-chat__mention-avatar {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  font-size: var(--text-base);
+}
+.task-chat__avatar-image,
+.task-chat__mention-avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.task-chat__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  color: var(--color-text-subtle);
+  font-size: var(--text-sm);
+  line-height: 1.2;
+}
+.task-chat__message-row.is-own .task-chat__meta { justify-content: flex-end; }
+.task-chat__author {
+  color: var(--color-text);
+  font-weight: var(--fw-semibold);
+}
+:root[data-theme="dark"] .task-chat__author { color: var(--color-text-strong); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .task-chat__author { color: var(--color-text-strong); }
+}
+/* Time / "edited" tag — keep muted but light-friendly on dark wallpaper. */
+.task-chat__time,
+.task-chat__edited {
+  color: var(--color-text-subtle);
+}
+:root[data-theme="dark"] .task-chat__time,
+:root[data-theme="dark"] .task-chat__edited {
+  color: var(--color-text-muted);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .task-chat__time,
+  :root:not([data-theme="light"]) .task-chat__edited {
+    color: var(--color-text-muted);
+  }
+}
+.task-chat__edited { font-style: italic; }
+
+.task-chat__bubble {
+  max-width: min(560px, 78%);
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-xs);
+}
+.task-chat__bubble.is-own {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-on-primary);
+  box-shadow: var(--shadow-sm);
+}
+.task-chat__message-row.is-deleted .task-chat__bubble { opacity: 0.65; }
+
+.task-chat__text,
+.task-chat__deleted {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+}
+
+.task-chat__attachments {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.task-chat__image-attachment {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  cursor: zoom-in;
+  overflow: hidden;
+  transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+.task-chat__image-attachment:hover {
+  transform: scale(1.01);
+  box-shadow: var(--shadow-md);
+}
+.task-chat__image-attachment img {
+  display: block;
+  max-width: 240px;
+  max-height: 180px;
+  width: auto;
+  height: auto;
+}
+
+.task-chat__mention-inline {
+  display: inline;
+  padding: 0 4px;
+  border-radius: var(--radius-xs);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-weight: var(--fw-semibold);
+}
+.task-chat__bubble.is-own .task-chat__mention-inline {
+  background: rgba(255, 255, 255, 0.22);
+  color: var(--color-on-primary);
+}
+
+.task-chat__link {
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.task-chat__bubble.is-own .task-chat__link {
+  color: var(--color-on-primary);
+}
+
+.task-chat__attachment {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: center;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-2);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.task-chat__attachment:hover { background: var(--color-surface-3); }
+.task-chat__bubble.is-own .task-chat__attachment {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+.task-chat__bubble.is-own .task-chat__attachment:hover {
+  background: rgba(255, 255, 255, 0.20);
+}
+
+.task-chat__attachment-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-md);
+}
+.task-chat__bubble.is-own .task-chat__attachment-icon {
+  background: rgba(255, 255, 255, 0.22);
+  color: var(--color-on-primary);
+}
+
+.task-chat__attachment-content {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.task-chat__attachment-name,
+.task-chat__attachment-size {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.task-chat__attachment-name {
+  color: var(--color-text);
+  font-size: var(--text-md);
+  font-weight: var(--fw-semibold);
+}
+.task-chat__attachment-size {
+  color: var(--color-text-subtle);
+  font-size: var(--text-sm);
+  font-weight: var(--fw-medium);
+}
+.task-chat__bubble.is-own .task-chat__attachment-name,
+.task-chat__bubble.is-own .task-chat__attachment-size {
+  color: var(--color-on-primary);
+}
+
+.task-chat__message-actions {
+  display: inline-flex;
+  gap: var(--space-3);
+  padding: 0 4px;
+}
+.task-chat__message-row.is-own .task-chat__message-actions {
+  justify-content: flex-end;
+}
+
+.task-chat__link-btn,
+.task-chat__pending-remove {
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+  padding: 0;
+}
+.task-chat__link-btn:hover { color: var(--color-primary); }
+.task-chat__link-btn.is-danger,
+.task-chat__pending-remove { color: var(--color-danger); }
+.task-chat__link-btn.is-danger:hover { color: var(--color-danger-hover); }
+
+.task-chat__composer {
+  border-top: 1px solid var(--color-border-subtle);
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  background: var(--color-surface);
+}
+
+.task-chat__mentions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.task-chat__mention-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--fw-semibold);
+}
+.task-chat__mention-chip button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  cursor: pointer;
+}
+
+.task-chat__file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.task-chat__pending-file {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: var(--space-2);
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+}
+.task-chat__pending-file-main {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text);
+  font-size: var(--text-base);
+  font-weight: var(--fw-medium);
+}
+.task-chat__pending-file-main span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.task-chat__pending-file-meta {
+  color: var(--color-text-subtle);
+  font-size: var(--text-sm);
+  font-weight: var(--fw-medium);
+}
+
+.task-chat__composer-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-2);
+  align-items: end;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+.task-chat__composer-bar:focus-within {
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-focus);
+}
+
+.task-chat__input {
+  min-height: 24px;
+  max-height: 200px;
+  resize: none;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--color-text);
+  font-family: var(--font-main);
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+  padding: 4px 0;
+}
+.task-chat__input::placeholder { color: var(--color-text-subtle); }
+
+.task-chat__composer-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.task-chat__tool-btn,
+.task-chat__send-btn {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: var(--radius-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.task-chat__tool-btn {
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+}
+.task-chat__tool-btn:hover { background: var(--color-surface-3); color: var(--color-text); }
+.task-chat__send-btn {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  box-shadow: var(--shadow-sm);
+}
+.task-chat__send-btn:hover { background: var(--color-primary-hover); }
+.task-chat__send-btn:disabled { opacity: 0.55; cursor: default; }
+
+.task-chat__mention-picker {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+  padding: var(--space-2);
+}
+
+.task-chat__mention-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.task-chat__mention-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.task-chat__mention-option {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: center;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+.task-chat__mention-option:hover { background: var(--color-surface-2); }
+
+.task-chat__mention-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.task-chat__mention-copy strong,
+.task-chat__mention-copy small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.task-chat__mention-copy strong {
+  color: var(--color-text);
+  font-size: var(--text-base);
+  font-weight: var(--fw-semibold);
+}
+.task-chat__mention-copy small {
+  color: var(--color-text-subtle);
+  font-size: var(--text-sm);
+}
+
+.task-chat__mention-empty,
+.task-chat__readonly {
+  color: var(--color-text-subtle);
+  font-size: var(--text-base);
+  text-align: center;
+  padding: var(--space-3);
+}
+
+.task-chat__edit {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.task-chat__edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.task-chat-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.38);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2100;
+  backdrop-filter: blur(4px);
+}
+
+.task-chat-confirm-glass {
+  width: 400px;
+  max-width: calc(100vw - 24px);
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-xl);
+  display: flex;
+  flex-direction: column;
+  color: var(--color-text);
+}
+
+.task-chat-confirm-header,
+.task-chat-confirm-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-4);
+}
+.task-chat-confirm-header { border-bottom: 1px solid var(--color-border-subtle); }
+.task-chat-confirm-footer {
+  justify-content: flex-end;
+  border-top: 1px solid var(--color-border-subtle);
+}
+.task-chat-confirm-close {
+  background: transparent;
+  border: 0;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+.task-chat-confirm-body { padding: var(--space-4); }
+
+/* ----- LIGHTBOX --------------------------------------------- */
+.task-chat-lightbox {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.84);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 2200;
+  padding: var(--space-6);
+  gap: var(--space-3);
+  cursor: zoom-out;
+}
+.task-chat-lightbox__image {
+  max-width: min(92vw, 1400px);
+  max-height: 80vh;
+  width: auto;
+  height: auto;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-xl);
+  cursor: default;
+}
+.task-chat-lightbox__close {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 0;
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--color-text-inverse);
+  cursor: pointer;
+  font-size: var(--text-lg);
+}
+.task-chat-lightbox__close:hover { background: rgba(255, 255, 255, 0.22); }
+.task-chat-lightbox__caption {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--color-text-inverse);
+  font-size: var(--text-md);
+  cursor: default;
+}
+.task-chat-lightbox__download {
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--color-text-inverse);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+.task-chat-lightbox__download:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+@media (max-width: 860px) {
+  .task-chat__message-row,
+  .task-chat__message-row.is-own {
+    grid-template-columns: 32px minmax(0, 1fr);
+  }
+  .task-chat__message-row.is-own .task-chat__avatar,
+  .task-chat__message-row.is-own .task-chat__message-main {
+    order: initial;
+  }
+  .task-chat__message-row.is-own .task-chat__meta,
+  .task-chat__message-row.is-own .task-chat__message-actions {
+    justify-content: flex-start;
+  }
+  .task-chat__bubble {
+    max-width: 100%;
+  }
+  .task-chat__composer-bar {
+    grid-template-columns: 1fr;
+  }
+  .task-chat__composer-actions {
+    justify-content: flex-end;
+  }
+}
+</style>

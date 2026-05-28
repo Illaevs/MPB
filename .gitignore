@@ -1,0 +1,51 @@
+# secrets
+.env
+.env.*
+backend/.env
+backend/.env.*
+.vscode/
+.vscode/sftp.json
+
+# python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# db
+*.db
+*.sqlite
+*.sqlite3
+test_portal/*.db
+
+# backups / generated dumps
+backups/
+_backups*/
+_eb_v2_bak/
+codepatch*/
+storage*.tgz
+*.tgz
+
+# runtime storage
+storage/
+static/
+tmp_uploads/
+uploads/
+
+# frontend deps/build
+node_modules/
+frontend/dist/
+
+# OS / IDE
+.DS_Store
+.idea/
+test_portal/*.db*
+test_portal/assets/
+test_portal/static/
+test_portal/storage/
+test_portal/tmp_uploads/
+
+test_portal/static/
+test_portal/storage/
+test_portal/tmp_uploads/

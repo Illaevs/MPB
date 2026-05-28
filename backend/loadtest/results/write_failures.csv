@@ -1,0 +1,3 @@
+Method,Name,Error,Occurrences,First Seen,Last Seen
+PUT,PUT /tasks/{id} [write],LocustBadStatusCode(code=500),645,2026-05-18T13:33:35Z,2026-05-18T13:34:55Z
+POST,POST /tasks/ [write],CatchResponseError('500: Internal Server Error'),3608,2026-05-18T13:33:34Z,2026-05-18T13:34:56Z
