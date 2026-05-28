@@ -1,13 +1,13 @@
 # Document Flow & Storage API
 
-Сгенерировано из `docs/API.md` на 2026-05-19 01:30:03 (local time).
+Сгенерировано из `docs/API.md` на 2026-05-29 01:30:42 (local time).
 
 ## Scope
 - Домен: `documents`
-- Описание: Реестры документов, исходящие, загрузки, хранилище и файловый каталог.
-- Routers: `5`
-- Endpoints: `72`
-- Список роутеров: `document_registry`, `outgoing_registry`, `uploads`, `storage`, `files_catalog`
+- Описание: Реестры документов, шаблоны, исходящие, загрузки, хранилище и файловый каталог.
+- Routers: `6`
+- Endpoints: `82`
+- Список роутеров: `document_registry`, `document_templates`, `outgoing_registry`, `uploads`, `storage`, `files_catalog`
 
 ## Common Rules
 - Общие правила API (base URL, auth headers, коды ошибок) вынесены в `docs/api/INDEX.md`.
@@ -541,6 +541,7 @@ Endpoints: `27`
     - `db.add`
     - `db.commit`
     - `db.refresh`
+    - `emit_event_safe`
     - `log_event`
   - Side effects: DB write, Audit/Event logging
 - Error Handling:
@@ -601,12 +602,13 @@ Endpoints: `27`
     - `HTTPException`
     - `db.commit`
     - `db.refresh`
+    - `emit_event_safe`
     - `db.execute`
     - `log_event`
     - `select`
   - Side effects: DB write, DB read, Audit/Event logging
 - Error Handling:
-  - `400`: `Provide either document_id or package_id`; body schema `{"detail": "..."}`
+  - `400`: `Provide either document_id or package_id`; `pre_result.reason`; body schema `{"detail": "..."}`
   - `404`: `Document not found`; `Package not found`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
@@ -692,6 +694,7 @@ Endpoints: `27`
     - `HTTPException`
     - `db.commit`
     - `db.refresh`
+    - `emit_event_safe`
     - `log_event`
     - `select`
   - Side effects: DB write, DB read, Audit/Event logging
@@ -1134,6 +1137,7 @@ Endpoints: `27`
     - `HTTPException`
     - `db.delete`
     - `db.commit`
+    - `emit_event_safe`
     - `select`
   - Side effects: DB write, DB read
 - Error Handling:
@@ -1196,10 +1200,12 @@ Endpoints: `27`
     - `HTTPException`
     - `db.commit`
     - `db.refresh`
+    - `emit_event_safe`
     - `log_event`
     - `select`
   - Side effects: DB write, DB read, Audit/Event logging
 - Error Handling:
+  - `400`: `pre_result.reason`; body schema `{"detail": "..."}`
   - `404`: `Document not found`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
@@ -1294,6 +1300,309 @@ Endpoints: `27`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 
+### Router `document_templates`
+
+Source: `backend/app/routers/document_templates.py`
+
+Prefix: `/api/v1/document-templates`
+
+Endpoints: `10`
+
+#### `GET /api/v1/document-templates`
+
+- Controller: `backend/app/routers/document_templates.py::list_templates`
+- Data Contract:
+  - Path params: none
+  - Query params: `search`: Optional[str] (optional, default=None, constraints=-); `module`: Optional[str] (optional, default=None, constraints=-); `document_kind`: Optional[str] (optional, default=None, constraints=-); `status`: Optional[str] (optional, default=None, constraints=-); `active`: Optional[bool] (optional, default=None, constraints=-); `skip`: int (optional, default=0, constraints=ge=0); `limit`: int (optional, default=50, constraints=ge=1, le=200)
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware)
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `_: Depends(require_section_read('document_templates'))`
+- Logic Flow:
+  - Internal calls:
+    - `Query`
+    - `Depends`
+    - `select`
+    - `require_section_read`
+    - `db.execute`
+    - `or_`
+    - `and_`
+    - `DocumentTemplate.name.ilike`
+    - `DocumentTemplate.description.ilike`
+    - `DocumentTemplate.module.ilike`
+    - `DocumentTemplate.document_kind.ilike`
+    - `DocumentTemplate.updated_at.desc`
+  - Side effects: DB write, DB read
+- Error Handling:
+  - Explicit `HTTPException` not found in handler body
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/document-templates`
+
+- Controller: `backend/app/routers/document_templates.py::create_template`
+- Data Contract:
+  - Path params: none
+  - Query params: none
+  - Header params: none
+  - Form params: `name`: str (required, default=-, constraints=-); `module`: str (optional, default='outgoing_registry', constraints=-); `document_kind`: str (optional, default='letter', constraints=-); `status`: str (optional, default='draft', constraints=-); `is_active`: bool (optional, default=False, constraints=-); `description`: Optional[str] (optional, default=None, constraints=-); `our_company_key`: Optional[str] (optional, default=None, constraints=-); `binding_type`: str (optional, default='global', constraints=-); `binding_id`: Optional[str] (optional, default=None, constraints=-)
+  - File params: `file`: UploadFile (required, default=-, constraints=-)
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+    - `_: Depends(require_section_write('document_templates'))`
+- Logic Flow:
+  - Internal calls:
+    - `Form`
+    - `File`
+    - `Depends`
+    - `DocumentTemplate`
+    - `db.add`
+    - `require_section_write`
+    - `db.flush`
+    - `db.commit`
+    - `db.refresh`
+  - Side effects: DB write, File/storage operation
+- Error Handling:
+  - Explicit `HTTPException` not found in handler body
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/document-templates/field-groups`
+
+- Controller: `backend/app/routers/document_templates.py::list_template_field_groups`
+- Data Contract:
+  - Path params: none
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware)
+  - Depends/Security:
+    - `_: Depends(require_section_read('document_templates'))`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `get_template_field_groups`
+    - `require_section_read`
+  - Side effects: No explicit side effects (read/transform path)
+- Error Handling:
+  - Explicit `HTTPException` not found in handler body
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/document-templates/fields`
+
+- Controller: `backend/app/routers/document_templates.py::list_template_fields`
+- Data Contract:
+  - Path params: none
+  - Query params: `search`: Optional[str] (optional, default=None, constraints=-); `module`: Optional[str] (optional, default=None, constraints=-); `document_kind`: Optional[str] (optional, default=None, constraints=-); `group`: Optional[str] (optional, default=None, constraints=-)
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware)
+  - Depends/Security:
+    - `_: Depends(require_section_read('document_templates'))`
+- Logic Flow:
+  - Internal calls:
+    - `Query`
+    - `Depends`
+    - `get_template_fields`
+    - `require_section_read`
+  - Side effects: No explicit side effects (read/transform path)
+- Error Handling:
+  - Explicit `HTTPException` not found in handler body
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/document-templates/meta`
+
+- Controller: `backend/app/routers/document_templates.py::get_template_meta`
+- Data Contract:
+  - Path params: none
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware)
+  - Depends/Security:
+    - `_: Depends(require_section_read('document_templates'))`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `require_section_read`
+  - Side effects: No explicit side effects (read/transform path)
+- Error Handling:
+  - Explicit `HTTPException` not found in handler body
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `DELETE /api/v1/document-templates/{template_id}`
+
+- Controller: `backend/app/routers/document_templates.py::delete_template`
+- Data Contract:
+  - Path params: `template_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware)
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `_: Depends(require_section_write('document_templates'))`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `require_section_write`
+    - `db.get`
+    - `HTTPException`
+    - `db.delete`
+    - `db.commit`
+  - Side effects: DB write
+- Error Handling:
+  - `404`: `Template not found`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/document-templates/{template_id}`
+
+- Controller: `backend/app/routers/document_templates.py::get_template`
+- Data Contract:
+  - Path params: `template_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware)
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `_: Depends(require_section_read('document_templates'))`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `require_section_read`
+    - `db.get`
+    - `HTTPException`
+  - Side effects: No explicit side effects (read/transform path)
+- Error Handling:
+  - `404`: `Template not found`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `PUT /api/v1/document-templates/{template_id}`
+
+- Controller: `backend/app/routers/document_templates.py::update_template`
+- Data Contract:
+  - Path params: `template_id`: str (required, default=-, constraints=-)
+  - Query params: `payload`: dict (required, default=-, constraints=-)
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+    - `_: Depends(require_section_write('document_templates'))`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `require_section_write`
+    - `db.get`
+    - `HTTPException`
+    - `db.commit`
+    - `db.refresh`
+  - Side effects: DB write
+- Error Handling:
+  - `404`: `Template not found`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/document-templates/{template_id}/download`
+
+- Controller: `backend/app/routers/document_templates.py::download_template`
+- Data Contract:
+  - Path params: `template_id`: str (required, default=-, constraints=-)
+  - Query params: `version_id`: Optional[str] (optional, default=None, constraints=-)
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware)
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `_: Depends(require_section_read('document_templates'))`
+- Logic Flow:
+  - Internal calls:
+    - `Query`
+    - `Depends`
+    - `quote`
+    - `Response`
+    - `require_section_read`
+    - `db.get`
+    - `HTTPException`
+    - `db.execute`
+    - `read_file_bytes`
+    - `and_`
+    - `select`
+  - Side effects: DB read, File/storage operation
+- Error Handling:
+  - `404`: `Template not found`; `Template version not found`; `Template file not found`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/document-templates/{template_id}/versions`
+
+- Controller: `backend/app/routers/document_templates.py::upload_template_version`
+- Data Contract:
+  - Path params: `template_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: `file`: UploadFile (required, default=-, constraints=-)
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+    - `_: Depends(require_section_write('document_templates'))`
+- Logic Flow:
+  - Internal calls:
+    - `File`
+    - `Depends`
+    - `require_section_write`
+    - `db.get`
+    - `HTTPException`
+    - `db.commit`
+    - `db.refresh`
+  - Side effects: DB write, File/storage operation
+- Error Handling:
+  - `404`: `Template not found`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+
 ### Router `outgoing_registry`
 
 Source: `backend/app/routers/outgoing_registry.py`
@@ -1365,12 +1674,12 @@ Endpoints: `27`
     - `Company.get_by_id`
     - `HTTPException`
     - `safe_refresh_deal_health_issues`
+    - `emit_event_safe`
     - `Deal.get_by_id`
     - `sequence_lock`
     - `OutgoingDocument.update`
     - `storage_available`
     - `ensure_path`
-    - `clean_name`
   - Side effects: DB write, Audit/Event logging, File/storage operation
 - Error Handling:
   - `400`: `Act requires selected contract`; body schema `{"detail": "..."}`
@@ -1774,10 +2083,10 @@ Endpoints: `27`
     - `db.execute`
     - `db.commit`
     - `safe_refresh_deal_health_issues`
+    - `emit_event_safe`
     - `safe_refresh_orphan_health_issues`
     - `delete_path`
     - `and_`
-    - `delete`
   - Side effects: DB write, DB read, File/storage operation
 - Error Handling:
   - `404`: `Document not found`; body schema `{"detail": "..."}`
@@ -1834,6 +2143,7 @@ Endpoints: `27`
     - `HTTPException`
     - `ensure_can_edit_record`
     - `safe_refresh_deal_health_issues`
+    - `emit_event_safe`
     - `Company.get_by_id`
     - `Deal.get_by_id`
     - `ensure_entity_action_allowed`

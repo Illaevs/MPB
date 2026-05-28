@@ -1,13 +1,13 @@
 # Legal & Compliance API
 
-Сгенерировано из `docs/API.md` на 2026-05-19 01:30:03 (local time).
+Сгенерировано из `docs/API.md` на 2026-05-29 01:30:42 (local time).
 
 ## Scope
 - Домен: `legal_compliance`
-- Описание: Юридическая работа и аккредитации.
-- Routers: `2`
-- Endpoints: `26`
-- Список роутеров: `legal_work`, `accreditations`
+- Описание: Юридическая работа, аккредитации и нормативная база.
+- Routers: `3`
+- Endpoints: `34`
+- Список роутеров: `legal_work`, `accreditations`, `reglaments`
 
 ## Common Rules
 - Общие правила API (base URL, auth headers, коды ошибок) вынесены в `docs/api/INDEX.md`.
@@ -352,6 +352,7 @@ Endpoints: `13`
   - Internal calls:
     - `Depends`
     - `LegalCase.create`
+    - `emit_event_safe`
   - Side effects: DB write
 - Error Handling:
   - Explicit `HTTPException` not found in handler body
@@ -610,6 +611,7 @@ Endpoints: `13`
     - `LegalCase.get_by_id`
     - `HTTPException`
     - `LegalCase.update`
+    - `emit_event_safe`
   - Side effects: DB write
 - Error Handling:
   - `404`: `Case not found`; body schema `{"detail": "..."}`
@@ -1106,11 +1108,274 @@ Endpoints: `13`
     - `HTTPException`
     - `db.commit`
     - `db.refresh`
+    - `emit_event_safe`
     - `select`
   - Side effects: DB write, DB read
 - Error Handling:
   - `400`: `Comment is required for rejection`; body schema `{"detail": "..."}`
   - `404`: `Accreditation not found`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+
+### Router `reglaments`
+
+Source: `backend/app/routers/reglaments.py`
+
+Prefix: `/api/v1/reglaments`
+
+Endpoints: `8`
+
+#### `GET /api/v1/reglaments`
+
+- Controller: `backend/app/routers/reglaments.py::list_reglaments`
+- Summary: Каталог нормативной базы с фильтрами.
+- Data Contract:
+  - Path params: none
+  - Query params: `doc_type`: Optional[str] (optional, default=None, constraints=-); `status`: Optional[str] (optional, default=None, constraints=-); `discipline`: Optional[str] (optional, default=None, constraints=-); `q`: Optional[str] (optional, default=None, constraints=-); `limit`: int (optional, default=100, constraints=-); `offset`: int (optional, default=0, constraints=-)
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Response model: `List[ReglamentBrief]`
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `select`
+    - `Reglament.discipline_tags.like`
+    - `or_`
+    - `Reglament.doc_number.like`
+    - `Reglament.title.like`
+    - `Reglament.full_title.like`
+    - `db.execute`
+  - Side effects: DB read
+- Error Handling:
+  - Explicit `HTTPException` not found in handler body
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/reglaments`
+
+- Controller: `backend/app/routers/reglaments.py::create_reglament`
+- Summary: Создать новую норму вручную (без файла). Admin only.
+- Data Contract:
+  - Path params: none
+  - Query params: `payload`: ReglamentCreate (required, default=-, constraints=-)
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Response model: `ReglamentDetail`
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `Reglament`
+    - `db.add`
+    - `HTTPException`
+    - `db.flush`
+    - `db.commit`
+    - `db.execute`
+    - `select`
+  - Side effects: DB write, DB read
+- Error Handling:
+  - `409`: `Норма с таким (тип, номер) уже есть`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/reglaments/search`
+
+- Controller: `backend/app/routers/reglaments.py::search_reglaments`
+- Summary: Полнотекстовый + семантический поиск по нормативной базе.
+- Data Contract:
+  - Path params: none
+  - Query params: `payload`: SearchRequest (required, default=-, constraints=-)
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Response model: `SearchResponse`
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `is_hybrid_enabled`
+    - `embed_query`
+    - `db.execute`
+    - `text`
+  - Side effects: DB read
+- Error Handling:
+  - Explicit `HTTPException` not found in handler body
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/reglaments/sections/{section_id}`
+
+- Controller: `backend/app/routers/reglaments.py::get_section`
+- Summary: Полный текст конкретной секции (для прямой ссылки из поиска или
+- Data Contract:
+  - Path params: `section_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Response model: `ReglamentSectionFull`
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `HTTPException`
+    - `db.execute`
+    - `text`
+  - Side effects: DB read
+- Error Handling:
+  - `404`: `Раздел не найден`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `DELETE /api/v1/reglaments/{reglament_id}`
+
+- Controller: `backend/app/routers/reglaments.py::delete_reglament`
+- Summary: Удалить норму со всеми секциями/FTS/embeddings. Admin only.
+- Data Contract:
+  - Path params: `reglament_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `HTTPException`
+    - `db.execute`
+    - `db.delete`
+    - `db.commit`
+    - `text`
+    - `select`
+  - Side effects: DB write, DB read
+- Error Handling:
+  - `404`: `Норма не найдена`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/reglaments/{reglament_id}`
+
+- Controller: `backend/app/routers/reglaments.py::get_reglament`
+- Summary: Документ + оглавление (секции без контента — экономим payload).
+- Data Contract:
+  - Path params: `reglament_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Response model: `ReglamentDetail`
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `HTTPException`
+    - `db.execute`
+    - `select`
+  - Side effects: DB read
+- Error Handling:
+  - `404`: `Норма не найдена`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/reglaments/{reglament_id}/reindex`
+
+- Controller: `backend/app/routers/reglaments.py::reindex_reglament`
+- Summary: Перезапустить embedding для всех секций нормы. Admin only.
+- Data Contract:
+  - Path params: `reglament_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `background.add_task`
+    - `HTTPException`
+    - `db.execute`
+    - `db.commit`
+    - `text`
+    - `select`
+  - Side effects: DB write, DB read, Background task trigger
+- Error Handling:
+  - `404`: `Норма не найдена`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/reglaments/{reglament_id}/upload`
+
+- Controller: `backend/app/routers/reglaments.py::upload_reglament_file`
+- Summary: Загрузить PDF/DOCX файл к существующей норме → парсинг → секции →
+- Data Contract:
+  - Path params: `reglament_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: `file`: UploadFile (required, default=-, constraints=-)
+  - Body: none
+  - Response model: `UploadResponse`
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `File`
+    - `Depends`
+    - `parse_reglament_file`
+    - `UploadResponse`
+    - `HTTPException`
+    - `db.commit`
+    - `background.add_task`
+    - `db.execute`
+    - `select`
+  - Side effects: DB write, DB read, Background task trigger, File/storage operation
+- Error Handling:
+  - `400`: `Пустой файл`; body schema `{"detail": "..."}`
+  - `404`: `Норма не найдена`; body schema `{"detail": "..."}`
+  - `413`: `Файл больше 50 MB`; body schema `{"detail": "..."}`
+  - `422`: `Не удалось распарсить файл. Поддерживаются PDF и DOCX.`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 

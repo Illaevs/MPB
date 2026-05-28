@@ -1,10 +1,10 @@
 # Finance & Billing API
 
-Сгенерировано из `docs/API.md` на 2026-05-19 01:30:03 (local time).
+Сгенерировано из `docs/API.md` на 2026-05-29 01:30:41 (local time).
 
 ## Scope
 - Домен: `finance`
-- Описание: Финансы, казначейство, ДДС, экономика, штрафы и договоры.
+- Описание: Финансы, казначейство, ДДС, штрафы и договоры.
 - Routers: `4`
 - Endpoints: `65`
 - Список роутеров: `finance`, `income_expense`, `penalty_rules`, `contracts`
@@ -860,8 +860,10 @@ Endpoints: `30`
   - Internal calls:
     - `Depends`
     - `db.execute`
-    - `db.commit`
     - `HTTPException`
+    - `db.commit`
+    - `emit_event_safe`
+    - `select`
     - `delete`
   - Side effects: DB write, DB read
 - Error Handling:
@@ -891,6 +893,7 @@ Endpoints: `30`
     - `TreasuryAllocationResponse.model_validate`
     - `db.execute`
     - `HTTPException`
+    - `emit_event_safe`
     - `db.commit`
     - `db.refresh`
     - `select`
@@ -1114,6 +1117,7 @@ Endpoints: `30`
     - `db.flush`
     - `db.commit`
     - `db.refresh`
+    - `emit_event_safe`
     - `select`
   - Side effects: DB write, DB read
 - Error Handling:
@@ -1178,6 +1182,7 @@ Endpoints: `30`
     - `HTTPException`
     - `db.delete`
     - `db.commit`
+    - `emit_event_safe`
     - `select`
     - `delete`
   - Side effects: DB write, DB read
@@ -1209,6 +1214,7 @@ Endpoints: `30`
     - `HTTPException`
     - `db.commit`
     - `db.refresh`
+    - `emit_event_safe`
     - `TreasuryAllocation`
     - `db.add`
     - `select`
@@ -1272,9 +1278,10 @@ Endpoints: `30`
     - `db.execute`
     - `HTTPException`
     - `IncomeExpenseEntry`
+    - `db.flush`
+    - `emit_event_safe`
     - `db.commit`
     - `db.refresh`
-    - `db.flush`
     - `select`
   - Side effects: DB write, DB read
 - Error Handling:
@@ -1427,6 +1434,7 @@ Endpoints: `7`
     - `IncomeExpenseEntry`
     - `db.add`
     - `db.refresh`
+    - `emit_event_safe`
     - `db.execute`
     - `HTTPException`
     - `db.commit`
@@ -1522,6 +1530,7 @@ Endpoints: `7`
     - `get_section_permissions`
     - `db.delete`
     - `db.commit`
+    - `emit_event_safe`
     - `allowed_deal_ids`
     - `select`
     - `delete`
@@ -1588,6 +1597,7 @@ Endpoints: `7`
     - `ensure_can_edit_record`
     - `db.commit`
     - `db.refresh`
+    - `emit_event_safe`
     - `Contract.get_by_id`
     - `select`
   - Side effects: DB write, DB read
@@ -1837,6 +1847,8 @@ Endpoints: `22`
     - `Contract.create`
     - `_apply_service_paid_amounts`
     - `safe_refresh_deal_health_issues`
+    - `emit_event_safe`
+    - `db.commit`
     - `Deal.get_by_id`
     - `SubcontractorCard.get_by_id`
     - `safe_refresh_orphan_health_issues`
@@ -2123,6 +2135,7 @@ Endpoints: `22`
     - `ensure_can_edit_record`
     - `Contract.delete`
     - `safe_refresh_deal_health_issues`
+    - `emit_event_safe`
     - `safe_refresh_orphan_health_issues`
     - `log_event`
   - Side effects: Audit/Event logging
@@ -2190,13 +2203,14 @@ Endpoints: `22`
     - `Contract.update`
     - `_apply_service_paid_amounts`
     - `safe_refresh_deal_health_issues`
+    - `emit_event_safe`
     - `Deal.get_by_id`
     - `SubcontractorCard.get_by_id`
     - `safe_refresh_orphan_health_issues`
-    - `log_event`
+    - `logger.exception`
   - Side effects: DB write, Audit/Event logging
 - Error Handling:
-  - `400`: `Unsupported contract_type`; `Contract must be linked to deal or subcontractor, not both`; body schema `{"detail": "..."}`
+  - `400`: `Unsupported contract_type`; `Contract must be linked to deal or subcontractor, not both`; `result.reason`; body schema `{"detail": "..."}`
   - `404`: `Contract not found`; `Deal not found`; `Subcontractor not found`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 

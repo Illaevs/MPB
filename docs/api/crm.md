@@ -1,13 +1,13 @@
 # CRM Core API
 
-Сгенерировано из `docs/API.md` на 2026-05-19 01:30:03 (local time).
+Сгенерировано из `docs/API.md` на 2026-05-29 01:30:41 (local time).
 
 ## Scope
 - Домен: `crm`
-- Описание: Сделки, лиды, этапы, задачи, продукты, тендеры и исполнение.
-- Routers: `14`
-- Endpoints: `139`
-- Список роутеров: `deals`, `leads`, `stages`, `tasks`, `products`, `task_auctions`, `tenders`, `deal_execution`, `executor`, `subcontractors`, `subcontractor_stages`, `subcontractor_products`, `result_reviews`, `kp`
+- Описание: Сделки, лиды, этапы, задачи, подзадачи, согласования, продукты, тендеры и исполнение.
+- Routers: `16`
+- Endpoints: `166`
+- Список роутеров: `deals`, `leads`, `stages`, `tasks`, `task_subtasks`, `approvals`, `products`, `task_auctions`, `tenders`, `deal_execution`, `executor`, `subcontractors`, `subcontractor_stages`, `subcontractor_products`, `result_reviews`, `kp`
 
 ## Common Rules
 - Общие правила API (base URL, auth headers, коды ошибок) вынесены в `docs/api/INDEX.md`.
@@ -15,7 +15,7 @@
 
 ## Data Contract Catalog (Domain)
 
-Модели, используемые в домене: `52`.
+Модели, используемые в домене: `62`.
 
 ### Model `DealCreate`
 
@@ -248,7 +248,7 @@ Source: `backend/app/schemas/task.py`
 
 | Field | Type | Required | Default | Constraints |
 | --- | --- | --- | --- | --- |
-| title | str | yes | - | - |
+| title | str | yes | - | max_length=TASK_TITLE_MAX |
 | description | Optional[str] | no | None | - |
 | deal_id | Optional[Union[str, UUID]] | no | None | - |
 | stage_id | Optional[Union[str, UUID]] | no | None | - |
@@ -283,7 +283,7 @@ Source: `backend/app/schemas/task.py`
 
 | Field | Type | Required | Default | Constraints |
 | --- | --- | --- | --- | --- |
-| title | str | yes | - | - |
+| title | str | yes | - | max_length=TASK_TITLE_MAX |
 | description | Optional[str] | no | None | - |
 | deal_id | Optional[Union[str, UUID]] | no | None | - |
 | stage_id | Optional[Union[str, UUID]] | no | None | - |
@@ -323,7 +323,7 @@ Source: `backend/app/schemas/task.py`
 
 | Field | Type | Required | Default | Constraints |
 | --- | --- | --- | --- | --- |
-| title | Optional[str] | no | None | - |
+| title | Optional[str] | no | None | max_length=TASK_TITLE_MAX |
 | description | Optional[str] | no | None | - |
 | deal_id | Optional[Union[str, UUID]] | no | None | - |
 | stage_id | Optional[Union[str, UUID]] | no | None | - |
@@ -358,7 +358,7 @@ Source: `backend/app/schemas/task.py`
 
 | Field | Type | Required | Default | Constraints |
 | --- | --- | --- | --- | --- |
-| title | str | yes | - | - |
+| title | str | yes | - | max_length=TASK_TITLE_MAX |
 | description | Optional[str] | no | None | - |
 | deal_id | Optional[Union[str, UUID]] | no | None | - |
 | stage_id | Optional[Union[str, UUID]] | no | None | - |
@@ -408,6 +408,170 @@ Source: `backend/app/schemas/task.py`
 | matrix_quadrant | Optional[str] | no | None | - |
 | matrix_sort_order | Optional[int] | no | None | - |
 | matrix_manual | Optional[bool] | no | False | - |
+
+
+### Model `TaskSubtaskCreate`
+
+Source: `backend/app/schemas/task_subtask.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| title | str | yes | - | - |
+| assigned_to_user_id | Optional[str] | no | None | - |
+| due_date | Optional[date] | no | None | - |
+| due_time | Optional[str] | no | None | - |
+| is_urgent | Optional[bool] | no | False | - |
+
+
+### Model `TaskSubtaskReorder`
+
+Source: `backend/app/schemas/task_subtask.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| ids | List[str] | yes | - | - |
+
+
+### Model `TaskSubtaskResponse`
+
+Source: `backend/app/schemas/task_subtask.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| id | str | yes | - | - |
+| task_id | str | yes | - | - |
+| title | str | yes | - | - |
+| is_done | bool | yes | - | - |
+| is_urgent | bool | no | False | - |
+| assigned_to_user_id | Optional[str] | no | None | - |
+| assignee_name | Optional[str] | no | None | - |
+| due_date | Optional[date] | no | None | - |
+| due_time | Optional[str] | no | None | - |
+| sort_order | int | yes | - | - |
+| created_by_user_id | Optional[str] | no | None | - |
+| created_at | Optional[datetime] | no | None | - |
+| updated_at | Optional[datetime] | no | None | - |
+| done_at | Optional[datetime] | no | None | - |
+
+
+### Model `TaskSubtaskUpdate`
+
+Source: `backend/app/schemas/task_subtask.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| title | Optional[str] | no | None | - |
+| is_done | Optional[bool] | no | None | - |
+| assigned_to_user_id | Optional[str] | no | None | - |
+| due_date | Optional[date] | no | None | - |
+| due_time | Optional[str] | no | None | - |
+| is_urgent | Optional[bool] | no | None | - |
+
+
+### Model `ApprovalInboxResponse`
+
+Source: `backend/app/schemas/approval.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| stats | ApprovalInboxStats | yes | - | - |
+| items | List[ApprovalInboxItem] | no | factory:list | - |
+| total | int | no | 0 | - |
+| offset | int | no | 0 | - |
+| limit | int | no | 0 | - |
+
+
+### Model `ApprovalInstanceAction`
+
+Source: `backend/app/schemas/approval.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| comment | Optional[str] | no | None | - |
+
+
+### Model `ApprovalInstanceResponse`
+
+Source: `backend/app/schemas/approval.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| id | str | yes | - | - |
+| template_id | str | yes | - | - |
+| template_name | str | yes | - | - |
+| entity_type | str | yes | - | - |
+| entity_id | str | yes | - | - |
+| entity_label | Optional[str] | no | None | - |
+| status | str | yes | - | - |
+| current_step_id | Optional[str] | no | None | - |
+| started_by | Optional[str] | no | None | - |
+| started_by_label | Optional[str] | no | None | - |
+| completed_by | Optional[str] | no | None | - |
+| completed_by_label | Optional[str] | no | None | - |
+| completed_comment | Optional[str] | no | None | - |
+| started_at | Optional[datetime] | no | None | - |
+| completed_at | Optional[datetime] | no | None | - |
+| steps | List[ApprovalInstanceStepResponse] | no | factory:list | - |
+| actions | List[ApprovalActionLogResponse] | no | factory:list | - |
+
+
+### Model `ApprovalInstanceStart`
+
+Source: `backend/app/schemas/approval.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| template_id | str | yes | - | - |
+| entity_id | str | yes | - | - |
+| entity_type | Optional[str] | no | None | - |
+| entity_label | Optional[str] | no | None | - |
+
+
+### Model `ApprovalTemplateResponse`
+
+Source: `backend/app/schemas/approval.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| id | str | yes | - | - |
+| name | str | yes | - | - |
+| code | Optional[str] | no | None | - |
+| description | Optional[str] | no | None | - |
+| entity_type | str | yes | - | - |
+| is_active | bool | yes | - | - |
+| tags | List[str] | no | factory:list | - |
+| created_by | Optional[str] | no | None | - |
+| updated_by | Optional[str] | no | None | - |
+| created_at | Optional[datetime] | no | None | - |
+| updated_at | Optional[datetime] | no | None | - |
+| steps | List[ApprovalTemplateStepResponse] | no | factory:list | - |
+| active_instances_count | int | no | 0 | - |
+| total_instances_count | int | no | 0 | - |
+
+
+### Model `ApprovalTemplateWrite`
+
+Source: `backend/app/schemas/approval.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| name | str | yes | - | - |
+| code | Optional[str] | no | None | - |
+| description | Optional[str] | no | None | - |
+| entity_type | str | yes | - | - |
+| is_active | bool | no | True | - |
+| tags | List[str] | no | factory:list | - |
+| steps | List[ApprovalTemplateStepWrite] | no | factory:list | - |
 
 
 ### Model `DealProductCreate`
@@ -1159,7 +1323,7 @@ Source: `backend/app/routers/deals.py`
 
 Prefix: `/api/v1/deals`
 
-Endpoints: `10`
+Endpoints: `15`
 
 #### `GET /api/v1/deals`
 
@@ -1222,10 +1386,47 @@ Endpoints: `10`
     - `Depends`
     - `require_section_write`
     - `Deal.create`
+    - `emit_event_safe`
+    - `db.commit`
+    - `db.add`
     - `log_event`
+    - `DealGip`
+    - `db.flush`
+    - `logger.warning`
   - Side effects: DB write, Audit/Event logging
 - Error Handling:
   - Explicit `HTTPException` not found in handler body
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `DELETE /api/v1/deals/activities/{activity_id}`
+
+- Controller: `backend/app/routers/deals.py::delete_deal_activity`
+- Summary: Удалить пользовательский timeline-элемент. Можно только comment/file
+- Data Contract:
+  - Path params: `activity_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context; route may enforce role/section checks
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `HTTPException`
+    - `DealActivity.delete`
+    - `db.execute`
+    - `select`
+  - Side effects: DB read
+- Error Handling:
+  - `400`: `System activities cannot be deleted`; body schema `{"detail": "..."}`
+  - `403`: `Not author`; body schema `{"detail": "..."}`
+  - `404`: `Activity not found`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 #### `DELETE /api/v1/deals/{deal_id}`
@@ -1309,6 +1510,8 @@ Endpoints: `10`
     - `ensure_can_edit_record`
     - `HTTPException`
     - `Deal.update`
+    - `emit_event_safe`
+    - `db.commit`
     - `log_event`
   - Side effects: DB write, Audit/Event logging
 - Error Handling:
@@ -1348,6 +1551,66 @@ Endpoints: `10`
   - Side effects: DB write, DB read, Audit/Event logging
 - Error Handling:
   - Explicit `HTTPException` not found in handler body
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/deals/{deal_id}/comments`
+
+- Controller: `backend/app/routers/deals.py::add_deal_comment`
+- Data Contract:
+  - Path params: `deal_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: `body`: dict
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Body`
+    - `Depends`
+    - `HTTPException`
+    - `DealActivity.create`
+  - Side effects: DB write
+- Error Handling:
+  - `400`: `Empty comment`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/deals/{deal_id}/files`
+
+- Controller: `backend/app/routers/deals.py::upload_deal_file`
+- Data Contract:
+  - Path params: `deal_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: `caption`: Optional[str] (optional, default=None, constraints=-)
+  - File params: `file`: UploadFile (required, default=-, constraints=-)
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `File`
+    - `Form`
+    - `Depends`
+    - `clean_name`
+    - `storage_available`
+    - `HTTPException`
+    - `ensure_path`
+    - `write_upload_to_tmp`
+    - `DealActivity.create`
+    - `upload_file_with_safe_extension`
+  - Side effects: DB write, File/storage operation
+- Error Handling:
+  - `500`: `Storage not configured`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 #### `GET /api/v1/deals/{deal_id}/folders`
@@ -1436,6 +1699,68 @@ Endpoints: `10`
   - Side effects: DB write, DB read
 - Error Handling:
   - `400`: `В payload передан неверный user_id`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/deals/{deal_id}/tasks`
+
+- Controller: `backend/app/routers/deals.py::create_deal_task`
+- Summary: Создать задачу, привязанную к сделке, и добавить запись в timeline.
+- Data Contract:
+  - Path params: `deal_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: `body`: dict
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Body`
+    - `Depends`
+    - `HTTPException`
+    - `DealActivity.create`
+    - `User.get_by_id`
+    - `db.execute`
+    - `Task.create`
+    - `db.rollback`
+  - Side effects: DB write, DB read
+- Error Handling:
+  - `400`: `Title is required`; `f'Invalid due_date: {due_date_raw!r}`; body schema `{"detail": "..."}`
+  - `404`: `Assigned user not found`; body schema `{"detail": "..."}`
+  - `500`: `f'Failed to create task: {msg}`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/deals/{deal_id}/timeline`
+
+- Controller: `backend/app/routers/deals.py::get_deal_timeline`
+- Summary: Лента пользовательских событий по сделке.
+- Data Contract:
+  - Path params: `deal_id`: str (required, default=-, constraints=-)
+  - Query params: `limit`: int (optional, default=200, constraints=-); `offset`: int (optional, default=0, constraints=-); `types`: Optional[str] (optional, default=None, constraints=-)
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `db.execute`
+    - `DealActivity.created_at.desc`
+    - `select`
+  - Side effects: DB write, DB read
+- Error Handling:
+  - Explicit `HTTPException` not found in handler body
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 #### `PATCH /api/v1/deals/{deal_id}/vat`
@@ -1536,6 +1861,7 @@ Endpoints: `11`
   - Internal calls:
     - `Depends`
     - `Lead.create`
+    - `emit_event_safe`
     - `LeadActivity.create`
   - Side effects: DB write
 - Error Handling:
@@ -1595,6 +1921,7 @@ Endpoints: `11`
     - `HTTPException`
     - `ensure_can_edit_record`
     - `Lead.delete`
+    - `emit_event_safe`
   - Side effects: No explicit side effects (read/transform path)
 - Error Handling:
   - `404`: `Lead not found`; body schema `{"detail": "..."}`
@@ -1653,6 +1980,7 @@ Endpoints: `11`
     - `Lead.get_by_id`
     - `ensure_can_edit_record`
     - `Lead.update`
+    - `emit_event_safe`
     - `LeadActivity.create`
   - Side effects: DB write
 - Error Handling:
@@ -1714,11 +2042,13 @@ Endpoints: `11`
     - `LeadProduct.get_by_lead`
     - `Deal.calculate_total_value`
     - `Lead.update`
+    - `emit_event_safe`
     - `Product.get_by_id`
     - `DealProduct.create`
     - `LeadActivity.create`
   - Side effects: DB write
 - Error Handling:
+  - `400`: `pre_result.reason`; body schema `{"detail": "..."}`
   - `404`: `Lead not found`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
@@ -1879,6 +2209,7 @@ Endpoints: `13`
     - `Depends`
     - `Stage.create`
     - `safe_refresh_deal_health_issues`
+    - `emit_event_safe`
     - `HTTPException`
     - `log_event`
   - Side effects: DB write, Audit/Event logging
@@ -2020,6 +2351,7 @@ Endpoints: `13`
     - `db.commit`
     - `Stage.delete`
     - `safe_refresh_deal_health_issues`
+    - `emit_event_safe`
     - `log_event`
     - `delete`
     - `or_`
@@ -2082,6 +2414,7 @@ Endpoints: `13`
     - `HTTPException`
     - `Stage.update`
     - `safe_refresh_deal_health_issues`
+    - `emit_event_safe`
     - `GanttService.propagate_dates`
     - `log_event`
   - Side effects: DB write, Audit/Event logging
@@ -2157,8 +2490,8 @@ Endpoints: `13`
     - `db.flush`
     - `GanttService._resolve_successor_schedule`
     - `safe_refresh_deal_health_issues`
+    - `emit_event_safe`
     - `db.commit`
-    - `GanttService.propagate_dates`
   - Side effects: DB write, DB read, Audit/Event logging
 - Error Handling:
   - `400`: `Stage cannot depend on itself`; `Predecessor stage must belong to the same deal`; `Dependency cycle is not allowed`; body schema `{"detail": "..."}`
@@ -2258,15 +2591,15 @@ Endpoints: `11`
     - `Depends`
     - `select`
     - `get_section_permissions`
+    - `or_`
     - `Task.created_at.desc`
     - `db.execute`
+    - `Task.id.in_`
     - `Task.source_auction_id.isnot`
     - `Task.status.notin_`
-    - `or_`
     - `func.count`
     - `Task.source_auction_id.is_`
     - `Task.title.ilike`
-    - `Task.description.ilike`
   - Side effects: DB write, DB read
 - Error Handling:
   - Explicit `HTTPException` not found in handler body
@@ -2294,6 +2627,8 @@ Endpoints: `11`
 - Logic Flow:
   - Internal calls:
     - `Depends`
+    - `emit_event_safe`
+    - `db.commit`
     - `Deal.get_by_id`
     - `HTTPException`
     - `Stage.get_by_id`
@@ -2303,8 +2638,6 @@ Endpoints: `11`
     - `IncomeExpenseEntry`
     - `db.add`
     - `Task.create`
-    - `db.commit`
-    - `db.refresh`
   - Side effects: DB write, DB read, Audit/Event logging
 - Error Handling:
   - `400`: `Не удалось сохранить задачу: проверьте поля.`; body schema `{"detail": "..."}`
@@ -2372,6 +2705,8 @@ Endpoints: `11`
     - `TaskUserMatrix.task_id.in_`
     - `TaskUserMatrix`
     - `select`
+    - `TaskAssignee.task_id.in_`
+    - `TaskWatcher.task_id.in_`
   - Side effects: DB write, DB read
 - Error Handling:
   - `400`: `Invalid matrix quadrant`; body schema `{"detail": "..."}`
@@ -2403,6 +2738,8 @@ Endpoints: `11`
     - `db.execute`
     - `db.commit`
     - `Task.delete`
+    - `emit_event_safe`
+    - `text`
     - `delete`
   - Side effects: DB write, DB read
 - Error Handling:
@@ -2433,11 +2770,10 @@ Endpoints: `11`
     - `Depends`
     - `db.execute`
     - `HTTPException`
-    - `get_section_permissions`
     - `select`
   - Side effects: DB read
 - Error Handling:
-  - `404`: `Задача не найдена`; `Р—Р°РґР°С‡Р° РЅРµ РЅР°Р№РґРµРЅР°`; body schema `{"detail": "..."}`
+  - `404`: `Задача не найдена`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 #### `PUT /api/v1/tasks/{task_id}`
@@ -2604,6 +2940,695 @@ Endpoints: `11`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 
+### Router `task_subtasks`
+
+Source: `backend/app/routers/task_subtasks.py`
+
+Prefix: `/api/v1`
+
+Endpoints: `5`
+
+#### `DELETE /api/v1/tasks/subtasks/{subtask_id}`
+
+- Controller: `backend/app/routers/task_subtasks.py::delete_subtask`
+- Data Contract:
+  - Path params: `subtask_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `Task.get_by_id`
+    - `HTTPException`
+    - `_require_task_access`
+    - `db.delete`
+    - `emit_event_safe`
+    - `db.commit`
+  - Side effects: DB write
+- Error Handling:
+  - `404`: `Task not found`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `PATCH /api/v1/tasks/subtasks/{subtask_id}`
+
+- Controller: `backend/app/routers/task_subtasks.py::update_subtask`
+- Data Contract:
+  - Path params: `subtask_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body models: [`TaskSubtaskUpdate`](#model-tasksubtaskupdate)
+  - Response model: `TaskSubtaskResponse`
+  - Response contracts: [`TaskSubtaskResponse`](#model-tasksubtaskresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `HTTPException`
+    - `Task.get_by_id`
+    - `_require_task_access`
+    - `db.commit`
+    - `db.refresh`
+    - `emit_event_safe`
+  - Side effects: DB write
+- Error Handling:
+  - `400`: `Title is required`; body schema `{"detail": "..."}`
+  - `404`: `Subtask not found`; `Task not found`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/tasks/{task_id}/subtasks`
+
+- Controller: `backend/app/routers/task_subtasks.py::list_subtasks`
+- Data Contract:
+  - Path params: `task_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Response model: `List[TaskSubtaskResponse]`
+  - Response contracts: [`TaskSubtaskResponse`](#model-tasksubtaskresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `Task.get_by_id`
+    - `HTTPException`
+    - `_require_task_access`
+    - `db.execute`
+    - `TaskSubtask.sort_order.asc`
+    - `TaskSubtask.created_at.asc`
+    - `joinedload`
+    - `select`
+  - Side effects: DB write, DB read
+- Error Handling:
+  - `404`: `Task not found`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/tasks/{task_id}/subtasks`
+
+- Controller: `backend/app/routers/task_subtasks.py::create_subtask`
+- Data Contract:
+  - Path params: `task_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body models: [`TaskSubtaskCreate`](#model-tasksubtaskcreate)
+  - Response model: `TaskSubtaskResponse`
+  - Response contracts: [`TaskSubtaskResponse`](#model-tasksubtaskresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `TaskSubtask`
+    - `db.add`
+    - `Task.get_by_id`
+    - `HTTPException`
+    - `_require_task_access`
+    - `db.flush`
+    - `emit_event_safe`
+    - `db.commit`
+    - `db.refresh`
+    - `db.execute`
+    - `select`
+  - Side effects: DB write, DB read
+- Error Handling:
+  - `400`: `Title is required`; body schema `{"detail": "..."}`
+  - `404`: `Task not found`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/tasks/{task_id}/subtasks/reorder`
+
+- Controller: `backend/app/routers/task_subtasks.py::reorder_subtasks`
+- Summary: Перепростановка порядка пунктов чек-листа.
+- Data Contract:
+  - Path params: `task_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body models: [`TaskSubtaskReorder`](#model-tasksubtaskreorder)
+  - Response model: `List[TaskSubtaskResponse]`
+  - Response contracts: [`TaskSubtaskResponse`](#model-tasksubtaskresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `Task.get_by_id`
+    - `HTTPException`
+    - `_require_task_access`
+    - `db.execute`
+    - `db.commit`
+    - `TaskSubtask.sort_order.asc`
+    - `TaskSubtask.created_at.asc`
+    - `select`
+    - `joinedload`
+  - Side effects: DB write, DB read
+- Error Handling:
+  - `404`: `Task not found`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+
+### Router `approvals`
+
+Source: `backend/app/routers/approvals.py`
+
+Prefix: `/api/v1/approvals`
+
+Endpoints: `15`
+
+#### `GET /api/v1/approvals/inbox`
+
+- Controller: `backend/app/routers/approvals.py::get_inbox`
+- Data Contract:
+  - Path params: none
+  - Query params: `scope`: str (optional, default='pending_me', constraints=-); `entity_type`: Optional[str] (optional, default=None, constraints=-); `status`: Optional[str] (optional, default=None, constraints=-); `search`: Optional[str] (optional, default=None, constraints=-); `limit`: int (optional, default=200, constraints=ge=1, le=500); `offset`: int (optional, default=0, constraints=ge=0)
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Response model: `ApprovalInboxResponse`
+  - Response contracts: [`ApprovalInboxResponse`](#model-approvalinboxresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+    - `_: Depends(require_any_section_access(*AUTHENTICATED_SECTION_KEYS))`
+- Logic Flow:
+  - Internal calls:
+    - `Query`
+    - `Depends`
+    - `ApprovalInboxStats`
+    - `ApprovalInboxResponse`
+    - `require_any_section_access`
+    - `ApprovalInstance.started_at.desc`
+    - `db.execute`
+    - `select`
+    - `ApprovalInstanceStep.instance_id.in_`
+  - Side effects: DB read
+- Error Handling:
+  - Explicit `HTTPException` not found in handler body
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/approvals/instances`
+
+- Controller: `backend/app/routers/approvals.py::list_instances`
+- Data Contract:
+  - Path params: none
+  - Query params: `entity_type`: Optional[str] (optional, default=None, constraints=-); `entity_id`: Optional[str] (optional, default=None, constraints=-); `status`: Optional[str] (optional, default=None, constraints=-); `mine_only`: bool (optional, default=False, constraints=-)
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Response model: `List[ApprovalInstanceResponse]`
+  - Response contracts: [`ApprovalInstanceResponse`](#model-approvalinstanceresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+    - `_: Depends(require_any_section_access(*AUTHENTICATED_SECTION_KEYS))`
+- Logic Flow:
+  - Internal calls:
+    - `Query`
+    - `Depends`
+    - `require_any_section_access`
+    - `ApprovalInstance.started_at.desc`
+    - `db.execute`
+    - `is_superuser`
+    - `select`
+    - `or_`
+    - `ApprovalInstance.id.in_`
+    - `and_`
+  - Side effects: DB read
+- Error Handling:
+  - Explicit `HTTPException` not found in handler body
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/approvals/instances`
+
+- Controller: `backend/app/routers/approvals.py::start_instance`
+- Data Contract:
+  - Path params: none
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body models: [`ApprovalInstanceStart`](#model-approvalinstancestart)
+  - Response model: `ApprovalInstanceResponse`
+  - Response contracts: [`ApprovalInstanceResponse`](#model-approvalinstanceresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+    - `_: Depends(require_any_section_access(*AUTHENTICATED_SECTION_KEYS))`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `ApprovalInstance`
+    - `db.add`
+    - `require_any_section_access`
+    - `db.get`
+    - `HTTPException`
+    - `db.execute`
+    - `db.flush`
+    - `ApprovalInstanceStep`
+    - `ApprovalActionLog`
+    - `db.commit`
+    - `db.refresh`
+  - Side effects: DB write, DB read, Notification dispatch
+- Error Handling:
+  - `400`: `Шаблон согласования выключен.`; `Тип сущности не соответствует шаблону согласования.`; `Недопустимый тип сущности.`; `Для этой сущности уже запущено активное согласование.`; `Шаблон согласования не содержит ни одного шага.`; body schema `{"detail": "..."}`
+  - `404`: `Шаблон согласования не найден.`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/approvals/instances/{instance_id}`
+
+- Controller: `backend/app/routers/approvals.py::get_instance`
+- Data Contract:
+  - Path params: `instance_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Response model: `ApprovalInstanceResponse`
+  - Response contracts: [`ApprovalInstanceResponse`](#model-approvalinstanceresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context; route may enforce role/section checks
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+    - `_: Depends(require_any_section_access(*AUTHENTICATED_SECTION_KEYS))`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `require_any_section_access`
+    - `db.get`
+    - `HTTPException`
+    - `is_superuser`
+  - Side effects: No explicit side effects (read/transform path)
+- Error Handling:
+  - `403`: `Нет доступа к этому согласованию.`; body schema `{"detail": "..."}`
+  - `404`: `Экземпляр согласования не найден.`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/approvals/instances/{instance_id}/approve`
+
+- Controller: `backend/app/routers/approvals.py::approve_instance_step`
+- Data Contract:
+  - Path params: `instance_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body models: [`ApprovalInstanceAction`](#model-approvalinstanceaction)
+  - Response model: `ApprovalInstanceResponse`
+  - Response contracts: [`ApprovalInstanceResponse`](#model-approvalinstanceresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+    - `_: Depends(require_any_section_access(*AUTHENTICATED_SECTION_KEYS))`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `db.add`
+    - `require_any_section_access`
+    - `db.get`
+    - `HTTPException`
+    - `ApprovalActionLog`
+    - `db.execute`
+    - `db.commit`
+    - `db.refresh`
+    - `emit_event_safe`
+    - `_notify_for_step`
+    - `select`
+  - Side effects: DB write, DB read, Notification dispatch
+- Error Handling:
+  - `400`: `Согласование уже завершено.`; `У согласования нет активного шага.`; body schema `{"detail": "..."}`
+  - `404`: `Экземпляр согласования не найден.`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/approvals/instances/{instance_id}/reject`
+
+- Controller: `backend/app/routers/approvals.py::reject_instance_step`
+- Data Contract:
+  - Path params: `instance_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body models: [`ApprovalInstanceAction`](#model-approvalinstanceaction)
+  - Response model: `ApprovalInstanceResponse`
+  - Response contracts: [`ApprovalInstanceResponse`](#model-approvalinstanceresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+    - `_: Depends(require_any_section_access(*AUTHENTICATED_SECTION_KEYS))`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `db.add`
+    - `require_any_section_access`
+    - `db.get`
+    - `HTTPException`
+    - `ApprovalActionLog`
+    - `db.commit`
+    - `db.refresh`
+    - `emit_event_safe`
+  - Side effects: DB write
+- Error Handling:
+  - `400`: `Согласование уже завершено.`; `У согласования нет активного шага.`; `Для отклонения согласования требуется комментарий.`; body schema `{"detail": "..."}`
+  - `404`: `Экземпляр согласования не найден.`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/approvals/meta`
+
+- Controller: `backend/app/routers/approvals.py::get_approval_meta`
+- Data Contract:
+  - Path params: none
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware)
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `_: Depends(require_section_read('roles'))`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `require_section_read`
+    - `User.get_all`
+    - `Role.get_all`
+  - Side effects: No explicit side effects (read/transform path)
+- Error Handling:
+  - Explicit `HTTPException` not found in handler body
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/approvals/templates`
+
+- Controller: `backend/app/routers/approvals.py::list_templates`
+- Data Contract:
+  - Path params: none
+  - Query params: `entity_type`: Optional[str] (optional, default=None, constraints=-); `active`: Optional[bool] (optional, default=None, constraints=-)
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Response model: `List[ApprovalTemplateResponse]`
+  - Response contracts: [`ApprovalTemplateResponse`](#model-approvaltemplateresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware)
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `_: Depends(require_section_read('roles'))`
+- Logic Flow:
+  - Internal calls:
+    - `Query`
+    - `Depends`
+    - `require_section_read`
+    - `ApprovalTemplate.updated_at.desc`
+    - `ApprovalTemplate.created_at.desc`
+    - `db.execute`
+    - `select`
+  - Side effects: DB write, DB read
+- Error Handling:
+  - Explicit `HTTPException` not found in handler body
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/approvals/templates`
+
+- Controller: `backend/app/routers/approvals.py::create_template`
+- Data Contract:
+  - Path params: none
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body models: [`ApprovalTemplateWrite`](#model-approvaltemplatewrite)
+  - Response model: `ApprovalTemplateResponse`
+  - Response contracts: [`ApprovalTemplateResponse`](#model-approvaltemplateresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+    - `_: Depends(require_section_write('roles'))`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `ApprovalTemplate`
+    - `db.add`
+    - `require_section_write`
+    - `HTTPException`
+    - `db.flush`
+    - `db.commit`
+    - `db.refresh`
+    - `emit_event_safe`
+  - Side effects: DB write
+- Error Handling:
+  - `400`: `Недопустимый тип сущности для шаблона согласования.`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/approvals/templates/runtime`
+
+- Controller: `backend/app/routers/approvals.py::list_runtime_templates`
+- Data Contract:
+  - Path params: none
+  - Query params: `entity_type`: Optional[str] (optional, default=None, constraints=-); `active`: bool (optional, default=True, constraints=-)
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Response model: `List[ApprovalTemplateResponse]`
+  - Response contracts: [`ApprovalTemplateResponse`](#model-approvaltemplateresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware)
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `_: Depends(require_any_section_access(*AUTHENTICATED_SECTION_KEYS))`
+- Logic Flow:
+  - Internal calls:
+    - `Query`
+    - `Depends`
+    - `require_any_section_access`
+    - `ApprovalTemplate.updated_at.desc`
+    - `ApprovalTemplate.created_at.desc`
+    - `db.execute`
+    - `select`
+  - Side effects: DB write, DB read
+- Error Handling:
+  - Explicit `HTTPException` not found in handler body
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `DELETE /api/v1/approvals/templates/{template_id}`
+
+- Controller: `backend/app/routers/approvals.py::delete_template`
+- Data Contract:
+  - Path params: `template_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware)
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `_: Depends(require_section_write('roles'))`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `require_section_write`
+    - `db.get`
+    - `HTTPException`
+    - `db.delete`
+    - `db.commit`
+  - Side effects: DB write
+- Error Handling:
+  - `404`: `Шаблон согласования не найден.`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/approvals/templates/{template_id}`
+
+- Controller: `backend/app/routers/approvals.py::get_template`
+- Data Contract:
+  - Path params: `template_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Response model: `ApprovalTemplateResponse`
+  - Response contracts: [`ApprovalTemplateResponse`](#model-approvaltemplateresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware)
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `_: Depends(require_section_read('roles'))`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `require_section_read`
+    - `db.get`
+    - `HTTPException`
+  - Side effects: No explicit side effects (read/transform path)
+- Error Handling:
+  - `404`: `Шаблон согласования не найден.`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `PUT /api/v1/approvals/templates/{template_id}`
+
+- Controller: `backend/app/routers/approvals.py::update_template`
+- Data Contract:
+  - Path params: `template_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body models: [`ApprovalTemplateWrite`](#model-approvaltemplatewrite)
+  - Response model: `ApprovalTemplateResponse`
+  - Response contracts: [`ApprovalTemplateResponse`](#model-approvaltemplateresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+    - `_: Depends(require_section_write('roles'))`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `require_section_write`
+    - `db.get`
+    - `HTTPException`
+    - `db.commit`
+    - `db.refresh`
+    - `emit_event_safe`
+  - Side effects: DB write
+- Error Handling:
+  - `400`: `Недопустимый тип сущности для шаблона согласования.`; body schema `{"detail": "..."}`
+  - `404`: `Шаблон согласования не найден.`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/approvals/templates/{template_id}/duplicate`
+
+- Controller: `backend/app/routers/approvals.py::duplicate_template`
+- Data Contract:
+  - Path params: `template_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Response model: `ApprovalTemplateResponse`
+  - Response contracts: [`ApprovalTemplateResponse`](#model-approvaltemplateresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+    - `_: Depends(require_section_write('roles'))`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `ApprovalTemplate`
+    - `db.add`
+    - `require_section_write`
+    - `db.get`
+    - `HTTPException`
+    - `db.execute`
+    - `db.flush`
+    - `ApprovalTemplateStep`
+    - `db.commit`
+    - `db.refresh`
+    - `select`
+  - Side effects: DB write, DB read
+- Error Handling:
+  - `404`: `Шаблон согласования не найден.`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/approvals/templates/{template_id}/usage`
+
+- Controller: `backend/app/routers/approvals.py::get_template_usage`
+- Data Contract:
+  - Path params: `template_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware)
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `_: Depends(require_section_read('roles'))`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `require_section_read`
+    - `db.get`
+    - `HTTPException`
+  - Side effects: No explicit side effects (read/transform path)
+- Error Handling:
+  - `404`: `Шаблон согласования не найден.`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+
 ### Router `products`
 
 Source: `backend/app/routers/products.py`
@@ -2661,6 +3686,7 @@ Endpoints: `21`
   - Internal calls:
     - `Depends`
     - `Product.create`
+    - `emit_event_safe`
     - `HTTPException`
   - Side effects: DB write
 - Error Handling:
@@ -2714,6 +3740,7 @@ Endpoints: `21`
   - Internal calls:
     - `Depends`
     - `ProductCategory.create`
+    - `emit_event_safe`
     - `HTTPException`
   - Side effects: DB write
 - Error Handling:
@@ -2738,8 +3765,10 @@ Endpoints: `21`
 - Logic Flow:
   - Internal calls:
     - `Depends`
+    - `ProductCategory.get_by_id`
     - `ProductCategory.delete`
     - `HTTPException`
+    - `emit_event_safe`
   - Side effects: No explicit side effects (read/transform path)
 - Error Handling:
   - `404`: `Category not found`; body schema `{"detail": "..."}`
@@ -2794,6 +3823,7 @@ Endpoints: `21`
     - `Depends`
     - `ProductCategory.update`
     - `HTTPException`
+    - `emit_event_safe`
   - Side effects: DB write
 - Error Handling:
   - `400`: `Failed to update category`; body schema `{"detail": "..."}`
@@ -3128,8 +4158,10 @@ Endpoints: `21`
 - Logic Flow:
   - Internal calls:
     - `Depends`
+    - `Product.get_by_id`
     - `Product.delete`
     - `HTTPException`
+    - `emit_event_safe`
   - Side effects: No explicit side effects (read/transform path)
 - Error Handling:
   - `404`: `Product not found`; body schema `{"detail": "..."}`
@@ -3182,8 +4214,10 @@ Endpoints: `21`
 - Logic Flow:
   - Internal calls:
     - `Depends`
+    - `Product.get_by_id`
     - `Product.update`
     - `HTTPException`
+    - `emit_event_safe`
   - Side effects: DB write
 - Error Handling:
   - `400`: `Failed to update product`; body schema `{"detail": "..."}`
@@ -3245,6 +4279,7 @@ Endpoints: `12`
     - `Depends`
     - `HTTPException`
     - `TaskAuction.create`
+    - `emit_event_safe`
   - Side effects: DB write
 - Error Handling:
   - `400`: `budget is required`; `items required for auction block`; `Block must have at least one item`; body schema `{"detail": "..."}`
@@ -3414,6 +4449,7 @@ Endpoints: `12`
     - `TaskAuction.get_by_id`
     - `TaskAuctionBid.get_by_user_and_auction`
     - `TaskAuctionBid.create`
+    - `emit_event_safe`
     - `TaskAuctionBid.get_by_auction`
   - Side effects: DB write
 - Error Handling:
@@ -3739,6 +4775,7 @@ Endpoints: `8`
     - `HTTPException`
     - `db.commit`
     - `db.refresh`
+    - `emit_event_safe`
     - `select`
   - Side effects: DB write, DB read
 - Error Handling:
@@ -3801,6 +4838,7 @@ Endpoints: `8`
     - `db.execute`
     - `HTTPException`
     - `db.commit`
+    - `emit_event_safe`
     - `select`
   - Side effects: DB write, DB read
 - Error Handling:
@@ -3907,6 +4945,7 @@ Endpoints: `10`
     - `SubcontractorCard.get_by_id`
     - `StageProductAssignment.create`
     - `safe_refresh_deal_health_issues`
+    - `emit_event_safe`
     - `SubcontractorProduct.get_by_id`
   - Side effects: DB write
 - Error Handling:
@@ -3936,6 +4975,7 @@ Endpoints: `10`
     - `StageProductAssignment.delete`
     - `HTTPException`
     - `safe_refresh_deal_health_issues`
+    - `emit_event_safe`
   - Side effects: No explicit side effects (read/transform path)
 - Error Handling:
   - `404`: `Assignment not found`; body schema `{"detail": "..."}`
@@ -3964,6 +5004,7 @@ Endpoints: `10`
     - `StageProductAssignment.update`
     - `HTTPException`
     - `safe_refresh_deal_health_issues`
+    - `emit_event_safe`
   - Side effects: DB write
 - Error Handling:
   - `404`: `Assignment not found`; body schema `{"detail": "..."}`
@@ -4504,6 +5545,7 @@ Endpoints: `6`
   - Internal calls:
     - `Depends`
     - `SubcontractorCard.create`
+    - `emit_event_safe`
     - `HTTPException`
     - `db.rollback`
   - Side effects: DB write
@@ -4529,8 +5571,10 @@ Endpoints: `6`
 - Logic Flow:
   - Internal calls:
     - `Depends`
+    - `SubcontractorCard.get_by_id`
     - `SubcontractorCard.delete`
     - `HTTPException`
+    - `emit_event_safe`
   - Side effects: No explicit side effects (read/transform path)
 - Error Handling:
   - `404`: `Карточка субподрядчика не найдена`; body schema `{"detail": "..."}`
@@ -4584,6 +5628,7 @@ Endpoints: `6`
     - `Depends`
     - `HTTPException`
     - `SubcontractorCard.update`
+    - `emit_event_safe`
     - `db.rollback`
   - Side effects: DB write
 - Error Handling:
@@ -4674,6 +5719,7 @@ Endpoints: `10`
   - Internal calls:
     - `Depends`
     - `SubcontractorStage.create`
+    - `emit_event_safe`
     - `HTTPException`
   - Side effects: DB write
 - Error Handling:
@@ -4840,6 +5886,7 @@ Endpoints: `10`
     - `HTTPException`
     - `SubcontractorStage.update`
     - `SubcontractorGanttService.propagate_dates`
+    - `emit_event_safe`
   - Side effects: DB write
 - Error Handling:
   - `400`: `Error updating stage`; body schema `{"detail": "..."}`
@@ -5136,6 +6183,7 @@ Endpoints: `3`
     - `HTTPException`
     - `StageResult.update`
     - `log_event`
+    - `emit_event_safe`
   - Side effects: DB write, Audit/Event logging
 - Error Handling:
   - `400`: `Invalid status`; `Комментарий обязателен при отклонении`; body schema `{"detail": "..."}`
@@ -5149,7 +6197,7 @@ Source: `backend/app/routers/kp.py`
 
 Prefix: `/api/v1`
 
-Endpoints: `8`
+Endpoints: `10`
 
 #### `GET /api/v1/kp/`
 
@@ -5208,6 +6256,7 @@ Endpoints: `8`
     - `KpDocument`
     - `db.add`
     - `db.refresh`
+    - `emit_event_safe`
     - `db.commit`
   - Side effects: DB write
 - Error Handling:
@@ -5326,14 +6375,13 @@ Endpoints: `8`
     - `Form`
     - `File`
     - `Depends`
-    - `(settings.STORAGE_LOCAL_ROOT or '').rstrip`
+    - `clean_name`
     - `KpTemplate`
     - `db.add`
     - `ensure_path`
     - `upload_bytes_with_safe_extension`
     - `db.commit`
     - `db.refresh`
-    - `clean_name`
   - Side effects: DB write, File/storage operation
 - Error Handling:
   - Explicit `HTTPException` not found in handler body
@@ -5369,6 +6417,71 @@ Endpoints: `8`
   - `404`: `KP not found`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
+#### `POST /api/v1/kp/{kp_id}/generate-version`
+
+- Controller: `backend/app/routers/kp.py::generate_kp_version_sync`
+- Summary: Создать новую версию КП с DOCX (+ PDF если есть soffice).
+- Data Contract:
+  - Path params: `kp_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Response model: `KpVersionResponse`
+  - Response contracts: [`KpVersionResponse`](#model-kpversionresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `_: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `db.get`
+    - `HTTPException`
+    - `read_file_bytes`
+  - Side effects: File/storage operation
+- Error Handling:
+  - `400`: `У КП не выбран шаблон`; `Файл шаблона недоступен`; body schema `{"detail": "..."}`
+  - `404`: `KP not found`; `Файл шаблона не найден в storage`; body schema `{"detail": "..."}`
+  - `500`: `f'Не удалось прочитать шаблон: {exc}`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/kp/{kp_id}/render-docx`
+
+- Controller: `backend/app/routers/kp.py::render_kp_to_docx`
+- Summary: Серверный рендер docx КП:
+- Data Contract:
+  - Path params: `kp_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `_: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `db.execute`
+    - `HTTPException`
+    - `db.get`
+    - `render_kp_docx`
+    - `read_file_bytes`
+    - `select`
+  - Side effects: DB read, File/storage operation
+- Error Handling:
+  - `400`: `KP has no template assigned`; `Template file is missing`; body schema `{"detail": "..."}`
+  - `404`: `KP not found`; `Template file not found in storage`; body schema `{"detail": "..."}`
+  - `500`: `f'Failed to read template: {exc}`; `f'Failed to render docx: {exc}`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
 #### `POST /api/v1/kp/{kp_id}/upload`
 
 - Controller: `backend/app/routers/kp.py::upload_kp_version`
@@ -5391,7 +6504,7 @@ Endpoints: `8`
   - Internal calls:
     - `File`
     - `Depends`
-    - `(settings.STORAGE_LOCAL_ROOT or '').rstrip`
+    - `clean_name`
     - `KpVersion`
     - `db.add`
     - `db.get`

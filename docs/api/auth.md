@@ -1,13 +1,13 @@
 # Identity & Access API
 
-Сгенерировано из `docs/API.md` на 2026-05-19 01:30:03 (local time).
+Сгенерировано из `docs/API.md` на 2026-05-29 01:30:41 (local time).
 
 ## Scope
 - Домен: `auth`
-- Описание: Аутентификация, пользователи, роли, компании и справочные интеграции.
-- Routers: `6`
-- Endpoints: `55`
-- Список роутеров: `auth`, `users`, `roles`, `companies`, `banks`, `dadata`
+- Описание: Аутентификация, пользователи, роли, компании, оргструктура и справочные интеграции.
+- Routers: `7`
+- Endpoints: `63`
+- Список роутеров: `auth`, `users`, `roles`, `companies`, `banks`, `dadata`, `org_structure`
 
 ## Common Rules
 - Общие правила API (base URL, auth headers, коды ошибок) вынесены в `docs/api/INDEX.md`.
@@ -15,7 +15,7 @@
 
 ## Data Contract Catalog (Domain)
 
-Модели, используемые в домене: `25`.
+Модели, используемые в домене: `30`.
 
 ### Model `LoginRequest`
 
@@ -200,6 +200,7 @@ Source: `backend/app/schemas/user.py`
 | role_id | Optional[Union[str, UUID]] | no | None | - |
 | is_active | Optional[bool] | no | True | - |
 | id | Union[str, UUID] | yes | - | - |
+| role_name | Optional[str] | no | None | - |
 | avatar_url | Optional[str] | no | None | - |
 | wallpaper_url | Optional[str] | no | None | - |
 | two_factor_enabled | Optional[bool] | no | False | - |
@@ -235,6 +236,8 @@ Source: `backend/app/schemas/role.py`
 | name | str | yes | - | - |
 | description | Optional[str] | no | None | - |
 | subtree_scope | Optional[bool] | no | False | - |
+| track_work_time | Optional[bool] | no | False | - |
+| idle_timeout_minutes | Optional[int] | no | None | - |
 
 
 ### Model `RolePermissionResponse`
@@ -279,6 +282,8 @@ Source: `backend/app/schemas/role.py`
 | name | str | yes | - | - |
 | description | Optional[str] | no | None | - |
 | subtree_scope | Optional[bool] | no | False | - |
+| track_work_time | Optional[bool] | no | False | - |
+| idle_timeout_minutes | Optional[int] | no | None | - |
 | id | Union[str, UUID] | yes | - | - |
 | is_system | bool | no | False | - |
 | created_at | Optional[datetime] | no | None | - |
@@ -295,6 +300,8 @@ Source: `backend/app/schemas/role.py`
 | name | Optional[str] | no | None | - |
 | description | Optional[str] | no | None | - |
 | subtree_scope | Optional[bool] | no | None | - |
+| track_work_time | Optional[bool] | no | None | - |
+| idle_timeout_minutes | Optional[int] | no | None | - |
 
 
 ### Model `CompanyCreate`
@@ -323,6 +330,7 @@ Source: `backend/app/schemas/company.py`
 | work_directions | Optional[List[Union[str, int]]] | no | [] | - |
 | rating | Optional[float] | no | 0.0 | - |
 | note | Optional[str] | no | None | - |
+| is_default | Optional[bool] | no | False | - |
 
 
 ### Model `CompanyDocumentResponse`
@@ -376,6 +384,7 @@ Source: `backend/app/schemas/company.py`
 | work_directions | Optional[List[Union[str, int]]] | no | [] | - |
 | rating | Optional[float] | no | 0.0 | - |
 | note | Optional[str] | no | None | - |
+| is_default | Optional[bool] | no | False | - |
 | id | Union[str, UUID] | yes | - | - |
 | created_at | Optional[datetime] | yes | - | - |
 | updated_at | Optional[datetime] | yes | - | - |
@@ -407,6 +416,88 @@ Source: `backend/app/schemas/company.py`
 | work_directions | Optional[List[Union[str, int]]] | no | [] | - |
 | rating | Optional[float] | no | 0.0 | - |
 | note | Optional[str] | no | None | - |
+| is_default | Optional[bool] | no | False | - |
+
+
+### Model `OrgUnitAssign`
+
+Source: `backend/app/schemas/org_unit.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| user_id | str | yes | - | - |
+| org_unit_id | Optional[str] | no | None | - |
+
+
+### Model `OrgUnitCreate`
+
+Source: `backend/app/schemas/org_unit.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| name | str | yes | - | - |
+| parent_id | Optional[str] | no | None | - |
+| kind | Optional[str] | no | None | - |
+| head_user_id | Optional[str] | no | None | - |
+| sort_order | Optional[int] | no | 0 | - |
+
+
+### Model `OrgUnitResponse`
+
+Source: `backend/app/schemas/org_unit.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| id | str | yes | - | - |
+| parent_id | Optional[str] | no | None | - |
+| name | str | yes | - | - |
+| kind | Optional[str] | no | None | - |
+| head_user_id | Optional[str] | no | None | - |
+| sort_order | int | no | 0 | - |
+| depth | int | no | 0 | - |
+| path | Optional[str] | no | None | - |
+| member_count | int | no | 0 | - |
+| created_at | Optional[datetime] | no | None | - |
+| updated_at | Optional[datetime] | no | None | - |
+
+
+### Model `OrgUnitTreeNode`
+
+Source: `backend/app/schemas/org_unit.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| id | str | yes | - | - |
+| parent_id | Optional[str] | no | None | - |
+| name | str | yes | - | - |
+| kind | Optional[str] | no | None | - |
+| head_user_id | Optional[str] | no | None | - |
+| sort_order | int | no | 0 | - |
+| depth | int | no | 0 | - |
+| path | Optional[str] | no | None | - |
+| member_count | int | no | 0 | - |
+| created_at | Optional[datetime] | no | None | - |
+| updated_at | Optional[datetime] | no | None | - |
+| children | List['OrgUnitTreeNode'] | no | [] | - |
+| members | List[OrgUnitMember] | no | [] | - |
+
+
+### Model `OrgUnitUpdate`
+
+Source: `backend/app/schemas/org_unit.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| name | Optional[str] | no | None | - |
+| parent_id | Optional[str] | no | None | - |
+| kind | Optional[str] | no | None | - |
+| head_user_id | Optional[str] | no | None | - |
+| sort_order | Optional[int] | no | None | - |
 
 
 ## Routers / Controllers Reference
@@ -637,6 +728,7 @@ Endpoints: `14`
     - `_load_login_user`
     - `_ensure_login_two_factor_state`
     - `create_two_factor_challenge_token`
+    - `_emit_login_event`
   - Side effects: No explicit side effects (read/transform path)
 - Error Handling:
   - Explicit `HTTPException` not found in handler body
@@ -655,10 +747,14 @@ Endpoints: `14`
   - Success status: `200`
 - Authentication & Authorization:
   - Access mode: JWT (AuthMiddleware)
-  - Depends/Security: none at function level
+  - Depends/Security:
+    - `db: Depends(get_db)`
 - Logic Flow:
   - Internal calls:
+    - `Depends`
     - `decode_token`
+    - `emit_event_safe`
+    - `client_ip`
   - Side effects: No explicit side effects (read/transform path)
 - Error Handling:
   - Explicit `HTTPException` not found in handler body
@@ -691,6 +787,7 @@ Endpoints: `14`
     - `_ensure_login_two_factor_state`
     - `create_two_factor_challenge_token`
     - `LoginResponse`
+    - `_emit_login_event`
   - Side effects: No explicit side effects (read/transform path)
 - Error Handling:
   - Explicit `HTTPException` not found in handler body
@@ -753,6 +850,7 @@ Endpoints: `14`
     - `HTTPException`
     - `User.get_by_id`
     - `verify_and_consume_backup_code`
+    - `_emit_login_event`
     - `Role.get_by_id`
     - `db.commit`
     - `db.refresh`
@@ -849,6 +947,7 @@ Endpoints: `14`
     - `HTTPException`
     - `User.get_by_id`
     - `verify_and_consume_backup_code`
+    - `_emit_login_event`
     - `Role.get_by_id`
     - `db.commit`
     - `db.refresh`
@@ -923,6 +1022,7 @@ Endpoints: `17`
     - `HTTPException`
     - `run_in_threadpool`
     - `User.create`
+    - `emit_event_safe`
     - `Role.get_by_id`
   - Side effects: DB write
 - Error Handling:
@@ -1275,6 +1375,7 @@ Endpoints: `17`
     - `HTTPException`
     - `User.delete`
     - `revoke_user_tokens`
+    - `emit_event_safe`
   - Side effects: No explicit side effects (read/transform path)
 - Error Handling:
   - `404`: `User not found`; body schema `{"detail": "..."}`
@@ -1305,6 +1406,7 @@ Endpoints: `17`
     - `User.get_by_id`
     - `HTTPException`
     - `User.update`
+    - `emit_event_safe`
     - `Role.get_by_id`
     - `run_in_threadpool`
     - `revoke_user_tokens`
@@ -1608,7 +1710,7 @@ Source: `backend/app/routers/companies.py`
 
 Prefix: `/api/v1/companies`
 
-Endpoints: `15`
+Endpoints: `17`
 
 #### `GET /api/v1/companies`
 
@@ -1667,6 +1769,7 @@ Endpoints: `15`
     - `Depends`
     - `require_section_write`
     - `Company.create`
+    - `emit_event_safe`
   - Side effects: DB write
 - Error Handling:
   - Explicit `HTTPException` not found in handler body
@@ -1695,6 +1798,33 @@ Endpoints: `15`
   - Side effects: No explicit side effects (read/transform path)
 - Error Handling:
   - Explicit `HTTPException` not found in handler body
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/companies/default-our-company`
+
+- Controller: `backend/app/routers/companies.py::get_default_our_company`
+- Summary: Returns the system-wide "наша компания" default — the company whose
+- Data Contract:
+  - Path params: none
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `_: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `Company.get_default_our_company`
+    - `HTTPException`
+  - Side effects: No explicit side effects (read/transform path)
+- Error Handling:
+  - `404`: `Default our company is not configured`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 #### `DELETE /api/v1/companies/documents/{document_id}`
@@ -1847,8 +1977,10 @@ Endpoints: `15`
   - Internal calls:
     - `Depends`
     - `require_section_write`
+    - `Company.get_by_id`
     - `Company.delete`
     - `HTTPException`
+    - `emit_event_safe`
   - Side effects: No explicit side effects (read/transform path)
 - Error Handling:
   - `404`: `Компания не найдена`; body schema `{"detail": "..."}`
@@ -1913,6 +2045,7 @@ Endpoints: `15`
     - `require_section_write`
     - `Company.update`
     - `HTTPException`
+    - `emit_event_safe`
   - Side effects: DB write
 - Error Handling:
   - `404`: `Компания не найдена`; body schema `{"detail": "..."}`
@@ -1955,7 +2088,7 @@ Endpoints: `15`
   - Path params: `company_id`: str (required, default=-, constraints=-)
   - Query params: none
   - Header params: none
-  - Form params: `our_company_id`: str (required, default=-, constraints=-)
+  - Form params: `our_company_id`: Optional[str] (optional, default=None, constraints=-)
   - File params: `file`: UploadFile (required, default=-, constraints=-)
   - Body: none
   - Response model: `CompanyDocumentResponse`
@@ -1983,7 +2116,7 @@ Endpoints: `15`
     - `db.commit`
   - Side effects: DB write, File/storage operation
 - Error Handling:
-  - `400`: `Our company not found`; body schema `{"detail": "..."}`
+  - `400`: `Default our_company is not configured; set one via /companies/{id}/set-default`; `Our company not found`; body schema `{"detail": "..."}`
   - `500`: `Storage is not configured`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
@@ -2012,6 +2145,38 @@ Endpoints: `15`
   - Side effects: DB write, DB read
 - Error Handling:
   - Explicit `HTTPException` not found in handler body
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/companies/{company_id}/set-default`
+
+- Controller: `backend/app/routers/companies.py::set_default_our_company`
+- Summary: Mark this company as the default "наша компания". Only internal
+- Data Contract:
+  - Path params: `company_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Response model: `CompanyResponse`
+  - Response contracts: [`CompanyResponse`](#model-companyresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware)
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `_: Depends(require_section_write('companies'))`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `require_section_write`
+    - `Company.get_by_id`
+    - `HTTPException`
+    - `Company.set_default`
+  - Side effects: No explicit side effects (read/transform path)
+- Error Handling:
+  - `400`: `Only internal companies can be set as default our_company`; body schema `{"detail": "..."}`
+  - `404`: `Company not found`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 #### `GET /api/v1/companies/{company_id}/users`
@@ -2148,6 +2313,212 @@ Endpoints: `1`
   - `400`: `Query is required`; body schema `{"detail": "..."}`
   - `500`: `Dadata token is not configured`; body schema `{"detail": "..."}`
   - `502`: `Failed to lookup party data`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+
+### Router `org_structure`
+
+Source: `backend/app/routers/org_structure.py`
+
+Prefix: `/api/v1/org-structure`
+
+Endpoints: `6`
+
+#### `GET /api/v1/org-structure`
+
+- Controller: `backend/app/routers/org_structure.py::list_org_units`
+- Data Contract:
+  - Path params: none
+  - Query params: `flat`: int (optional, default=0, constraints=-)
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Response model: `List[OrgUnitTreeNode]`
+  - Response contracts: [`OrgUnitTreeNode`](#model-orgunittreenode)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware)
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `_: Depends(require_section_read(SECTION))`
+- Logic Flow:
+  - Internal calls:
+    - `Query`
+    - `Depends`
+    - `require_section_read`
+    - `OrgUnit.get_all`
+    - `db.execute`
+    - `OrgUnitTreeNode.model_validate`
+    - `User.org_unit_id.isnot`
+    - `select`
+  - Side effects: DB read
+- Error Handling:
+  - Explicit `HTTPException` not found in handler body
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/org-structure`
+
+- Controller: `backend/app/routers/org_structure.py::create_org_unit`
+- Data Contract:
+  - Path params: none
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body models: [`OrgUnitCreate`](#model-orgunitcreate)
+  - Response model: `OrgUnitResponse`
+  - Response contracts: [`OrgUnitResponse`](#model-orgunitresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware)
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `_: Depends(require_section_write(SECTION))`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `OrgUnit`
+    - `db.add`
+    - `require_section_write`
+    - `db.flush`
+    - `db.commit`
+    - `db.refresh`
+    - `OrgUnit.get_by_id`
+    - `HTTPException`
+  - Side effects: DB write
+- Error Handling:
+  - `400`: `Родительский узел не найден`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/org-structure/assign`
+
+- Controller: `backend/app/routers/org_structure.py::assign_user`
+- Data Contract:
+  - Path params: none
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body models: [`OrgUnitAssign`](#model-orgunitassign)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware)
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `_: Depends(require_section_write(SECTION))`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `db.add`
+    - `require_section_write`
+    - `User.get_by_id`
+    - `HTTPException`
+    - `db.commit`
+    - `OrgUnit.get_by_id`
+  - Side effects: DB write
+- Error Handling:
+  - `400`: `Подразделение не найдено`; body schema `{"detail": "..."}`
+  - `404`: `Пользователь не найден`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `DELETE /api/v1/org-structure/{unit_id}`
+
+- Controller: `backend/app/routers/org_structure.py::delete_org_unit`
+- Data Contract:
+  - Path params: `unit_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware)
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `_: Depends(require_section_write(SECTION))`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `require_section_write`
+    - `OrgUnit.get_by_id`
+    - `HTTPException`
+    - `db.execute`
+    - `db.commit`
+    - `select`
+    - `delete`
+    - `func.count`
+  - Side effects: DB write, DB read
+- Error Handling:
+  - `404`: `Подразделение не найдено`; body schema `{"detail": "..."}`
+  - `409`: `У узла есть дочерние подразделения — сначала перенесите или удалите их`; `В узле есть сотрудники — сначала переназначьте их`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/org-structure/{unit_id}`
+
+- Controller: `backend/app/routers/org_structure.py::get_org_unit`
+- Data Contract:
+  - Path params: `unit_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Response model: `OrgUnitTreeNode`
+  - Response contracts: [`OrgUnitTreeNode`](#model-orgunittreenode)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware)
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `_: Depends(require_section_read(SECTION))`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `OrgUnitTreeNode.model_validate`
+    - `require_section_read`
+    - `OrgUnit.get_by_id`
+    - `HTTPException`
+    - `db.execute`
+    - `select`
+  - Side effects: DB read
+- Error Handling:
+  - `404`: `Подразделение не найдено`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `PATCH /api/v1/org-structure/{unit_id}`
+
+- Controller: `backend/app/routers/org_structure.py::update_org_unit`
+- Data Contract:
+  - Path params: `unit_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body models: [`OrgUnitUpdate`](#model-orgunitupdate)
+  - Response model: `OrgUnitResponse`
+  - Response contracts: [`OrgUnitResponse`](#model-orgunitresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware)
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `_: Depends(require_section_write(SECTION))`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `db.add`
+    - `require_section_write`
+    - `OrgUnit.get_by_id`
+    - `HTTPException`
+    - `db.flush`
+    - `db.commit`
+    - `db.refresh`
+  - Side effects: DB write
+- Error Handling:
+  - `400`: `Узел не может быть родителем сам себе`; `Родительский узел не найден`; `Нельзя переместить узел внутрь его собственного поддерева`; body schema `{"detail": "..."}`
+  - `404`: `Подразделение не найдено`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 

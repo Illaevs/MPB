@@ -1,13 +1,13 @@
 # Communications & Notifications API
 
-Сгенерировано из `docs/API.md` на 2026-05-19 01:30:03 (local time).
+Сгенерировано из `docs/API.md` на 2026-05-29 01:30:42 (local time).
 
 ## Scope
 - Домен: `communications`
-- Описание: Почта, чаты, тех. поддержка, уведомления и пользовательские предпочтения уведомлений.
-- Routers: `8`
-- Endpoints: `53`
-- Список роутеров: `mail`, `task_messages`, `global_chat`, `support`, `notifications`, `notification_rules`, `notification_preferences`, `notification_subscriptions`
+- Описание: Почта, чаты, корпоративная лента, тех. поддержка, уведомления и пользовательские предпочтения уведомлений.
+- Routers: `10`
+- Endpoints: `74`
+- Список роутеров: `mail`, `task_messages`, `global_chat`, `feed`, `support`, `notifications`, `notification_rules`, `notification_preferences`, `notification_subscriptions`, `telegram_notifications`
 
 ## Common Rules
 - Общие правила API (base URL, auth headers, коды ошибок) вынесены в `docs/api/INDEX.md`.
@@ -15,7 +15,7 @@
 
 ## Data Contract Catalog (Domain)
 
-Модели, используемые в домене: `34`.
+Модели, используемые в домене: `44`.
 
 ### Model `MailFolderResponse`
 
@@ -277,6 +277,119 @@ Source: `backend/app/schemas/global_chat_message.py`
 | Field | Type | Required | Default | Constraints |
 | --- | --- | --- | --- | --- |
 | body | Optional[str] | no | None | - |
+
+
+### Model `FeedCommentCreate`
+
+Source: `backend/app/schemas/feed.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| body | str | yes | - | min_length=1, max_length=8000 |
+
+
+### Model `FeedCommentResponse`
+
+Source: `backend/app/schemas/feed.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| id | str | yes | - | - |
+| post_id | str | yes | - | - |
+| author | Optional[FeedAuthor] | no | None | - |
+| body | str | yes | - | - |
+| created_at | Optional[datetime] | no | None | - |
+| can_delete | bool | no | False | - |
+
+
+### Model `FeedPoll`
+
+Source: `backend/app/schemas/feed.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| multi | bool | no | False | - |
+| anonymous | bool | no | False | - |
+| options | List[FeedPollOption] | no | [] | - |
+| total_votes | int | no | 0 | - |
+| my_voted | bool | no | False | - |
+
+
+### Model `FeedPostCreate`
+
+Source: `backend/app/schemas/feed.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| body | str | no | '' | max_length=20000 |
+| post_type | str | no | 'news' | - |
+| is_pinned | bool | no | False | - |
+| attachments | List[FeedAttachment] | no | [] | - |
+| poll | Optional[FeedPollInput] | no | None | - |
+
+
+### Model `FeedPostPatch`
+
+Source: `backend/app/schemas/feed.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| body | Optional[str] | no | None | max_length=20000 |
+| post_type | Optional[str] | no | None | - |
+| is_pinned | Optional[bool] | no | None | - |
+| attachments | Optional[List[FeedAttachment]] | no | None | - |
+
+
+### Model `FeedPostResponse`
+
+Source: `backend/app/schemas/feed.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| id | str | yes | - | - |
+| author | Optional[FeedAuthor] | no | None | - |
+| body | str | yes | - | - |
+| post_type | str | no | 'news' | - |
+| is_pinned | bool | no | False | - |
+| attachments | List[FeedAttachment] | no | [] | - |
+| poll | Optional[FeedPoll] | no | None | - |
+| created_at | Optional[datetime] | no | None | - |
+| updated_at | Optional[datetime] | no | None | - |
+| reactions | List[FeedReactionGroup] | no | [] | - |
+| comments_count | int | no | 0 | - |
+| views_count | int | no | 0 | - |
+| can_edit | bool | no | False | - |
+
+
+### Model `FeedReactRequest`
+
+Source: `backend/app/schemas/feed.py`
+
+Description: Переключить (toggle) эмодзи-реакцию на посте.
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| emoji | str | yes | - | min_length=1, max_length=16 |
+
+
+### Model `FeedVoteRequest`
+
+Source: `backend/app/schemas/feed.py`
+
+Description: Проголосовать в опросе. Для single-choice опроса учитывается
+первый из `option_ids`; для multi — весь набор.
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| option_ids | List[str] | no | [] | - |
 
 
 ### Model `CreateTaskFromTicket`
@@ -569,6 +682,37 @@ Source: `backend/app/schemas/notification_rules.py`
 | --- | --- | --- | --- | --- |
 | is_muted | Optional[bool] | no | None | - |
 | mute_until | Optional[datetime] | no | None | - |
+
+
+### Model `TelegramConnectionStatusResponse`
+
+Source: `backend/app/schemas/notification_rules.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| bot_configured | bool | yes | - | - |
+| bot_username | Optional[str] | no | None | - |
+| is_connected | bool | yes | - | - |
+| is_enabled | bool | yes | - | - |
+| is_verified | bool | yes | - | - |
+| telegram_username | Optional[str] | no | None | - |
+| chat_id_masked | Optional[str] | no | None | - |
+| linked_at | Optional[datetime] | no | None | - |
+| deliver_telegram | bool | yes | - | - |
+
+
+### Model `TelegramLinkResponse`
+
+Source: `backend/app/schemas/notification_rules.py`
+
+
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| bot_configured | bool | yes | - | - |
+| bot_username | Optional[str] | no | None | - |
+| link_url | Optional[str] | no | None | - |
+| expires_at | Optional[datetime] | no | None | - |
 
 
 ## Routers / Controllers Reference
@@ -875,6 +1019,7 @@ Endpoints: `13`
     - `db.get`
     - `HTTPException`
     - `ensure_valid_token`
+    - `emit_event_safe`
     - `asyncio.to_thread`
     - `logger.warning`
   - Side effects: No explicit side effects (read/transform path)
@@ -1032,7 +1177,40 @@ Source: `backend/app/routers/task_messages.py`
 
 Prefix: `/api/v1`
 
-Endpoints: `4`
+Endpoints: `6`
+
+#### `GET /api/v1/tasks/chat/unread-counts`
+
+- Controller: `backend/app/routers/task_messages.py::list_chat_unread_counts`
+- Summary: Возвращает {task_id: count} непрочитанных сообщений от других
+- Data Contract:
+  - Path params: none
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `and_`
+    - `TaskMessage.is_deleted.is_`
+    - `get_section_permissions`
+    - `db.execute`
+    - `or_`
+    - `select`
+    - `TaskRead.task_id.in_`
+    - `TaskMessage.task_id.in_`
+  - Side effects: DB read
+- Error Handling:
+  - Explicit `HTTPException` not found in handler body
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 #### `DELETE /api/v1/tasks/messages/{message_id}`
 
@@ -1056,6 +1234,7 @@ Endpoints: `4`
     - `db.get`
     - `HTTPException`
     - `Task.get_by_id`
+    - `emit_event_safe`
     - `db.commit`
   - Side effects: DB write
 - Error Handling:
@@ -1087,6 +1266,7 @@ Endpoints: `4`
     - `db.get`
     - `HTTPException`
     - `Task.get_by_id`
+    - `emit_event_safe`
     - `db.commit`
     - `db.refresh`
     - `joinedload`
@@ -1095,6 +1275,39 @@ Endpoints: `4`
   - `400`: `Message deleted`; `Message cannot be empty`; body schema `{"detail": "..."}`
   - `403`: `Not enough permissions`; body schema `{"detail": "..."}`
   - `404`: `Message not found`; `Task not found`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/tasks/{task_id}/chat/mark-read`
+
+- Controller: `backend/app/routers/task_messages.py::mark_task_chat_read`
+- Summary: Обнуляет непрочитанный счётчик: ставит last_read_at = сейчас.
+- Data Contract:
+  - Path params: `task_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `Task.get_by_id`
+    - `HTTPException`
+    - `db.execute`
+    - `TaskRead`
+    - `db.add`
+    - `db.commit`
+    - `and_`
+    - `select`
+  - Side effects: DB write, DB read
+- Error Handling:
+  - `404`: `Task not found`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 #### `GET /api/v1/tasks/{task_id}/messages`
@@ -1158,9 +1371,9 @@ Endpoints: `4`
     - `HTTPException`
     - `db.commit`
     - `db.refresh`
+    - `emit_event_safe`
     - `db.execute`
     - `storage_available`
-    - `ensure_path`
   - Side effects: DB write, DB read, Notification dispatch, File/storage operation
 - Error Handling:
   - `400`: `Message or files are required`; body schema `{"detail": "..."}`
@@ -1591,6 +1804,481 @@ Endpoints: `14`
 - Error Handling:
   - `400`: `Message deleted`; body schema `{"detail": "..."}`
   - `404`: `Message not found`; `Conversation not found`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+
+### Router `feed`
+
+Source: `backend/app/routers/feed.py`
+
+Prefix: `/api/v1/feed`
+
+Endpoints: `15`
+
+#### `GET /api/v1/feed`
+
+- Controller: `backend/app/routers/feed.py::list_feed`
+- Summary: Лента: закреплённые сверху, далее по убыванию даты.
+- Data Contract:
+  - Path params: none
+  - Query params: `limit`: int (optional, default=20, constraints=ge=1, le=100); `offset`: int (optional, default=0, constraints=ge=0)
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Response model: `List[FeedPostResponse]`
+  - Response contracts: [`FeedPostResponse`](#model-feedpostresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `Query`
+    - `db.execute`
+    - `FeedPost.is_pinned.desc`
+    - `FeedPost.created_at.desc`
+    - `select`
+  - Side effects: DB write, DB read
+- Error Handling:
+  - Explicit `HTTPException` not found in handler body
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/feed`
+
+- Controller: `backend/app/routers/feed.py::create_post`
+- Summary: Создать пост. Требует `feed.edit_all` (или superuser).
+- Data Contract:
+  - Path params: none
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body models: [`FeedPostCreate`](#model-feedpostcreate)
+  - Response model: `FeedPostResponse`
+  - Response contracts: [`FeedPostResponse`](#model-feedpostresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context; route may enforce role/section checks
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `FeedPost`
+    - `db.add`
+    - `HTTPException`
+    - `db.commit`
+    - `db.refresh`
+    - `emit_event_safe`
+    - `_notify`
+  - Side effects: DB write, Notification dispatch
+- Error Handling:
+  - `400`: `Пост пустой`; body schema `{"detail": "..."}`
+  - `403`: `Нет прав на публикацию в ленте`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `DELETE /api/v1/feed/comments/{comment_id}`
+
+- Controller: `backend/app/routers/feed.py::delete_comment`
+- Summary: Удалить комментарий. Автор или `feed.edit_all`.
+- Data Contract:
+  - Path params: `comment_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context; route may enforce role/section checks
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `HTTPException`
+    - `db.delete`
+    - `db.commit`
+    - `db.execute`
+    - `select`
+  - Side effects: DB write, DB read
+- Error Handling:
+  - `403`: `Нет прав на удаление комментария`; body schema `{"detail": "..."}`
+  - `404`: `Комментарий не найден`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/feed/file/{filename}`
+
+- Controller: `backend/app/routers/feed.py::get_feed_file`
+- Summary: Отдать файл поста с оригинальным именем для скачивания.
+- Data Contract:
+  - Path params: `filename`: str (required, default=-, constraints=-)
+  - Query params: `name`: Optional[str] (optional, default=None, constraints=-)
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware)
+  - Depends/Security: none at function level
+- Logic Flow:
+  - Internal calls:
+    - `Query`
+    - `FileResponse`
+    - `HTTPException`
+  - Side effects: File/storage operation
+- Error Handling:
+  - `404`: `Not found`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/feed/image/{filename}`
+
+- Controller: `backend/app/routers/feed.py::get_feed_image`
+- Summary: Отдать картинку поста. Защита от path traversal.
+- Data Contract:
+  - Path params: `filename`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware)
+  - Depends/Security: none at function level
+- Logic Flow:
+  - Internal calls:
+    - `FileResponse`
+    - `HTTPException`
+  - Side effects: File/storage operation
+- Error Handling:
+  - `404`: `Not found`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/feed/popular`
+
+- Controller: `backend/app/routers/feed.py::popular_feed`
+- Summary: Топ постов за период по сумме (реакции + комментарии).
+- Data Contract:
+  - Path params: none
+  - Query params: `days`: int (optional, default=30, constraints=ge=1, le=365); `limit`: int (optional, default=5, constraints=ge=1, le=20)
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Response model: `List[FeedPostResponse]`
+  - Response contracts: [`FeedPostResponse`](#model-feedpostresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `Query`
+    - `db.execute`
+    - `select`
+  - Side effects: DB read
+- Error Handling:
+  - Explicit `HTTPException` not found in handler body
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/feed/upload-file`
+
+- Controller: `backend/app/routers/feed.py::upload_feed_file`
+- Summary: Загрузить произвольный файл к посту (документ/архив/CAD/медиа).
+- Data Contract:
+  - Path params: none
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: `file`: UploadFile (required, default=-, constraints=-)
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context; route may enforce role/section checks
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `File`
+    - `Depends`
+    - `HTTPException`
+    - `_uuid.uuid4`
+  - Side effects: File/storage operation
+- Error Handling:
+  - `400`: `f'Этот тип файла не поддержан. Разрешены: документы, таблицы, архивы, аудио/видео, CAD-проекты`; `Файл пустой`; `f'Максимальный размер файла {_MAX_FILE_BYTES // (1024 * 1024)} МБ`; body schema `{"detail": "..."}`
+  - `403`: `Нет прав на загрузку файлов в ленту`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/feed/upload-image`
+
+- Controller: `backend/app/routers/feed.py::upload_feed_image`
+- Summary: Загрузить картинку для поста. Возвращает `{url, name}`.
+- Data Contract:
+  - Path params: none
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: `file`: UploadFile (required, default=-, constraints=-)
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context; route may enforce role/section checks
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `File`
+    - `Depends`
+    - `HTTPException`
+    - `_uuid.uuid4`
+  - Side effects: File/storage operation
+- Error Handling:
+  - `400`: `Допустимы только JPG, PNG, WEBP, GIF`; `Файл пустой`; `Максимальный размер картинки 8 МБ`; body schema `{"detail": "..."}`
+  - `403`: `Нет прав на загрузку картинок в ленту`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `DELETE /api/v1/feed/{post_id}`
+
+- Controller: `backend/app/routers/feed.py::delete_post`
+- Summary: Удалить пост. Автор или `feed.edit_all`. Каскадно чистит
+- Data Contract:
+  - Path params: `post_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context; route may enforce role/section checks
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `HTTPException`
+    - `db.delete`
+    - `db.commit`
+    - `db.execute`
+    - `sa_delete`
+    - `select`
+  - Side effects: DB write, DB read
+- Error Handling:
+  - `403`: `Нет прав на удаление`; body schema `{"detail": "..."}`
+  - `404`: `Пост не найден`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `PATCH /api/v1/feed/{post_id}`
+
+- Controller: `backend/app/routers/feed.py::patch_post`
+- Summary: Правка поста. Автор или `feed.edit_all`. Опрос правкой не
+- Data Contract:
+  - Path params: `post_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body models: [`FeedPostPatch`](#model-feedpostpatch)
+  - Response model: `FeedPostResponse`
+  - Response contracts: [`FeedPostResponse`](#model-feedpostresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context; route may enforce role/section checks
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `HTTPException`
+    - `db.commit`
+    - `db.refresh`
+    - `db.execute`
+    - `select`
+  - Side effects: DB write, DB read
+- Error Handling:
+  - `403`: `Нет прав на правку поста`; body schema `{"detail": "..."}`
+  - `404`: `Пост не найден`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/feed/{post_id}/comments`
+
+- Controller: `backend/app/routers/feed.py::list_comments`
+- Summary: Комментарии поста по возрастанию даты.
+- Data Contract:
+  - Path params: `post_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Response model: `List[FeedCommentResponse]`
+  - Response contracts: [`FeedCommentResponse`](#model-feedcommentresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `FeedCommentResponse`
+    - `db.execute`
+    - `FeedComment.created_at.asc`
+    - `select`
+  - Side effects: DB write, DB read
+- Error Handling:
+  - Explicit `HTTPException` not found in handler body
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/feed/{post_id}/comments`
+
+- Controller: `backend/app/routers/feed.py::create_comment`
+- Summary: Оставить комментарий. Автор поста получает уведомление;
+- Data Contract:
+  - Path params: `post_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body models: [`FeedCommentCreate`](#model-feedcommentcreate)
+  - Response model: `FeedCommentResponse`
+  - Response contracts: [`FeedCommentResponse`](#model-feedcommentresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `FeedComment`
+    - `db.add`
+    - `FeedCommentResponse`
+    - `HTTPException`
+    - `db.commit`
+    - `db.refresh`
+    - `_notify`
+    - `db.execute`
+    - `select`
+  - Side effects: DB write, DB read, Notification dispatch
+- Error Handling:
+  - `404`: `Пост не найден`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/feed/{post_id}/react`
+
+- Controller: `backend/app/routers/feed.py::toggle_reaction`
+- Summary: Поставить/снять эмодзи-реакцию (toggle). Пользователь может
+- Data Contract:
+  - Path params: `post_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body models: [`FeedReactRequest`](#model-feedreactrequest)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `HTTPException`
+    - `db.add`
+    - `db.execute`
+    - `FeedReaction`
+    - `db.commit`
+    - `db.rollback`
+    - `sa_delete`
+    - `select`
+    - `func.count`
+  - Side effects: DB write, DB read
+- Error Handling:
+  - `404`: `Пост не найден`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/feed/{post_id}/view`
+
+- Controller: `backend/app/routers/feed.py::mark_view`
+- Summary: Отметить просмотр (идемпотентно — пара пост+пользователь uniq).
+- Data Contract:
+  - Path params: `post_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `db.add`
+    - `FeedView`
+    - `db.execute`
+    - `db.commit`
+    - `db.rollback`
+    - `select`
+  - Side effects: DB write, DB read
+- Error Handling:
+  - Explicit `HTTPException` not found in handler body
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/feed/{post_id}/vote`
+
+- Controller: `backend/app/routers/feed.py::vote_poll`
+- Summary: Проголосовать в опросе. Single — учитывается один вариант;
+- Data Contract:
+  - Path params: `post_id`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body models: [`FeedVoteRequest`](#model-feedvoterequest)
+  - Response model: `FeedPoll`
+  - Response contracts: [`FeedPoll`](#model-feedpoll)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `HTTPException`
+    - `db.execute`
+    - `db.add`
+    - `db.commit`
+    - `FeedPollVote`
+    - `sa_delete`
+    - `select`
+  - Side effects: DB write, DB read
+- Error Handling:
+  - `404`: `Опрос не найден`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 
@@ -2301,6 +2989,130 @@ Endpoints: `4`
   - Side effects: DB write, DB read
 - Error Handling:
   - `404`: `Subscription not found`; body schema `{"detail": "..."}`
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+
+### Router `telegram_notifications`
+
+Source: `backend/app/routers/telegram_notifications.py`
+
+Prefix: `/api/v1/telegram`
+
+Endpoints: `4`
+
+#### `POST /api/v1/telegram/link`
+
+- Controller: `backend/app/routers/telegram_notifications.py::create_telegram_link`
+- Data Contract:
+  - Path params: none
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Response model: `TelegramLinkResponse`
+  - Response contracts: [`TelegramLinkResponse`](#model-telegramlinkresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `utcnow_naive`
+    - `secrets.token_urlsafe`
+    - `TelegramLinkResponse`
+    - `telegram_bot_configured`
+    - `TelegramConnection`
+    - `db.add`
+    - `db.commit`
+    - `build_telegram_deep_link`
+  - Side effects: DB write
+- Error Handling:
+  - Explicit `HTTPException` not found in handler body
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `DELETE /api/v1/telegram/me`
+
+- Controller: `backend/app/routers/telegram_notifications.py::unlink_my_telegram`
+- Data Contract:
+  - Path params: none
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `get_or_create_notification_preference`
+    - `db.commit`
+  - Side effects: DB write, Notification dispatch
+- Error Handling:
+  - Explicit `HTTPException` not found in handler body
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `GET /api/v1/telegram/me`
+
+- Controller: `backend/app/routers/telegram_notifications.py::get_my_telegram_status`
+- Data Contract:
+  - Path params: none
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: none
+  - Response model: `TelegramConnectionStatusResponse`
+  - Response contracts: [`TelegramConnectionStatusResponse`](#model-telegramconnectionstatusresponse)
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware) + current user context
+  - Depends/Security:
+    - `db: Depends(get_db)`
+    - `user: Depends(CurrentUser)`
+- Logic Flow:
+  - Internal calls:
+    - `Depends`
+    - `TelegramConnectionStatusResponse`
+    - `get_or_create_notification_preference`
+    - `telegram_bot_configured`
+  - Side effects: Notification dispatch
+- Error Handling:
+  - Explicit `HTTPException` not found in handler body
+  - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
+
+#### `POST /api/v1/telegram/webhook/{webhook_secret}`
+
+- Controller: `backend/app/routers/telegram_notifications.py::telegram_webhook`
+- Data Contract:
+  - Path params: `webhook_secret`: str (required, default=-, constraints=-)
+  - Query params: none
+  - Header params: none
+  - Form params: none
+  - File params: none
+  - Body: `payload`: Optional[dict[str, Any]]
+  - Success status: `200`
+- Authentication & Authorization:
+  - Access mode: JWT (AuthMiddleware)
+  - Depends/Security:
+    - `db: Depends(get_db)`
+- Logic Flow:
+  - Internal calls:
+    - `Body`
+    - `Depends`
+    - `HTTPException`
+    - `handle_telegram_update`
+  - Side effects: No explicit side effects (read/transform path)
+- Error Handling:
+  - `404`: `Not found`; body schema `{"detail": "..."}`
   - `422`: validation error by FastAPI/Pydantic, body schema `{'detail': [{'loc': [...], 'msg': '...', 'type': '...'}]}`
 
 

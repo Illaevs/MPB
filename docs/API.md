@@ -11,8 +11,9 @@
 - `docs/api/documents.md`
 - `docs/api/communications.md`
 - `docs/api/legal_compliance.md`
+- `docs/api/hr.md`
+- `docs/api/platform.md`
 - `docs/api/analytics.md`
-- `docs/api/misc.md`
 
 ## Regeneration
 1. Обновить `docs/API.md` генератором API reference (если менялись роутеры/схемы).

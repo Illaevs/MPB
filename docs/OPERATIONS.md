@@ -3,19 +3,25 @@
 Документ для повседневной эксплуатации CRM в dev/stage/prod средах.
 
 ## 1. Scope
-- Система: NMBD Tech CRM (`frontend` + `backend` + background workers).
+- Система: Nexus Tech CRM (`frontend` + `backend` + background workers + `mobile_app`).
 - Основной production-контур:
   - Host: `130.49.150.152`
   - Project root: `/var/www/www-root/data/www/for-apps.ru/ERPsys`
   - Backend: `/var/www/www-root/data/www/for-apps.ru/ERPsys/backend`
   - Frontend build: `/var/www/www-root/data/www/for-apps.ru/ERPsys/frontend/dist`
   - Storage root (local): `/mnt/netdisk/CRM`
+- Test/staging контур:
+  - Host: `130.49.151.237` (mpb-erp.ru)
+  - Project root: `/opt/mpb-erp-test`
+  - Webroot: `/var/www/www-root/data/www/mpb-erp.ru`
 
 ## 2. Runtime Components
-- API: FastAPI (`backend/main.py`) под systemd `crm-backend.service`.
-- Upload worker: `backend/upload_worker.py` под `crm-upload-worker.service`.
-- Notifications worker: `backend/notifications_worker.py` под `crm-notifications-worker.service`.
-- Mail worker: `backend/mail_worker.py` (systemd unit опционален; если заведён, обычно `crm-mail-worker.service`).
+- API: FastAPI (`backend/main.py`) под systemd `crm-backend.service` (на test-контуре: `mpb-erp-test-backend.service`).
+- Upload worker: `backend/upload_worker.py` под `crm-upload-worker.service` (test: `mpb-erp-test-upload-worker.service`).
+- Notifications worker: `backend/notifications_worker.py` под `crm-notifications-worker.service` (test: `mpb-erp-test-notifications-worker.service`).
+- Mail worker: `backend/mail_worker.py` (systemd unit опционален).
+- Event Bus worker: `backend/event_outbox_worker.py` под `crm-event-bus-worker.service` (test: `mpb-erp-test-event-bus-worker.service`).
+- Embedding worker: `backend/embedding_worker.py` под `crm-embedding-worker.service` (test: `mpb-erp-test-embedding-worker.service`) — нужен при `ENABLE_HYBRID_SEARCH=1`.
 - Reverse proxy: Nginx.
 
 ## 3. Operational Commands
