@@ -1492,3 +1492,84 @@
   opacity: 0.6;
   margin-right: 4px;
 }
+
+/* ============================================================
+   Phase A.1 — message list refactor
+   ============================================================ */
+
+/* Aвтор-группировка: соседние сообщения от одного автора визуально
+   слипаются (меньше отступа между ними) и только у ПЕРВОГО рисуется
+   аватар. У остальных — пустой placeholder того же размера, чтобы
+   баббл сохранил левый отступ. */
+.message-row__avatar-placeholder {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  align-self: flex-end;
+}
+
+.message-row.is-group-mid { margin-top: 1px; }
+.message-row.is-group-last { margin-top: 1px; }
+.message-row.is-group-first { margin-top: 8px; }
+
+/* Скругления баббла внутри группы — sharp на стыкующемся углу. */
+.message-row.is-group-mid .message-bubble,
+.message-row.is-group-first:not(.is-group-last) .message-bubble {
+  border-bottom-left-radius: 6px;
+}
+.message-row.is-group-mid.is-own .message-bubble,
+.message-row.is-group-first:not(.is-group-last).is-own .message-bubble {
+  border-bottom-left-radius: var(--chat-radius-large);
+  border-bottom-right-radius: 6px;
+}
+.message-row.is-group-last:not(.is-group-first) .message-bubble {
+  border-top-left-radius: 6px;
+}
+.message-row.is-group-last:not(.is-group-first).is-own .message-bubble {
+  border-top-left-radius: var(--chat-radius-large);
+  border-top-right-radius: 6px;
+}
+
+/* Разделитель «Новые сообщения». Использует last_read_at из Stage 1. */
+.messenger-thread__unread-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: var(--space-3) 0;
+  color: var(--md-sys-color-primary, #6366f1);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.messenger-thread__unread-divider::before,
+.messenger-thread__unread-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--md-sys-color-primary, #6366f1);
+  opacity: 0.45;
+}
+.messenger-thread__unread-divider span {
+  flex-shrink: 0;
+  padding: 2px 10px;
+  background: rgba(99, 102, 241, 0.12);
+  border-radius: var(--radius-pill);
+}
+
+/* Inline-видео в бабблe. Grid аналогичен media-grid, но видео занимает
+   полную ширину (одно сообщение редко содержит несколько видео). */
+.message-bubble__video-grid {
+  display: grid;
+  gap: 4px;
+  margin: -2px -4px 6px;
+  border-radius: var(--chat-radius-small);
+  overflow: hidden;
+}
+.message-video {
+  width: 100%;
+  max-height: 320px;
+  border-radius: var(--chat-radius-small);
+  background: #000;
+  display: block;
+}

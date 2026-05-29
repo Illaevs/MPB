@@ -258,16 +258,32 @@
                 <span>{{ item.label }}</span>
               </div>
 
+              <div
+                v-else-if="item.type === 'unread'"
+                class="messenger-thread__unread-divider"
+              >
+                <span>Новые сообщения</span>
+              </div>
+
               <article
                 v-else
                 :id="`message-${item.message.id}`"
                 class="message-row"
-                :class="{ 'is-own': isOwn(item.message), 'is-editing': editingId === item.message.id }"
+                :class="{
+                  'is-own': isOwn(item.message),
+                  'is-editing': editingId === item.message.id,
+                  'is-group-first': item.isFirstFromAuthor,
+                  'is-group-last': item.isLastFromAuthor,
+                  'is-group-mid': !item.isFirstFromAuthor && !item.isLastFromAuthor,
+                }"
                 @mouseenter="hoveredMessageId = item.message.id"
                 @mouseleave="hoveredMessageId = null"
               >
+                <!-- Аватар: только на ПЕРВОМ сообщении в группе у не-меня.
+                     В середине группы вместо аватара — пустой слот для
+                     сохранения отступа (см. CSS .message-row__avatar-placeholder). -->
                 <div
-                  v-if="!isOwn(item.message)"
+                  v-if="!isOwn(item.message) && item.isFirstFromAuthor"
                   class="message-row__avatar"
                   :style="getMessageAvatarUrl(item.message) ? null : getAvatarStyle(getMessageAuthor(item.message), 'user')"
                 >
@@ -280,10 +296,15 @@
                   >
                   <template v-else>{{ getMessageInitial(item.message) }}</template>
                 </div>
+                <div
+                  v-else-if="!isOwn(item.message)"
+                  class="message-row__avatar-placeholder"
+                  aria-hidden="true"
+                ></div>
 
                 <div class="message-bubble" :class="{ 'is-deleted': item.message.is_deleted }">
                   <div
-                    v-if="!isOwn(item.message) && activeConversation && activeConversation.type !== 'direct' && !item.message.is_deleted"
+                    v-if="!isOwn(item.message) && item.isFirstFromAuthor && activeConversation && activeConversation.type !== 'direct' && !item.message.is_deleted"
                     class="message-bubble__author"
                     :style="{ color: getAuthorColor(getMessageAuthor(item.message)) }"
                   >
@@ -329,6 +350,18 @@
                       >
                         <img :src="file.download_url" :alt="file.name || 'Изображение'">
                       </button>
+                    </div>
+
+                    <div v-if="messageVideoAttachments(item.message).length" class="message-bubble__video-grid">
+                      <video
+                        v-for="file in messageVideoAttachments(item.message)"
+                        :key="`video:${file.path || file.name}`"
+                        :src="file.download_url"
+                        controls
+                        preload="metadata"
+                        playsinline
+                        class="message-video"
+                      ></video>
                     </div>
 
                     <div v-if="messageFileAttachments(item.message).length" class="message-bubble__attachments">
@@ -1136,8 +1169,22 @@ export default {
       return INLINE_IMAGE_EXTENSIONS.some((ext) => name.endsWith(ext))
     }
 
+    // Phase A.1 — inline-видео. mp4/webm играем прямо в бабблe, не
+    // выкидываем как download-карточку. preload="metadata" грузит
+    // только заголовки до play — никакого автотрафика.
+    const isInlineVideo = (file = {}) => {
+      const contentType = String(file.content_type || file.type || '').toLowerCase()
+      if (contentType.startsWith('video/')) return true
+      const name = String(file.name || '').toLowerCase()
+      return ['.mp4', '.webm', '.ogg', '.mov', '.m4v'].some((ext) => name.endsWith(ext))
+    }
+
     const messageImageAttachments = (message) => (message?.attachments || []).filter((file) => isInlineImage(file) && file.download_url)
-    const messageFileAttachments = (message) => (message?.attachments || []).filter((file) => !isInlineImage(file) || !file.download_url)
+    const messageVideoAttachments = (message) => (message?.attachments || []).filter((file) => isInlineVideo(file) && file.download_url)
+    // Файлы — то, что НЕ inline-картинка и НЕ inline-видео.
+    const messageFileAttachments = (message) => (message?.attachments || []).filter(
+      (file) => (!isInlineImage(file) && !isInlineVideo(file)) || !file.download_url
+    )
 
     const openImageViewer = (file, sourceFiles = []) => {
       const mediaItems = (sourceFiles || []).filter((item) => isInlineImage(item) && item.download_url)
@@ -1180,18 +1227,78 @@ export default {
       })
     })
 
+    const GROUP_GAP_MS = 5 * 60 * 1000 // 5 минут — порог группировки соседних сообщений одного автора
+
     const messageFeed = computed(() => {
       const feed = []
       let lastDay = ''
-      visibleMessages.value.forEach((message) => {
+      let lastAuthor = null
+      let lastTime = 0
+      const visible = visibleMessages.value
+
+      // Stage 1: last_read_at приходит на activeConversation (per-user
+      // state). Ищем первое сообщение от ДРУГОГО юзера, пришедшее
+      // после моего last_read_at — туда поставим разделитель
+      // «Новые сообщения». Если у меня нет last_read_at (первое
+      // открытие) — анкор на первом не-моём сообщении (всё новое).
+      const myId = String(activeUser.value?.id || '')
+      const lastReadAt = activeConversation.value?.last_read_at
+      let unreadAnchorIdx = -1
+      const lastReadMs = lastReadAt ? new Date(lastReadAt).getTime() : 0
+      for (let i = 0; i < visible.length; i += 1) {
+        const m = visible[i]
+        if (!m || !m.created_at) continue
+        if (String(m.user_id || '') === myId) continue
+        const ts = new Date(m.created_at).getTime()
+        if (!lastReadMs || ts > lastReadMs) {
+          unreadAnchorIdx = i
+          break
+        }
+      }
+
+      for (let i = 0; i < visible.length; i += 1) {
+        const message = visible[i]
         const date = message.created_at ? new Date(message.created_at) : null
         const dayKey = date ? date.toISOString().slice(0, 10) : 'unknown'
         if (dayKey !== lastDay) {
           lastDay = dayKey
+          lastAuthor = null
+          lastTime = 0
           feed.push({ type: 'day', key: `day-${dayKey}`, label: formatDayChip(message.created_at) })
         }
-        feed.push({ type: 'message', key: message.id, message })
-      })
+
+        if (i === unreadAnchorIdx) {
+          feed.push({ type: 'unread', key: `unread-${message.id}` })
+        }
+
+        const author = String(message.user_id || '')
+        const time = date ? date.getTime() : 0
+
+        // Группировка: сообщение «первое в группе», если автор сменился
+        // или прошло >5 мин с предыдущего. «Последнее в группе» —
+        // если у следующего другой автор / >5мин позже / смена дня.
+        const isFirstFromAuthor = author !== lastAuthor || (time - lastTime) > GROUP_GAP_MS
+        const next = visible[i + 1]
+        const nextDate = next?.created_at ? new Date(next.created_at) : null
+        const nextDayKey = nextDate ? nextDate.toISOString().slice(0, 10) : ''
+        const nextSameAuthor = next
+          && String(next.user_id || '') === author
+          && nextDate && date
+          && (nextDate.getTime() - time) <= GROUP_GAP_MS
+          && nextDayKey === dayKey
+        const isLastFromAuthor = !nextSameAuthor
+
+        feed.push({
+          type: 'message',
+          key: message.id,
+          message,
+          isFirstFromAuthor,
+          isLastFromAuthor,
+        })
+
+        lastAuthor = author
+        lastTime = time
+      }
       return feed
     })
 
@@ -1849,7 +1956,9 @@ export default {
       insertLinkToken,
       insertEmoji,
       isInlineImage,
+      isInlineVideo,
       messageImageAttachments,
+      messageVideoAttachments,
       messageFileAttachments,
       openImageViewer,
       closeImageViewer,
