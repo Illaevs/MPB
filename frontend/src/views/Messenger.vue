@@ -87,6 +87,12 @@
                 :class="conversation.type === 'direct' ? '' : conversationAvatarClass(conversation)"
                 :style="conversation.type === 'direct' && !getConversationUserAvatarUrl(conversation) ? getAvatarStyle(conversation.title) : null"
               >
+                <span
+                  v-if="conversation.type === 'direct' && conversationPresenceStatus(conversation) !== 'offline'"
+                  class="presence-dot"
+                  :class="'presence-dot--' + conversationPresenceStatus(conversation)"
+                  :title="conversationPresenceStatus(conversation) === 'online' ? 'Сейчас в сети' : 'Был(а) недавно'"
+                ></span>
                 <template v-if="conversation.type === 'direct'">
                   <img
                     v-if="getConversationUserAvatarUrl(conversation) && !isAvatarBroken(getConversationUserAvatarUrl(conversation))"
@@ -214,6 +220,12 @@
         <header v-if="activeConversation" class="messenger-thread__header">
           <div class="thread-title">
             <div class="thread-title__avatar" :class="conversationAvatarClass(activeConversation)" :style="threadAvatarStyle">
+              <span
+                v-if="activeConversation.type === 'direct' && conversationPresenceStatus(activeConversation) !== 'offline'"
+                class="presence-dot presence-dot--lg"
+                :class="'presence-dot--' + conversationPresenceStatus(activeConversation)"
+                :title="conversationPresenceStatus(activeConversation) === 'online' ? 'Сейчас в сети' : 'Был(а) недавно'"
+              ></span>
               <template v-if="activeConversation.type === 'direct'">
                 <img
                   v-if="getConversationUserAvatarUrl(activeConversation) && !isAvatarBroken(getConversationUserAvatarUrl(activeConversation))"
@@ -1870,6 +1882,30 @@ export default {
       await unmuteConversation(id)
     }
 
+    // Phase C.2: online-status helper.
+    // online: last_seen <  2 минут назад → зелёная точка
+    // recent: 2–10 минут        → жёлтая точка
+    // offline: >10 минут / null → точку не рисуем
+    const presenceStatus = (lastSeenAt) => {
+      if (!lastSeenAt) return 'offline'
+      try {
+        const ageMs = Date.now() - new Date(lastSeenAt).getTime()
+        if (ageMs < 0) return 'online'
+        if (ageMs < 2 * 60 * 1000) return 'online'
+        if (ageMs < 10 * 60 * 1000) return 'recent'
+        return 'offline'
+      } catch (e) {
+        return 'offline'
+      }
+    }
+
+    // Для DM-конвера: статус собеседника. Глобал/группа — null
+    // (групповой presence — отдельная задача Stage E).
+    const conversationPresenceStatus = (conversation) => {
+      if (!conversation || conversation.type !== 'direct') return 'offline'
+      return presenceStatus(conversation.peer_last_seen_at)
+    }
+
     // Phase C.1: humanized "X печатает..." / "X и Y печатают..." /
     // "X, Y и ещё 2 печатают...".
     const typingHumanText = computed(() => {
@@ -2391,6 +2427,7 @@ export default {
       pickMentionAutoItem,
       onComposerKeydownMention,
       typingHumanText,
+      conversationPresenceStatus,
       submitAddMembers,
       insertLinkToken,
       insertEmoji,

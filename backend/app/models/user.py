@@ -36,6 +36,11 @@ class User(Base):
     # Персональные настройки интерфейса (синхронизируются между устройствами)
     ui_preferences = Column(JSON, default=dict, nullable=True)
 
+    # Phase C.2: presence. Фронт пингует heartbeat раз в минуту;
+    # backend хранит timestamp последнего пинга. UI считает «online»
+    # если last_seen_at моложе ~2 минут.
+    last_seen_at = Column(DateTime(timezone=True), nullable=True)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

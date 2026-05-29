@@ -70,16 +70,18 @@ class ChatConversationResponse(BaseModel):
     # peer_last_read_at — Phase B.2: для DM-чатов last_read_at второго
     #                     участника. Фронт сравнивает с моими
     #                     message.created_at для ✓/✓✓.
+    # peer_last_seen_at — Phase C.2: для DM presence (зелёная точка).
     unread_count: int = 0
     is_archived: bool = False
     muted_until: Optional[datetime] = None
     last_read_at: Optional[datetime] = None
     is_pinned: bool = False
     peer_last_read_at: Optional[datetime] = None
+    peer_last_seen_at: Optional[datetime] = None
 
     @field_serializer(
         "created_at", "updated_at", "muted_until", "last_read_at",
-        "peer_last_read_at",
+        "peer_last_read_at", "peer_last_seen_at",
     )
     def serialize_timestamps(self, value: Optional[datetime]) -> Optional[str]:
         return serialize_utc_datetime(value)
@@ -152,6 +154,7 @@ class SearchableUserResponse(BaseModel):
 
     Отдаёт ВСЕХ активных юзеров (кроме самого вызывающего); пометка
     `has_dm` подсказывает фронту «уже есть чат» vs «новый».
+    Phase C.2: last_seen_at — для зелёной точки online status.
     """
 
     id: str
@@ -160,6 +163,11 @@ class SearchableUserResponse(BaseModel):
     avatar_url: Optional[str] = None
     has_dm: bool = False
     dm_conversation_id: Optional[str] = None
+    last_seen_at: Optional[datetime] = None
+
+    @field_serializer("last_seen_at")
+    def serialize_last_seen_at(self, value: Optional[datetime]) -> Optional[str]:
+        return serialize_utc_datetime(value)
 
     class Config:
         from_attributes = True

@@ -579,6 +579,7 @@ async def _serialize_conversation(
     member_lookup_data = _conversation_member_lookup(conversation)
     my_member = member_lookup_data.get(str(user.id))
     peer_last_read_at: Optional[datetime] = None
+    peer_last_seen_at: Optional[datetime] = None
 
     if conversation.type == "global" or my_member is None:
         unread = 0
@@ -595,12 +596,17 @@ async def _serialize_conversation(
         muted_until = my_member.muted_until
         is_pinned = bool(getattr(my_member, "is_pinned", False))
 
-        # Phase B.2: для DM-чатов берём last_read_at второго участника.
-        # Фронт сравнит его с created_at МОИХ сообщений → ✓ vs ✓✓.
+        # Phase B.2 + C.2: для DM-чатов берём last_read_at и
+        # last_seen_at второго участника. Фронт использует:
+        #   last_read_at → ✓ vs ✓✓ на моих сообщениях
+        #   last_seen_at → зелёная точка online в шапке/карточке
         if conversation.type == "direct":
             for member in conversation.members or []:
                 if str(member.user_id) != str(user.id):
                     peer_last_read_at = member.last_read_at
+                    peer_user_obj = member.__dict__.get("user")
+                    if peer_user_obj is not None:
+                        peer_last_seen_at = getattr(peer_user_obj, "last_seen_at", None)
                     break
 
     return ChatConversationResponse(
@@ -621,6 +627,7 @@ async def _serialize_conversation(
         last_read_at=last_read_at,
         is_pinned=is_pinned,
         peer_last_read_at=peer_last_read_at,
+        peer_last_seen_at=peer_last_seen_at,
     )
 
 
@@ -1249,6 +1256,7 @@ async def list_searchable_users(
             avatar_url=getattr(u, "avatar_url", None),
             has_dm=str(u.id) in dm_lookup,
             dm_conversation_id=dm_lookup.get(str(u.id)),
+            last_seen_at=getattr(u, "last_seen_at", None),
         )
         for u in users_list
     ]

@@ -67,6 +67,7 @@ import { useRoute } from 'vue-router'
 import { useNotificationsStore } from './stores/notifications'
 import { useWorkdayStore } from './stores/workday'
 import { useIdleTracker } from './composables/useIdleTracker'
+import { usePresence } from './composables/usePresence'
 import WorkdayStartModal from './components/ui/WorkdayStartModal.vue'
 import ToastContainer from './components/ui/ToastContainer.vue'
 import ConfirmDialog from './components/ui/ConfirmDialog.vue'
@@ -116,6 +117,9 @@ export default {
     // lastActivityAt у workday-стора. Композабл сам цепляется к window
     // и снимется на unmount компонента App.
     useIdleTracker(() => workdayStore.markActivity())
+    // Phase C.2: presence heartbeat — пинг users/me/heartbeat раз в
+    // 60с с любой страницы. Backend обновляет users.last_seen_at.
+    usePresence()
     const route = useRoute()
     // Тему и состояние сайдбара ведут singleton-композаблы; AppSidebar читает их сам.
     useTheme()

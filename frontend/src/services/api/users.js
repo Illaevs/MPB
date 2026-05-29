@@ -47,6 +47,11 @@ export const getMyUiPreferences = (options) =>
 export const updateMyUiPreferences = (prefs, options) =>
   patch(`${BASE}/me/ui-preferences`, prefs, options)
 
+// Phase C.2: presence heartbeat. Фронт пингует раз в 60с — бэк
+// обновляет users.last_seen_at = NOW.
+export const heartbeat = (options) =>
+  post(`${BASE}/me/heartbeat`, undefined, options)
+
 /** URL аватарки/файла — для прямой подстановки в <img src>. */
 export const avatarUserUrl = (userId) =>
   `${BASE}/avatar-user/${encodeURIComponent(String(userId || '').trim())}`
