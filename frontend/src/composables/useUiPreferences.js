@@ -42,7 +42,14 @@ const DEFAULTS = () => ({
     itemOrder: {},
   },
   startPage: null,
-  notifications: { pollSeconds: 30 },
+  notifications: {
+    pollSeconds: 30,
+    // Звуковые уведомления — два независимых тумблера.
+    // soundEnabled          — общий bell (любые системные пуши)
+    // messengerSoundEnabled — новые сообщения в мессенджере
+    soundEnabled: true,
+    messengerSoundEnabled: true,
+  },
   locale: { dateFormat: null, numberFormat: null, timezone: null },
   tableViews: {},
   dashboard: { hidden: [], sideOrder: ['portfolio', 'tasks', 'actions'] },
@@ -478,6 +485,14 @@ export function useUiPreferences() {
     prefs.notifications.pollSeconds = Number.isFinite(n) && n >= 0 ? n : 30
   }
 
+  function setSoundEnabled(value) {
+    prefs.notifications.soundEnabled = !!value
+  }
+
+  function setMessengerSoundEnabled(value) {
+    prefs.notifications.messengerSoundEnabled = !!value
+  }
+
   function setLocale(patch) {
     if (!isPlainObject(patch)) return
     if ('dateFormat' in patch) prefs.locale.dateFormat = patch.dateFormat || null
@@ -566,6 +581,8 @@ export function useUiPreferences() {
     resetNavOrder,
     setStartPage,
     setPollSeconds,
+    setSoundEnabled,
+    setMessengerSoundEnabled,
     setLocale,
     getTableView,
     setTableView,

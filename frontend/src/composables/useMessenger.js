@@ -2,6 +2,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as messengerApi from '../services/api/messenger'
 import { getActiveUser, hasSectionAccess } from '../utils/permissions'
 import { useToast } from './useToast'
+import { useNotificationSound } from './useNotificationSound'
 import { useUsersStore } from '../stores/users'
 import { downloadFromApi } from '../utils/download'
 import { formatDateTime as fmtDateTime, formatTime as fmtTime } from '../utils/format'
@@ -35,7 +36,14 @@ const createPendingFileEntry = (file) => {
 
 export function useMessenger() {
   const { error: toastError, success: toastSuccess } = useToast()
+  const { playMessengerDing } = useNotificationSound()
   const usersStore = useUsersStore()
+
+  // Звуковые уведомления messenger: сравниваем last_message.id per chat
+  // между двумя последовательными loadConversations. Первый поллинг
+  // (сразу после mount) — пропускаем, иначе пингало бы при открытии.
+  let _convPollDone = false
+  let _lastMessageIdByConv = new Map()
 
   const permissionsVersion = ref(0)
   const loadingConversations = ref(false)
@@ -269,6 +277,42 @@ export function useMessenger() {
       } else {
         activeConversationId.value = String(conversations.value[0]?.id || '')
       }
+
+      // Звуковое уведомление: проверяем, появилось ли НОВОЕ
+      // last_message.id (не моё, не в активном фокусированном чате,
+      // не muted). Первый polling — baseline без пинга.
+      try {
+        const myId = String(activeUser.value?.id || '')
+        const tabFocused =
+          typeof document !== 'undefined' && document.hasFocus && document.hasFocus()
+        const activeId = String(activeConversationId.value || '')
+        let shouldDing = false
+        const nextMap = new Map()
+        for (const conv of conversations.value) {
+          const cId = String(conv?.id || '')
+          const lastMsg = conv?.last_message
+          const lastId = lastMsg?.id ? String(lastMsg.id) : ''
+          if (cId && lastId) nextMap.set(cId, lastId)
+          if (!_convPollDone) continue
+          if (!cId || !lastId) continue
+          const prev = _lastMessageIdByConv.get(cId)
+          if (prev === lastId) continue
+          // Новое сообщение появилось.
+          if (String(lastMsg?.user_id || '') === myId) continue
+          if (cId === activeId && tabFocused) continue
+          if (isConversationMuted(conv)) continue
+          shouldDing = true
+        }
+        _lastMessageIdByConv = nextMap
+        if (!_convPollDone) {
+          _convPollDone = true
+        } else if (shouldDing) {
+          playMessengerDing()
+        }
+      } catch (e) {
+        // защитный try — звук не критичен, не валим loadConversations.
+      }
+
       return conversations.value
     } catch (error) {
       conversations.value = []
