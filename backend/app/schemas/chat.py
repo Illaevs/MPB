@@ -61,7 +61,17 @@ class ChatConversationResponse(BaseModel):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
-    @field_serializer("created_at", "updated_at")
+    # Per-user state (Stage 1 implicit DM).
+    # unread_count — число сообщений с created_at > last_read_at.
+    # is_archived  — true, если ТЕКУЩИЙ юзер архивировал чат у себя.
+    # muted_until  — None или будущий момент; вычисляется на запросе.
+    # last_read_at — для синхронизации с другими клиентами этого юзера.
+    unread_count: int = 0
+    is_archived: bool = False
+    muted_until: Optional[datetime] = None
+    last_read_at: Optional[datetime] = None
+
+    @field_serializer("created_at", "updated_at", "muted_until", "last_read_at")
     def serialize_timestamps(self, value: Optional[datetime]) -> Optional[str]:
         return serialize_utc_datetime(value)
 
@@ -87,3 +97,34 @@ class ChatConversationDirectCreate(BaseModel):
 
 class ChatConversationMemberAdd(BaseModel):
     user_ids: List[str] = Field(default_factory=list)
+
+
+class ChatConversationStateUpdate(BaseModel):
+    """PATCH /conversations/{id}/me — управление per-user state.
+
+    Поля опциональны: можно прислать только то, что меняем. `muted_forever`
+    True переводит chat в «навсегда заглушено» (сохраняется как далёкая
+    дата в muted_until).
+    """
+
+    is_archived: Optional[bool] = None
+    muted_until: Optional[datetime] = None
+    muted_forever: Optional[bool] = None
+
+
+class SearchableUserResponse(BaseModel):
+    """GET /chat/users/searchable — список юзеров для «написать коллеге».
+
+    Отдаёт ВСЕХ активных юзеров (кроме самого вызывающего); пометка
+    `has_dm` подсказывает фронту «уже есть чат» vs «новый».
+    """
+
+    id: str
+    full_name: Optional[str] = None
+    email: Optional[str] = None
+    avatar_url: Optional[str] = None
+    has_dm: bool = False
+    dm_conversation_id: Optional[str] = None
+
+    class Config:
+        from_attributes = True
