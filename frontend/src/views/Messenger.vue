@@ -3108,3 +3108,42 @@ function getAvatarStyle(seed, kind = 'user') {
 </script>
 
 <style scoped src="../styles/messenger-view.css"></style>
+
+<!-- Phase D.3: @-mention chip — non-scoped, так как <router-link>
+     рендерит <a> без data-v атрибута, scoped селектор не матчится. -->
+<style>
+.message-mention {
+  display: inline-block;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: rgba(99, 102, 241, 0.14);
+  color: #4f46e5;
+  text-decoration: none !important;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background-color 0.15s ease;
+}
+.message-mention:hover,
+.message-mention:focus {
+  background: rgba(99, 102, 241, 0.24);
+  text-decoration: none !important;
+}
+.message-mention--inert {
+  cursor: default;
+  opacity: 0.85;
+}
+.message-mention[data-kind="deal"]    { color: #16a34a; background: rgba(22, 163, 74, 0.12); }
+.message-mention[data-kind="task"]    { color: #d97706; background: rgba(217, 119, 6, 0.12); }
+.message-mention[data-kind="user"]    { color: #4f46e5; background: rgba(99, 102, 241, 0.14); }
+.message-mention[data-kind="deal"]:hover { background: rgba(22, 163, 74, 0.20); }
+.message-mention[data-kind="task"]:hover { background: rgba(217, 119, 6, 0.20); }
+/* В own-баббле (свои сообщения, тёмный/цветной фон) — белый текст
+   на полупрозрачной белой подложке, читается лучше. */
+.message-row.is-own .message-mention {
+  background: rgba(255, 255, 255, 0.22) !important;
+  color: #ffffff !important;
+}
+.message-row.is-own .message-mention:hover {
+  background: rgba(255, 255, 255, 0.32) !important;
+}
+</style>

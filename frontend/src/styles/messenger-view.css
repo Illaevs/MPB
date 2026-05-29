@@ -651,33 +651,10 @@
   color: var(--chat-accent); /* may be overridden by inline color from getAuthorColor() */
 }
 
-/* Phase D.3 — inline @-mention chip. Полупрозрачный фон акцентного
-   цвета, наследует line-height, без подчёркивания. Hover чуть темнее. */
-.message-mention {
-  display: inline-block;
-  padding: 0 4px;
-  border-radius: 4px;
-  background: rgba(99, 102, 241, 0.14);
-  color: var(--chat-accent, var(--color-primary));
-  text-decoration: none;
-  font-weight: 600;
-  white-space: nowrap;
-  transition: background-color var(--dur-fast) ease;
-}
-.message-mention:hover {
-  background: rgba(99, 102, 241, 0.24);
-  text-decoration: none;
-}
-.message-mention--inert {
-  cursor: default;
-  opacity: 0.85;
-}
-/* Цвет-маркер по типу. Опционально — фронт может перекрасить border. */
-.message-mention[data-kind="deal"]    { color: #16a34a; background: rgba(22, 163, 74, 0.12); }
-.message-mention[data-kind="task"]    { color: #d97706; background: rgba(217, 119, 6, 0.12); }
-.message-mention[data-kind="user"]    { color: var(--chat-accent, var(--color-primary)); }
-.message-mention[data-kind="deal"]:hover { background: rgba(22, 163, 74, 0.20); }
-.message-mention[data-kind="task"]:hover { background: rgba(217, 119, 6, 0.20); }
+/* Phase D.3 — .message-mention стили вынесены в non-scoped блок
+   в Messenger.vue (router-link рендерит <a> без data-v scoped
+   атрибута, поэтому в scoped CSS селектор не матчился). См. конец
+   Messenger.vue. */
 
 .message-bubble__text {
   margin: 0;

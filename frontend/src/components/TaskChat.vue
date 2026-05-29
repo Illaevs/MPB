@@ -1528,33 +1528,10 @@ export default {
   height: auto;
 }
 
-.task-chat__mention-inline {
-  display: inline;
-  padding: 0 4px;
-  border-radius: var(--radius-xs);
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  font-weight: var(--fw-semibold);
-  text-decoration: none;
-  cursor: pointer;
-  transition: background-color var(--dur-fast) ease;
-}
-.task-chat__mention-inline:hover { background: rgba(99, 102, 241, 0.24); text-decoration: none; }
-.task-chat__mention-inline--inert { cursor: default; opacity: 0.85; }
-/* Phase D.3: цвет по типу сущности (как в messenger). */
-.task-chat__mention-inline[data-kind="deal"] { color: #16a34a; background: rgba(22, 163, 74, 0.12); }
-.task-chat__mention-inline[data-kind="task"] { color: #d97706; background: rgba(217, 119, 6, 0.12); }
-.task-chat__mention-inline[data-kind="deal"]:hover { background: rgba(22, 163, 74, 0.20); }
-.task-chat__mention-inline[data-kind="task"]:hover { background: rgba(217, 119, 6, 0.20); }
-.task-chat__bubble.is-own .task-chat__mention-inline {
-  background: rgba(255, 255, 255, 0.22);
-  color: var(--color-on-primary);
-}
-.task-chat__bubble.is-own .task-chat__mention-inline[data-kind="deal"],
-.task-chat__bubble.is-own .task-chat__mention-inline[data-kind="task"] {
-  background: rgba(255, 255, 255, 0.22);
-  color: var(--color-on-primary);
-}
+/* Phase D.3 — .task-chat__mention-inline стили вынесены в
+   non-scoped блок в конце файла (см. ниже, после конца этого
+   scoped блока), потому что v-html вставляет элементы без
+   data-v scoped атрибута. */
 
 /* Phase D.3 — inline @-mention autocomplete popup (TaskChat). */
 .task-chat__input-wrap {
@@ -2086,5 +2063,41 @@ export default {
   .task-chat__composer-actions {
     justify-content: flex-end;
   }
+}
+</style>
+
+<!-- Phase D.3: @-mention chip — non-scoped, т.к. renderBodyHtml
+     вставляет <a> через v-html и scoped CSS не матчит их (нет
+     data-v атрибута на HTML, вставленном через v-html). -->
+<style>
+.task-chat__mention-inline {
+  display: inline-block;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: rgba(99, 102, 241, 0.14);
+  color: #4f46e5;
+  text-decoration: none !important;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background-color 0.15s ease;
+}
+.task-chat__mention-inline:hover,
+.task-chat__mention-inline:focus {
+  background: rgba(99, 102, 241, 0.24);
+  text-decoration: none !important;
+}
+.task-chat__mention-inline--inert { cursor: default; opacity: 0.85; }
+.task-chat__mention-inline[data-kind="deal"] { color: #16a34a; background: rgba(22, 163, 74, 0.12); }
+.task-chat__mention-inline[data-kind="task"] { color: #d97706; background: rgba(217, 119, 6, 0.12); }
+.task-chat__mention-inline[data-kind="user"] { color: #4f46e5; background: rgba(99, 102, 241, 0.14); }
+.task-chat__mention-inline[data-kind="deal"]:hover { background: rgba(22, 163, 74, 0.20); }
+.task-chat__mention-inline[data-kind="task"]:hover { background: rgba(217, 119, 6, 0.20); }
+/* В own-баббле — белый текст на полупрозрачной белой подложке. */
+.task-chat__bubble.is-own .task-chat__mention-inline {
+  background: rgba(255, 255, 255, 0.22) !important;
+  color: #ffffff !important;
+}
+.task-chat__bubble.is-own .task-chat__mention-inline:hover {
+  background: rgba(255, 255, 255, 0.32) !important;
 }
 </style>
