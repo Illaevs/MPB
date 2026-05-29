@@ -137,14 +137,38 @@ async def create_task_message(
     if not content and not files:
         raise HTTPException(status_code=400, detail="Message or files are required")
 
-    mentions_list: List[str] = []
+    # Phase D.3 — mentions поддерживают и старый формат (user_id строки),
+    # и новый ({kind, id, label, href} объекты).
+    mentions_list: List = []
     if mentions:
         try:
             parsed = json.loads(mentions)
             if isinstance(parsed, list):
-                mentions_list = [str(item) for item in parsed if item]
+                for item in parsed:
+                    if not item:
+                        continue
+                    if isinstance(item, dict):
+                        if item.get("id") and item.get("kind"):
+                            mentions_list.append({
+                                "kind": str(item["kind"]),
+                                "id": str(item["id"]),
+                                "label": str(item.get("label") or ""),
+                                "href": str(item.get("href") or ""),
+                            })
+                    else:
+                        mentions_list.append(str(item))
         except Exception:
             mentions_list = []
+
+    # Для уведомлений выделяем только user-mentions (deal/task ссылки
+    # — никому не интересны как «вас упомянули»).
+    user_mention_ids: List[str] = []
+    for m in mentions_list:
+        if isinstance(m, dict):
+            if m.get("kind") == "user" and m.get("id"):
+                user_mention_ids.append(str(m["id"]))
+        else:
+            user_mention_ids.append(str(m))
 
     message = TaskMessage(
         task_id=str(task.id),
@@ -197,7 +221,7 @@ async def create_task_message(
         notify_targets = set()
         if task.assigned_to_user_id and str(task.assigned_to_user_id) != str(user.id):
             notify_targets.add(str(task.assigned_to_user_id))
-        for mentioned in mentions_list:
+        for mentioned in user_mention_ids:
             if mentioned and str(mentioned) != str(user.id):
                 notify_targets.add(str(mentioned))
         for target_id in notify_targets:

@@ -200,16 +200,51 @@
         </div>
 
         <div class="task-chat__composer-bar">
-          <textarea
-            ref="inputRef"
-            v-model="draft"
-            class="task-chat__input"
-            rows="1"
-            placeholder="Напишите сообщение… (Enter — отправить, Shift/Ctrl+Enter — перенос строки)"
-            :style="{ maxHeight: inputMaxHeight + 'px' }"
-            @input="autoResizeInput"
-            @keydown.enter.exact.prevent.stop="sendMessage"
-          ></textarea>
+          <div class="task-chat__input-wrap">
+            <textarea
+              ref="inputRef"
+              v-model="draft"
+              class="task-chat__input"
+              rows="1"
+              placeholder="Напишите сообщение… (Enter — отправить, Shift/Ctrl+Enter — перенос строки)"
+              :style="{ maxHeight: inputMaxHeight + 'px' }"
+              @input="onComposerInput"
+              @keydown="onComposerKeydownMention"
+              @keydown.enter.exact.prevent.stop="sendMessage"
+            ></textarea>
+            <!-- Phase D.3 — inline @-mention autocomplete (user/deal/task). -->
+            <div
+              v-if="mentionAutoOpen && mentionAutoResults.length"
+              class="task-chat__mention-auto"
+              @mousedown.prevent
+            >
+              <button
+                v-for="(item, idx) in mentionAutoResults"
+                :key="`${item.kind}:${item.id}`"
+                type="button"
+                class="task-chat__mention-auto-item"
+                :class="{ 'is-active': idx === mentionAutoActiveIdx }"
+                @click="pickMentionAutoItem(item)"
+                @mouseenter="mentionAutoActiveIdx = idx"
+              >
+                <span class="task-chat__mention-auto-kind" :data-kind="item.kind">
+                  <i
+                    :class="
+                      item.kind === 'user'
+                        ? 'fas fa-user'
+                        : item.kind === 'deal'
+                          ? 'fas fa-briefcase'
+                          : 'fas fa-tasks'
+                    "
+                  ></i>
+                </span>
+                <span class="task-chat__mention-auto-copy">
+                  <strong>{{ item.label }}</strong>
+                  <small v-if="item.sublabel">{{ item.sublabel }}</small>
+                </span>
+              </button>
+            </div>
+          </div>
 
           <div class="task-chat__composer-actions">
             <button type="button" class="task-chat__tool-btn" title="Прикрепить файл" @click="openFilePicker">
@@ -438,11 +473,41 @@ export default {
         (m) => `<a href="${m}" target="_blank" rel="noopener noreferrer" class="task-chat__link">${m}</a>`
       )
     }
+    // Phase D.3 — рендер @-mentions с поддержкой нового формата
+    // (mentions = массив объектов {kind, id, label, href}).
+    // Алгоритм: сначала пробуем новый формат (структурированные mentions
+    // из message.mentions); fallback — старый по списку юзеров props.users.
     const renderBodyHtml = (message) => {
       const raw = String(message?.body || '')
       if (!raw) return ''
       let html = escapeHtml(raw)
-      // Replace @Имя Фамилия occurrences with chips. Match against props.users.
+
+      // 1) Новый формат: extended mentions с label/href/kind.
+      const ext = (message?.mentions || []).filter(
+        (m) => m && typeof m === 'object' && m.label
+      )
+      const usedRanges = []
+      ext.forEach((m) => {
+        const name = String(m.label || '').trim()
+        if (!name) return
+        const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        const re = new RegExp('@' + escaped, 'g')
+        // Defensive: старые href /deals/<id> → /projects/<id>
+        let href = String(m.href || '')
+        if (href.startsWith('/deals/')) href = '/projects/' + href.slice('/deals/'.length)
+        const kind = String(m.kind || '')
+        const escapedLabel = escapeHtml(name)
+        const chip = href
+          ? `<a href="${href}" class="task-chat__mention-inline" data-kind="${kind}" data-id="${m.id}">@${escapedLabel}</a>`
+          : `<span class="task-chat__mention-inline task-chat__mention-inline--inert" data-kind="${kind}" data-id="${m.id}">@${escapedLabel}</span>`
+        html = html.replace(re, chip)
+      })
+
+      // 2) Старый формат fallback: подменяем по списку известных юзеров.
+      // Не трогаем фрагменты, уже превращённые в chip-теги (наивная проверка
+      // на '<a' / '<span' слева от позиции — но т.к. мы уже заменили выше,
+      // повторно делаем replace только по чистому остатку: ОК для большинства
+      // случаев. Если новый формат покрыл всех — здесь почти пусто.
       const usersList = props.users || []
       const sorted = usersList.slice().sort((a, b) => {
         return String(b.full_name || '').length - String(a.full_name || '').length
@@ -450,10 +515,13 @@ export default {
       sorted.forEach((u) => {
         const name = String(u.full_name || u.email || '').trim()
         if (!name) return
+        // Проверяем что мы уже не сделали chip для этого имени.
+        if (html.includes(`>@${escapeHtml(name)}</a>`) || html.includes(`>@${escapeHtml(name)}</span>`)) return
         const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
         const re = new RegExp('@' + escaped, 'gi')
         html = html.replace(re, `<span class="task-chat__mention-inline" data-user-id="${u.id}">@${escapeHtml(name)}</span>`)
       })
+
       html = linkifyUrl(html)
       return html
     }
@@ -701,15 +769,162 @@ export default {
 
     const addMention = (user) => {
       if (!user) return
+      // Через старую модалку (только users). Сохраняем kind=user
+      // чтобы и старый, и новый формат вели себя одинаково в renderBodyHtml.
       selectedMentions.value.push({
         id: user.id,
-        name: user.full_name || user.email || user.id
+        name: user.full_name || user.email || user.id,
+        label: user.full_name || user.email || user.id,
+        kind: 'user',
+        href: '',
       })
       draft.value = `${draft.value.trim()} @${user.full_name || user.email || ''} `.trim() + ' '
     }
 
     const removeMention = (userId) => {
       selectedMentions.value = selectedMentions.value.filter((item) => item.id !== userId)
+    }
+
+    // Phase D.3 — inline @-mention autocomplete для TaskChat
+    // (как в Messenger). Триггер по `@<query>` в textarea, popup
+    // показывает users + deals + tasks через /chat/mention-search.
+    // Если юзер выбрал — вставляем `@label ` в draft и сохраняем
+    // структуру в selectedMentions.
+    const mentionAutoOpen = ref(false)
+    const mentionAutoResults = ref([])
+    const mentionAutoActiveIdx = ref(0)
+    const mentionAutoStart = ref(-1)  // позиция «@» в тексте
+    const mentionAutoQuery = ref('')
+    let _mentionFetchTimer = null
+
+    const _detectMentionTrigger = () => {
+      const el = inputRef.value
+      if (!el) return null
+      const caret = el.selectionStart ?? draft.value.length
+      const text = draft.value || ''
+      // Откатываемся назад от каретки, ищем последний `@` НЕ внутри
+      // другого слова. Если по дороге встретили пробел/перенос —
+      // триггер не работает.
+      let i = caret - 1
+      while (i >= 0) {
+        const ch = text[i]
+        if (ch === '@') {
+          if (i === 0 || /\s/.test(text[i - 1])) {
+            const query = text.slice(i + 1, caret)
+            if (/^[\wа-яёА-ЯЁ\- .]*$/.test(query)) {
+              return { at: i, query }
+            }
+          }
+          return null
+        }
+        if (/\s/.test(ch)) return null
+        i -= 1
+      }
+      return null
+    }
+
+    const _fetchMentionResults = (q) => {
+      if (_mentionFetchTimer) clearTimeout(_mentionFetchTimer)
+      _mentionFetchTimer = setTimeout(async () => {
+        try {
+          const data = await api.messenger.mentionSearch(q)
+          mentionAutoResults.value = Array.isArray(data) ? data : []
+          mentionAutoActiveIdx.value = 0
+        } catch (e) {
+          mentionAutoResults.value = []
+        }
+      }, 180)
+    }
+
+    const closeMentionAutocomplete = () => {
+      mentionAutoOpen.value = false
+      mentionAutoResults.value = []
+      mentionAutoStart.value = -1
+      mentionAutoQuery.value = ''
+    }
+
+    const pickMentionAutoItem = (item) => {
+      if (!item || mentionAutoStart.value < 0) {
+        closeMentionAutocomplete()
+        return
+      }
+      const text = draft.value || ''
+      const start = mentionAutoStart.value
+      const el = inputRef.value
+      const caret = el?.selectionStart ?? text.length
+      const before = text.slice(0, start)
+      const after = text.slice(caret)
+      const insert = `@${item.label} `
+      draft.value = `${before}${insert}${after}`
+      // Сохраняем структуру в selectedMentions, дабы при отправке
+      // backend получил kind/id/label/href — renderBodyHtml у получателя
+      // тоже использует mentions из ответа.
+      selectedMentions.value = [
+        ...selectedMentions.value,
+        {
+          id: item.id,
+          name: item.label,
+          label: item.label,
+          kind: item.kind,
+          href: item.href || '',
+        },
+      ]
+      closeMentionAutocomplete()
+      nextTick(() => {
+        const e = inputRef.value
+        if (e?.focus) {
+          e.focus()
+          const newCaret = before.length + insert.length
+          try { e.setSelectionRange(newCaret, newCaret) } catch (err) { /* ignore */ }
+        }
+        autoResizeInput()
+      })
+    }
+
+    // Обработчик ввода: проверяем триггер `@<query>` после каждого
+    // изменения. Если есть — открываем popup и подтягиваем результаты.
+    const onComposerInput = () => {
+      autoResizeInput()
+      const trig = _detectMentionTrigger()
+      if (trig) {
+        mentionAutoOpen.value = true
+        mentionAutoStart.value = trig.at
+        mentionAutoQuery.value = trig.query
+        if (trig.query.length >= 1) _fetchMentionResults(trig.query)
+        else mentionAutoResults.value = []
+      } else {
+        mentionAutoOpen.value = false
+        mentionAutoResults.value = []
+        mentionAutoStart.value = -1
+      }
+    }
+
+    const onComposerKeydownMention = (event) => {
+      if (!mentionAutoOpen.value || !mentionAutoResults.value.length) return false
+      if (event.key === 'ArrowDown') {
+        event.preventDefault()
+        mentionAutoActiveIdx.value =
+          (mentionAutoActiveIdx.value + 1) % mentionAutoResults.value.length
+        return true
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault()
+        mentionAutoActiveIdx.value =
+          (mentionAutoActiveIdx.value - 1 + mentionAutoResults.value.length) %
+          mentionAutoResults.value.length
+        return true
+      }
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault()
+        pickMentionAutoItem(mentionAutoResults.value[mentionAutoActiveIdx.value])
+        return true
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        closeMentionAutocomplete()
+        return true
+      }
+      return false
     }
 
     const sendMessage = async () => {
@@ -721,7 +936,20 @@ export default {
         const form = new FormData()
         if (text) form.append('body', text)
         if (selectedMentions.value.length) {
-          form.append('mentions', JSON.stringify(selectedMentions.value.map((item) => item.id)))
+          // Phase D.3 — отправляем расширенный формат если есть kind,
+          // иначе остаётся backward-compat (просто user_id строки).
+          const payload = selectedMentions.value.map((item) => {
+            if (item.kind) {
+              return {
+                kind: item.kind,
+                id: item.id,
+                label: item.label || item.name || '',
+                href: item.href || '',
+              }
+            }
+            return String(item.id)
+          })
+          form.append('mentions', JSON.stringify(payload))
         }
         pendingFiles.value.forEach((file) => form.append('files', file, file.name))
         const res = await api.tasks.sendMessage(props.taskId, form)
@@ -925,6 +1153,13 @@ export default {
       toggleMentions,
       addMention,
       removeMention,
+      // Phase D.3 — inline @-autocomplete
+      mentionAutoOpen,
+      mentionAutoResults,
+      mentionAutoActiveIdx,
+      onComposerInput,
+      onComposerKeydownMention,
+      pickMentionAutoItem,
       sendMessage,
       downloadAttachment,
       startEdit,
@@ -1300,10 +1535,98 @@ export default {
   background: var(--color-primary-soft);
   color: var(--color-primary);
   font-weight: var(--fw-semibold);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) ease;
 }
+.task-chat__mention-inline:hover { background: rgba(99, 102, 241, 0.24); text-decoration: none; }
+.task-chat__mention-inline--inert { cursor: default; opacity: 0.85; }
+/* Phase D.3: цвет по типу сущности (как в messenger). */
+.task-chat__mention-inline[data-kind="deal"] { color: #16a34a; background: rgba(22, 163, 74, 0.12); }
+.task-chat__mention-inline[data-kind="task"] { color: #d97706; background: rgba(217, 119, 6, 0.12); }
+.task-chat__mention-inline[data-kind="deal"]:hover { background: rgba(22, 163, 74, 0.20); }
+.task-chat__mention-inline[data-kind="task"]:hover { background: rgba(217, 119, 6, 0.20); }
 .task-chat__bubble.is-own .task-chat__mention-inline {
   background: rgba(255, 255, 255, 0.22);
   color: var(--color-on-primary);
+}
+.task-chat__bubble.is-own .task-chat__mention-inline[data-kind="deal"],
+.task-chat__bubble.is-own .task-chat__mention-inline[data-kind="task"] {
+  background: rgba(255, 255, 255, 0.22);
+  color: var(--color-on-primary);
+}
+
+/* Phase D.3 — inline @-mention autocomplete popup (TaskChat). */
+.task-chat__input-wrap {
+  position: relative;
+  min-width: 0;
+}
+.task-chat__mention-auto {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  margin-bottom: 6px;
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  z-index: 30;
+  padding: 4px;
+}
+.task-chat__mention-auto-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.task-chat__mention-auto-item:hover,
+.task-chat__mention-auto-item.is-active {
+  background: var(--color-surface-2);
+}
+.task-chat__mention-auto-kind {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+  font-size: 0.8em;
+  flex-shrink: 0;
+}
+.task-chat__mention-auto-kind[data-kind="deal"] { background: rgba(22, 163, 74, 0.16); color: #16a34a; }
+.task-chat__mention-auto-kind[data-kind="task"] { background: rgba(217, 119, 6, 0.16); color: #d97706; }
+.task-chat__mention-auto-kind[data-kind="user"] { background: rgba(99, 102, 241, 0.16); color: var(--color-primary); }
+.task-chat__mention-auto-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.task-chat__mention-auto-copy strong {
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.task-chat__mention-auto-copy small {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .task-chat__link {
