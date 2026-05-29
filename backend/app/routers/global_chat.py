@@ -19,8 +19,11 @@ from app.models import (
     ChatConversation,
     ChatConversationMember,
     ChatMessageReaction,
+    Deal,
     GlobalChatMessage,
     RolePermission,
+    Task,
+    TaskAssignee,
     User,
 )
 from app.schemas.chat import (
@@ -32,10 +35,12 @@ from app.schemas.chat import (
     ChatConversationStateUpdate,
     ChatConversationUpdate,
     ChatMessageReferenceResponse,
+    MentionItem,
     MessageReactionAggregate,
     ReactionToggleRequest,
     SearchableUserResponse,
 )
+from app.services.permissions import get_section_permissions
 from app.schemas.global_chat_message import GlobalChatMessageResponse, GlobalChatMessageUpdate
 from app.services.notifications import create_notification
 from app.services.storage import (
@@ -1135,6 +1140,122 @@ async def list_searchable_users(
         )
         for u in users_list
     ]
+
+
+# ────────────────────────────────────────────────────────────────────
+# Phase B.4 — mention сделок/задач/юзеров с ACL-фильтром
+# ────────────────────────────────────────────────────────────────────
+
+
+@router.get("/mention-search", response_model=List[MentionItem])
+async def mention_search(
+    request: Request,
+    q: str = "",
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(CurrentUser),
+):
+    """Объединённый поиск для @-меншенов в composer'е чата.
+
+    Возвращает до 20 элементов разных типов (user/deal/task), отранжированных
+    префиксом «совпадение по началу» → «содержит». ACL-фильтр:
+      - users: все активные кроме меня
+      - deals: superuser ИЛИ has read_all на «deals» ИЛИ created_by == me
+      - tasks: superuser ИЛИ has read_all на «tasks» ИЛИ
+               created_by == me ИЛИ я в task_assignees
+
+    Минимальная длина q = 1. Пустой q возвращает [] (UI обычно ждёт
+    хотя бы один символ).
+    """
+    await _require_chat_access(request, db, user)
+    query = (q or "").strip()
+    if not query:
+        return []
+    like = f"%{query}%"
+    is_super = bool(getattr(request.state, "is_superuser", False))
+
+    items: List[MentionItem] = []
+
+    # --- Users (top 10) ---
+    user_rows = (
+        await db.execute(
+            select(User)
+            .where(
+                User.is_active == True,  # noqa: E712
+                User.id != str(user.id),
+                (User.full_name.ilike(like)) | (User.email.ilike(like)),
+            )
+            .order_by(User.full_name.asc())
+            .limit(10)
+        )
+    ).scalars().all()
+    for u in user_rows:
+        items.append(
+            MentionItem(
+                kind="user",
+                id=str(u.id),
+                label=u.full_name or u.email or str(u.id),
+                sublabel=u.email if u.full_name else None,
+                avatar_url=getattr(u, "avatar_url", None),
+                href=None,
+            )
+        )
+
+    # --- Deals (top 5) ---
+    deals_read_all, _ = await get_section_permissions(db, user.role_id, "deals")
+    deal_stmt = (
+        select(Deal)
+        .where(
+            (Deal.title.ilike(like)) | (Deal.obj_name.ilike(like))
+        )
+        .order_by(Deal.created_at.desc())
+        .limit(5)
+    )
+    if not is_super and not deals_read_all:
+        deal_stmt = deal_stmt.where(Deal.created_by == str(user.id))
+    deal_rows = (await db.execute(deal_stmt)).scalars().all()
+    for d in deal_rows:
+        title = d.title or d.obj_name or f"Сделка {str(d.id)[:8]}"
+        items.append(
+            MentionItem(
+                kind="deal",
+                id=str(d.id),
+                label=title,
+                sublabel=d.obj_name if d.obj_name and d.obj_name != title else None,
+                avatar_url=None,
+                href=f"/deals/{d.id}",
+            )
+        )
+
+    # --- Tasks (top 5) ---
+    tasks_read_all, _ = await get_section_permissions(db, user.role_id, "tasks")
+    task_stmt = (
+        select(Task)
+        .where(Task.title.ilike(like))
+        .order_by(Task.created_at.desc())
+        .limit(5)
+    )
+    if not is_super and not tasks_read_all:
+        # created_by == me OR me ∈ task_assignees
+        my_assigned = select(TaskAssignee.task_id).where(
+            TaskAssignee.user_id == str(user.id)
+        )
+        task_stmt = task_stmt.where(
+            (Task.created_by == str(user.id)) | (Task.id.in_(my_assigned))
+        )
+    task_rows = (await db.execute(task_stmt)).scalars().all()
+    for t in task_rows:
+        items.append(
+            MentionItem(
+                kind="task",
+                id=str(t.id),
+                label=t.title or f"Задача {str(t.id)[:8]}",
+                sublabel=None,
+                avatar_url=None,
+                href=f"/tasks/{t.id}",
+            )
+        )
+
+    return items
 
 
 @router.get("/conversations/{conversation_id}/messages", response_model=List[GlobalChatMessageResponse])

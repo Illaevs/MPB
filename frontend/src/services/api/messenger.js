@@ -90,6 +90,11 @@ export const unpinMessage = (messageId, options) =>
 export const toggleReaction = (messageId, emoji, options) =>
   post(`${BASE}/messages/${messageId}/reactions`, { emoji }, options)
 
+// Phase B.4: @-mention search для composer'а. Возвращает смешанный
+// список users/deals/tasks с ACL-фильтром на бэке.
+export const mentionSearch = (q, options) =>
+  get(`${BASE}/mention-search`, { q }, options)
+
 // ---- global chat (плоский /messages, без conversation_id) ------------------
 
 export const listGlobalMessages = (options) =>

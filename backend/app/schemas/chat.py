@@ -163,3 +163,20 @@ class SearchableUserResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class MentionItem(BaseModel):
+    """GET /chat/mention-search — единый формат для мiks результата.
+
+    kind:
+      'user' — id юзера, label = full_name|email
+      'deal' — id сделки, label = title|obj_name
+      'task' — id задачи, label = title
+    """
+
+    kind: Literal["user", "deal", "task"]
+    id: str
+    label: str
+    sublabel: Optional[str] = None
+    avatar_url: Optional[str] = None
+    href: Optional[str] = None  # маршрут для перехода во фронте

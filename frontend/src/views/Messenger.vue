@@ -606,8 +606,42 @@
                   :placeholder="isEditMode ? 'Измените сообщение...' : 'Сообщение'"
                   @input="onComposerInput"
                   @paste="onComposerPaste"
+                  @keydown="onComposerKeydownMention"
                   @keydown.enter.exact.prevent="submitComposer"
                 ></textarea>
+
+                <!-- Phase B.4: @-mention autocomplete dropdown. -->
+                <div
+                  v-if="mentionAutoOpen && mentionAutoResults.length"
+                  class="messenger-composer__mention-auto"
+                  @mousedown.prevent
+                >
+                  <button
+                    v-for="(item, idx) in mentionAutoResults"
+                    :key="`${item.kind}:${item.id}`"
+                    type="button"
+                    class="messenger-composer__mention-auto-item"
+                    :class="{ 'is-active': idx === mentionAutoActiveIdx }"
+                    @click="pickMentionAutoItem(item)"
+                    @mouseenter="mentionAutoActiveIdx = idx"
+                  >
+                    <span class="mention-auto__kind" :data-kind="item.kind">
+                      <i
+                        :class="
+                          item.kind === 'user'
+                            ? 'fas fa-user'
+                            : item.kind === 'deal'
+                              ? 'fas fa-briefcase'
+                              : 'fas fa-tasks'
+                        "
+                      ></i>
+                    </span>
+                    <span class="mention-auto__copy">
+                      <strong>{{ item.label }}</strong>
+                      <small v-if="item.sublabel">{{ item.sublabel }}</small>
+                    </span>
+                  </button>
+                </div>
               </div>
 
               <button
@@ -1920,8 +1954,125 @@ export default {
       nextTick(syncComposerHeight)
     }
 
+    // Phase B.4 — @-mention autocomplete в composer'е.
+    // При вводе текста проверяем, есть ли активный «@» (символ перед
+    // курсором, за которым идут не-пробельные символы). Если есть —
+    // фетчим /mention-search и показываем dropdown.
+    const mentionAutoOpen = ref(false)
+    const mentionAutoQuery = ref('')
+    const mentionAutoResults = ref([])
+    const mentionAutoStart = ref(-1)   // позиция «@» в тексте
+    const mentionAutoActiveIdx = ref(0) // курсор в результатах (для ↑↓ Enter)
+    let _mentionFetchTimer = null
+
+    const _detectMentionTrigger = () => {
+      const inputEl = composerInputRef.value
+      if (!inputEl) return null
+      const text = composerText.value || ''
+      const caret = inputEl.selectionStart ?? text.length
+      // Найти последний '@' до курсора, у которого слева пробел/начало.
+      let i = caret - 1
+      while (i >= 0) {
+        const ch = text[i]
+        if (ch === '@') {
+          const prev = i > 0 ? text[i - 1] : ''
+          if (i === 0 || /\s/.test(prev)) {
+            return { at: i, query: text.slice(i + 1, caret) }
+          }
+          return null
+        }
+        if (/\s/.test(ch)) return null
+        i -= 1
+      }
+      return null
+    }
+
+    const _fetchMentionResults = async (q) => {
+      if (_mentionFetchTimer) clearTimeout(_mentionFetchTimer)
+      _mentionFetchTimer = setTimeout(async () => {
+        try {
+          const data = await import('../services/api/messenger').then((m) => m.mentionSearch(q))
+          mentionAutoResults.value = Array.isArray(data) ? data : []
+          mentionAutoActiveIdx.value = 0
+        } catch (e) {
+          mentionAutoResults.value = []
+        }
+      }, 180)
+    }
+
     const onComposerInput = () => {
       syncComposerHeight()
+      const trig = _detectMentionTrigger()
+      if (trig && trig.query.length >= 0) {
+        mentionAutoOpen.value = true
+        mentionAutoStart.value = trig.at
+        mentionAutoQuery.value = trig.query
+        if (trig.query.length >= 1) _fetchMentionResults(trig.query)
+        else mentionAutoResults.value = []
+      } else {
+        mentionAutoOpen.value = false
+        mentionAutoResults.value = []
+        mentionAutoStart.value = -1
+      }
+    }
+
+    const closeMentionAutocomplete = () => {
+      mentionAutoOpen.value = false
+      mentionAutoResults.value = []
+      mentionAutoStart.value = -1
+    }
+
+    const pickMentionAutoItem = (item) => {
+      if (!item || mentionAutoStart.value < 0) {
+        closeMentionAutocomplete()
+        return
+      }
+      const text = composerText.value || ''
+      const start = mentionAutoStart.value
+      // заменяем «@query» на «@label »
+      const inputEl = composerInputRef.value
+      const caret = inputEl?.selectionStart ?? text.length
+      const before = text.slice(0, start)
+      const after = text.slice(caret)
+      const insert = `@${item.label} `
+      composerText.value = `${before}${insert}${after}`
+      closeMentionAutocomplete()
+      nextTick(() => {
+        const el = composerInputRef.value
+        if (el && el.focus) {
+          el.focus()
+          const newCaret = before.length + insert.length
+          try { el.setSelectionRange(newCaret, newCaret) } catch (e) { /* ignore */ }
+        }
+      })
+    }
+
+    const onComposerKeydownMention = (event) => {
+      if (!mentionAutoOpen.value || !mentionAutoResults.value.length) return false
+      if (event.key === 'ArrowDown') {
+        event.preventDefault()
+        mentionAutoActiveIdx.value =
+          (mentionAutoActiveIdx.value + 1) % mentionAutoResults.value.length
+        return true
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault()
+        mentionAutoActiveIdx.value =
+          (mentionAutoActiveIdx.value - 1 + mentionAutoResults.value.length) %
+          mentionAutoResults.value.length
+        return true
+      }
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault()
+        pickMentionAutoItem(mentionAutoResults.value[mentionAutoActiveIdx.value])
+        return true
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        closeMentionAutocomplete()
+        return true
+      }
+      return false
     }
 
     const onComposerPaste = (event) => {
@@ -2212,6 +2363,11 @@ export default {
       openReactionPicker,
       closeReactionPicker,
       applyReaction,
+      mentionAutoOpen,
+      mentionAutoResults,
+      mentionAutoActiveIdx,
+      pickMentionAutoItem,
+      onComposerKeydownMention,
       submitAddMembers,
       insertLinkToken,
       insertEmoji,
