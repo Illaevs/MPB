@@ -241,8 +241,17 @@
         <div v-if="messageSearchOpen" class="messenger-thread__searchbar">
           <label class="messenger-thread__searchbox">
             <i class="fas fa-search"></i>
-            <input v-model="messageSearch" type="text" placeholder="Поиск">
+            <input v-model="messageSearch" type="text" placeholder="Поиск" autofocus>
           </label>
+
+          <span
+            v-if="messageSearch.trim()"
+            class="messenger-thread__search-meta"
+            :class="{ 'is-empty': !visibleMessages.length }"
+          >
+            <template v-if="visibleMessages.length">Найдено: {{ visibleMessages.length }}</template>
+            <template v-else>Ничего не найдено</template>
+          </span>
 
           <div class="messenger-thread__search-actions">
             <button type="button" class="messenger-icon-btn" title="Очистить" :disabled="!messageSearch" @click="messageSearch = ''">
@@ -288,6 +297,7 @@
                   'is-group-first': item.isFirstFromAuthor,
                   'is-group-last': item.isLastFromAuthor,
                   'is-group-mid': !item.isFirstFromAuthor && !item.isLastFromAuthor,
+                  'is-highlighted': highlightedMessageId === String(item.message.id),
                 }"
                 @mouseenter="hoveredMessageId = item.message.id"
                 @mouseleave="hoveredMessageId = null"
@@ -1825,9 +1835,21 @@ export default {
       }
     }
 
+    // Phase A.4 — jump-to-message: после scrollIntoView ставим
+    // highlighted-класс на 2 секунды, чтобы юзер визуально нашёл
+    // прыжок (особенно если контент похожий и target слегка вне поля).
+    let _highlightTimer = null
+    const highlightedMessageId = ref(null)
     const scrollToMessage = (messageId) => {
       const target = document.getElementById(`message-${messageId}`)
-      target?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      if (!target) return
+      target.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      highlightedMessageId.value = String(messageId)
+      if (_highlightTimer) clearTimeout(_highlightTimer)
+      _highlightTimer = setTimeout(() => {
+        highlightedMessageId.value = null
+        _highlightTimer = null
+      }, 2000)
     }
 
     const scrollToPinned = () => {
@@ -1972,6 +1994,8 @@ export default {
       onComposerDragOver,
       onComposerDragLeave,
       onComposerDrop,
+      highlightedMessageId,
+      visibleMessages,
       groupsOpen,
       directOpen,
       messageSearchOpen,
