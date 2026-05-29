@@ -31,6 +31,7 @@ from app.routers.deal_execution import router as deal_execution_router
 from app.routers.outgoing_registry import router as outgoing_registry_router
 from app.routers.document_registry import router as document_registry_router
 from app.routers.files_catalog import router as files_catalog_router
+from app.routers.file_folder_permissions import router as file_folder_permissions_router
 from app.routers.tenders import router as tenders_router
 from app.routers.accreditations import router as accreditations_router
 from app.routers.roles import router as roles_router
@@ -233,6 +234,10 @@ app.include_router(deal_execution_router, prefix="/api/v1", tags=["deal-executio
 app.include_router(outgoing_registry_router, prefix="/api/v1/outgoing-registry", tags=["outgoing-registry"], dependencies=[Depends(require_section_access("outgoing_registry"))])
 app.include_router(document_registry_router, prefix="/api/v1/document-registry", tags=["document-registry"], dependencies=[Depends(require_section_access("document_registry"))])
 app.include_router(files_catalog_router, prefix="/api/v1", tags=["files-catalog"], dependencies=[Depends(require_section_access("files_catalog"))])
+# Per-folder ACL management — гейтится той же section_access (видеть/менять
+# правила могут только те, у кого есть доступ к разделу), а на уровне самого
+# роутера — MANAGE на конкретной папке через folder_acl.require_folder_perm.
+app.include_router(file_folder_permissions_router, prefix="/api/v1", tags=["files-catalog-permissions"], dependencies=[Depends(require_section_access("files_catalog"))])
 app.include_router(tenders_router, prefix="/api/v1/tenders", tags=["tenders"], dependencies=[Depends(require_any_section_access("tenders_admin", "tenders_subcontractor"))])
 app.include_router(accreditations_router, prefix="/api/v1/accreditations", tags=["accreditations"], dependencies=[Depends(require_any_section_access("accreditations_admin", "accreditations_subcontractor"))])
 app.include_router(roles_router, prefix="/api/v1/roles", tags=["roles"], dependencies=[Depends(require_section_access("roles"))])
