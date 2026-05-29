@@ -532,7 +532,26 @@
                       </div>
                     </div>
 
-                    <p v-if="item.message.body" class="message-bubble__text">{{ item.message.body }}</p>
+                    <p v-if="item.message.body" class="message-bubble__text">
+                      <!-- Phase D.3: @-меншены рендерятся как ссылки/чипы.
+                           renderMessageBody возвращает массив сегментов:
+                           text → обычный текст, mention → router-link
+                           если есть href, иначе span. -->
+                      <template v-for="(seg, sidx) in renderMessageBody(item.message.body, item.message.mentions)" :key="`seg-${item.message.id}-${sidx}`">
+                        <router-link
+                          v-if="seg.type === 'mention' && seg.href"
+                          :to="seg.href"
+                          class="message-mention"
+                          :data-kind="seg.kind"
+                        >@{{ seg.label }}</router-link>
+                        <span
+                          v-else-if="seg.type === 'mention'"
+                          class="message-mention message-mention--inert"
+                          :data-kind="seg.kind"
+                        >@{{ seg.label }}</span>
+                        <template v-else>{{ seg.value }}</template>
+                      </template>
+                    </p>
 
                     <div v-if="extractMessageLinks(item.message).length" class="message-bubble__links">
                       <a
@@ -1566,6 +1585,67 @@ export default {
       return ['.mp3', '.wav', '.oga', '.m4a', '.weba', '.opus', '.aac'].some((ext) => name.endsWith(ext))
     }
 
+    // Phase D.3 — рендер @-mentions в теле сообщения.
+    // На вход: body + mentions (расширенный формат: массив объектов
+    // {kind, id, label, href} ИЛИ массив строк-user_id для legacy).
+    // На выход: массив сегментов [{type:'text',value} | {type:'mention',label,href}],
+    // которые шаблон отрендерит через v-for + <router-link>.
+    //
+    // Алгоритм: для каждого расширенного mention'а ищем в body первое
+    // вхождение `@label` (как substring) — если нашли, разрезаем body
+    // на куски и помечаем mention. Жадно слева-направо. Если label
+    // не найден (например, юзер вручную поправил текст) — пропускаем.
+    // Legacy string-mentions (только user_id) не рендерим ссылкой —
+    // у нас нет label, оставляем body как plain text.
+    const renderMessageBody = (body, mentions) => {
+      const text = String(body || '')
+      if (!text) return []
+      const extMentions = (mentions || [])
+        .filter((m) => m && typeof m === 'object' && m.label)
+        .map((m) => ({ ...m, label: String(m.label) }))
+      if (!extMentions.length) return [{ type: 'text', value: text }]
+
+      const segments = []
+      let rest = text
+      let consumed = 0
+      // Делаем копию списка, чтобы каждый mention был использован
+      // максимум один раз (защита от дублей одного и того же тега).
+      const pool = extMentions.slice()
+
+      while (pool.length) {
+        // Ищем самое раннее вхождение любого `@label` из пула.
+        let bestIdx = -1
+        let bestPick = -1
+        for (let i = 0; i < pool.length; i += 1) {
+          const needle = `@${pool[i].label}`
+          const at = rest.indexOf(needle)
+          if (at >= 0 && (bestIdx < 0 || at < bestIdx)) {
+            bestIdx = at
+            bestPick = i
+          }
+        }
+        if (bestPick < 0) break
+        const m = pool[bestPick]
+        const needle = `@${m.label}`
+        // Текст до меншена
+        if (bestIdx > 0) {
+          segments.push({ type: 'text', value: rest.slice(0, bestIdx) })
+        }
+        segments.push({
+          type: 'mention',
+          label: m.label,
+          href: m.href || '',
+          kind: m.kind || '',
+          id: m.id || '',
+        })
+        rest = rest.slice(bestIdx + needle.length)
+        consumed += bestIdx + needle.length
+        pool.splice(bestPick, 1)
+      }
+      if (rest) segments.push({ type: 'text', value: rest })
+      return segments
+    }
+
     const messageImageAttachments = (message) => (message?.attachments || []).filter((file) => isInlineImage(file) && file.download_url)
     const messageVideoAttachments = (message) => (message?.attachments || []).filter((file) => isInlineVideo(file) && file.download_url)
     const messageAudioAttachments = (message) => (message?.attachments || []).filter((file) => isInlineAudio(file) && file.download_url)
@@ -2478,6 +2558,19 @@ export default {
       const after = text.slice(caret)
       const insert = `@${item.label} `
       composerText.value = `${before}${insert}${after}`
+      // Phase D.3: запоминаем структурированный mention (kind/id/label/href)
+      // в selectedMentions — пойдёт на бэк как объект, renderer сделает
+      // из @label кликабельную ссылку.
+      selectedMentions.value = [
+        ...selectedMentions.value,
+        {
+          kind: item.kind,
+          id: item.id,
+          label: item.label,
+          href: item.href || '',
+          name: item.label, // backward compat: старый renderer ждал .name
+        },
+      ]
       closeMentionAutocomplete()
       nextTick(() => {
         const el = composerInputRef.value
@@ -2835,6 +2928,7 @@ export default {
       isInlineImage,
       isInlineVideo,
       isInlineAudio,
+      renderMessageBody,
       messageImageAttachments,
       messageVideoAttachments,
       messageAudioAttachments,

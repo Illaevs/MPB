@@ -737,14 +737,35 @@ async def _load_conversation_messages(
     return result.scalars().all()
 
 
-def _parse_mentions(mentions: Optional[str]) -> List[str]:
-    mentions_list: List[str] = []
+def _parse_mentions(mentions: Optional[str]) -> List:
+    """
+    Phase D.3 — расширенный формат mentions:
+      - старый: список строк-user_id (обратная совместимость для старых клиентов)
+      - новый: список объектов {kind, id, label, href} — для рендера ссылок
+        на сущности (user/deal/task/contract/project/lead).
+    Возвращаем как есть; downstream код знает оба формата.
+    """
+    mentions_list: List = []
     if not mentions:
         return mentions_list
     try:
         parsed = json.loads(mentions)
         if isinstance(parsed, list):
-            mentions_list = [str(item) for item in parsed if item]
+            for item in parsed:
+                if not item:
+                    continue
+                # dict — валидный новый формат, прокидываем как есть
+                if isinstance(item, dict):
+                    if item.get("id") and item.get("kind"):
+                        mentions_list.append({
+                            "kind": str(item["kind"]),
+                            "id": str(item["id"]),
+                            "label": str(item.get("label") or ""),
+                            "href": str(item.get("href") or ""),
+                        })
+                else:
+                    # строка → старый формат user_id
+                    mentions_list.append(str(item))
     except Exception:
         mentions_list = []
     return mentions_list

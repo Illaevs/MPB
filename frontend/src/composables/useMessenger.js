@@ -763,7 +763,20 @@ export function useMessenger() {
       const form = new FormData()
       if (text) form.append('body', text)
       if (selectedMentions.value.length) {
-        form.append('mentions', JSON.stringify(selectedMentions.value.map((item) => item.id)))
+        // Phase D.3 — отправляем расширенный формат если есть kind,
+        // иначе оставляем backward-compat (просто user_id строки).
+        const payload = selectedMentions.value.map((item) => {
+          if (item.kind) {
+            return {
+              kind: item.kind,
+              id: item.id,
+              label: item.label || item.name || '',
+              href: item.href || '',
+            }
+          }
+          return String(item.id)
+        })
+        form.append('mentions', JSON.stringify(payload))
       }
       if (replyTarget.value?.id) {
         form.append('reply_to_message_id', replyTarget.value.id)

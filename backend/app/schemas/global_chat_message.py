@@ -2,7 +2,7 @@
 Pydantic schemas for GlobalChatMessage model.
 """
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field, field_serializer
 
@@ -13,9 +13,15 @@ from app.schemas.chat import (
 )
 
 
+# Phase D.3 — mentions могут быть либо просто user_id (старый формат,
+# обратная совместимость), либо объекты {kind, id, label, href} с
+# расширенной информацией (новый, для рендера в виде ссылки).
+MentionItem = Union[str, Dict[str, Any]]
+
+
 class GlobalChatMessageCreate(BaseModel):
     body: Optional[str] = None
-    mentions: Optional[List[str]] = []
+    mentions: Optional[List[MentionItem]] = []
 
 
 class GlobalChatMessageUpdate(BaseModel):
@@ -29,7 +35,7 @@ class GlobalChatMessageResponse(BaseModel):
     conversation_id: Optional[str] = None
     body: Optional[str] = None
     attachments: List[Dict[str, Any]] = Field(default_factory=list)
-    mentions: List[str] = Field(default_factory=list)
+    mentions: List[MentionItem] = Field(default_factory=list)
     is_deleted: bool = False
     is_pinned: bool = False
     pinned_at: Optional[datetime] = None
