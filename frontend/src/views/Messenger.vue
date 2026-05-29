@@ -108,6 +108,7 @@
                 <span class="conversation-card__topline">
                   <strong>{{ conversation.title }}</strong>
                   <span class="conversation-card__time">
+                    <i v-if="isConversationPinned(conversation)" class="fas fa-thumbtack" title="Закреплён"></i>
                     <i v-if="isConversationMuted(conversation)" class="fas fa-bell-slash" title="Беззвучный"></i>
                     {{ formatSidebarTime(conversation.last_message?.created_at) }}
                   </span>
@@ -138,6 +139,22 @@
               class="conversation-card__menu"
               @click.stop
             >
+              <button
+                v-if="!isConversationPinned(conversation)"
+                type="button"
+                class="conversation-card__menu-item"
+                @click="pinCard(conversation)"
+              >
+                <i class="fas fa-thumbtack"></i> Закрепить вверху
+              </button>
+              <button
+                v-else
+                type="button"
+                class="conversation-card__menu-item"
+                @click="unpinCard(conversation)"
+              >
+                <i class="fas fa-thumbtack" style="transform:rotate(45deg)"></i> Открепить
+              </button>
               <button
                 v-if="!isConversationMuted(conversation)"
                 type="button"
@@ -1031,12 +1048,15 @@ export default {
       conversationUnreadCount,
       isConversationMuted,
       isConversationArchived,
+      isConversationPinned,
       searchableUsers,
       loadingSearchableUsers,
       loadSearchableUsers,
       archiveConversationForMe,
       muteConversationForever,
       unmuteConversation,
+      pinConversation,
+      unpinConversation,
       isOwn,
       canEdit,
       formatDateTime,
@@ -1745,6 +1765,21 @@ export default {
       await unmuteConversation(id)
     }
 
+    // Phase B.1: pin / unpin
+    const pinCard = async (conversation) => {
+      const id = String(conversation?.id || '')
+      if (!id) return
+      openCardMenuId.value = null
+      await pinConversation(id)
+    }
+
+    const unpinCard = async (conversation) => {
+      const id = String(conversation?.id || '')
+      if (!id) return
+      openCardMenuId.value = null
+      await unpinConversation(id)
+    }
+
     const openRenameModal = () => {
       if (!activeConversation.value) return
       renameMode.value = true
@@ -2075,6 +2110,8 @@ export default {
       archiveCard,
       muteCardForever,
       unmuteCard,
+      pinCard,
+      unpinCard,
       submitAddMembers,
       insertLinkToken,
       insertEmoji,

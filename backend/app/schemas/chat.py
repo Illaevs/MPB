@@ -61,17 +61,26 @@ class ChatConversationResponse(BaseModel):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
-    # Per-user state (Stage 1 implicit DM).
+    # Per-user state (Stage 1 implicit DM + Phase B).
     # unread_count — число сообщений с created_at > last_read_at.
     # is_archived  — true, если ТЕКУЩИЙ юзер архивировал чат у себя.
     # muted_until  — None или будущий момент; вычисляется на запросе.
     # last_read_at — для синхронизации с другими клиентами этого юзера.
+    # is_pinned    — закреплён ли чат сверху у меня (Phase B.1).
+    # peer_last_read_at — Phase B.2: для DM-чатов last_read_at второго
+    #                     участника. Фронт сравнивает с моими
+    #                     message.created_at для ✓/✓✓.
     unread_count: int = 0
     is_archived: bool = False
     muted_until: Optional[datetime] = None
     last_read_at: Optional[datetime] = None
+    is_pinned: bool = False
+    peer_last_read_at: Optional[datetime] = None
 
-    @field_serializer("created_at", "updated_at", "muted_until", "last_read_at")
+    @field_serializer(
+        "created_at", "updated_at", "muted_until", "last_read_at",
+        "peer_last_read_at",
+    )
     def serialize_timestamps(self, value: Optional[datetime]) -> Optional[str]:
         return serialize_utc_datetime(value)
 
@@ -110,6 +119,7 @@ class ChatConversationStateUpdate(BaseModel):
     is_archived: Optional[bool] = None
     muted_until: Optional[datetime] = None
     muted_forever: Optional[bool] = None
+    is_pinned: Optional[bool] = None
 
 
 class SearchableUserResponse(BaseModel):

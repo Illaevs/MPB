@@ -418,12 +418,16 @@ async def _serialize_conversation(
     # Per-user state. global чат не имеет member-строк (виртуальный
     # список), поэтому для него отдаём нули — unread по global пока
     # не считаем (отдельная задача, требует «last_read глобалки» per user).
-    my_member = _conversation_member_lookup(conversation).get(str(user.id))
+    member_lookup_data = _conversation_member_lookup(conversation)
+    my_member = member_lookup_data.get(str(user.id))
+    peer_last_read_at: Optional[datetime] = None
+
     if conversation.type == "global" or my_member is None:
         unread = 0
         is_archived = False
         muted_until = None
         last_read_at = None
+        is_pinned = False
     else:
         last_read_at = my_member.last_read_at
         unread = await _unread_count_for_member(
@@ -431,6 +435,15 @@ async def _serialize_conversation(
         )
         is_archived = bool(my_member.is_archived)
         muted_until = my_member.muted_until
+        is_pinned = bool(getattr(my_member, "is_pinned", False))
+
+        # Phase B.2: для DM-чатов берём last_read_at второго участника.
+        # Фронт сравнит его с created_at МОИХ сообщений → ✓ vs ✓✓.
+        if conversation.type == "direct":
+            for member in conversation.members or []:
+                if str(member.user_id) != str(user.id):
+                    peer_last_read_at = member.last_read_at
+                    break
 
     return ChatConversationResponse(
         id=str(conversation.id),
@@ -448,6 +461,8 @@ async def _serialize_conversation(
         is_archived=is_archived,
         muted_until=muted_until,
         last_read_at=last_read_at,
+        is_pinned=is_pinned,
+        peer_last_read_at=peer_last_read_at,
     )
 
 
@@ -753,7 +768,16 @@ async def list_conversations(
         payload = await _serialize_conversation(request, db, user, conversation)
         last_message_at = payload.last_message.created_at if payload.last_message else None
         timestamp = last_message_at.timestamp() if last_message_at else 0
-        priority = 0 if conversation.type == "global" else 1
+        # Sort buckets (Phase B.1):
+        #   0 — global чат (всегда сверху)
+        #   1 — мои закреплённые (per-user is_pinned)
+        #   2 — всё остальное
+        if conversation.type == "global":
+            priority = 0
+        elif payload.is_pinned:
+            priority = 1
+        else:
+            priority = 2
         serialized.append((priority, -timestamp, payload.title.lower(), payload))
     serialized.sort(key=lambda item: (item[0], item[1], item[2]))
     return [item[3] for item in serialized]
@@ -988,6 +1012,10 @@ async def update_my_conversation_state(
 
     if payload.is_archived is not None:
         my_member.is_archived = bool(payload.is_archived)
+        changed = True
+
+    if payload.is_pinned is not None:
+        my_member.is_pinned = bool(payload.is_pinned)
         changed = True
 
     # mute_logic:

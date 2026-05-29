@@ -502,6 +502,15 @@ export function useMessenger() {
   const unmuteConversation = (conversationId) =>
     updateMyConversationState(conversationId, { muted_forever: false })
 
+  // Phase B.1: закрепить / открепить чат у себя.
+  const pinConversation = (conversationId) =>
+    updateMyConversationState(conversationId, { is_pinned: true })
+
+  const unpinConversation = (conversationId) =>
+    updateMyConversationState(conversationId, { is_pinned: false })
+
+  const isConversationPinned = (conversation) => !!conversation?.is_pinned
+
   const createConversation = async (payload) => {
     savingConversation.value = true
     try {
@@ -787,6 +796,7 @@ export function useMessenger() {
     conversationUnreadCount,
     isConversationMuted,
     isConversationArchived,
+    isConversationPinned,
     searchableUsers,
     loadingSearchableUsers,
     loadSearchableUsers,
@@ -795,6 +805,8 @@ export function useMessenger() {
     unarchiveConversationForMe,
     muteConversationForever,
     unmuteConversation,
+    pinConversation,
+    unpinConversation,
     isOwn,
     canEdit,
     formatDateTime,
