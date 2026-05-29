@@ -200,6 +200,9 @@
             <button v-if="item.type === 'folder'" @click.stop="downloadItem(item)" title="Скачать архив">
               <i class="fas fa-file-archive"></i>
             </button>
+            <button v-if="item.type === 'folder'" @click.stop="openPermissions(item)" title="Права доступа">
+              <i class="fas fa-lock"></i>
+            </button>
             <button @click.stop="toggleMenu(item)" title="Меню">
               <i class="fas fa-ellipsis-v"></i>
             </button>
@@ -220,6 +223,9 @@
             </button>
             <button @click="openMove(item)">
               <i class="fas fa-arrows-alt"></i> Переместить
+            </button>
+            <button v-if="item.type === 'folder'" @click="openPermissions(item)">
+              <i class="fas fa-lock"></i> Права доступа
             </button>
             <div class="menu-divider"></div>
             <button class="danger" @click="deleteItem(item)">
@@ -260,6 +266,9 @@
             </button>
             <button v-if="item.type === 'folder'" @click.stop="downloadItem(item)" title="Скачать архив">
               <i class="fas fa-file-archive"></i>
+            </button>
+            <button v-if="item.type === 'folder'" @click.stop="openPermissions(item)" title="Права доступа">
+              <i class="fas fa-lock"></i>
             </button>
             <button @click.stop="openRename(item)" title="Переименовать">
               <i class="fas fa-pen"></i>
@@ -345,6 +354,13 @@
       </div>
     </div>
 
+    <!-- Folder permissions modal -->
+    <FolderPermissionsModal
+      :open="showPermissionsModal"
+      :path="permissionsPath"
+      @close="closePermissions"
+    />
+
     <!-- Move modal -->
     <div v-if="showMoveModal" class="modal-overlay" v-modal-close="closeMove">
       <div class="modal-dialog" @click.stop>
@@ -385,9 +401,11 @@ import * as filesApi from '../services/api/files'
 import { rawRequest } from '../services/api/_client'
 import { useToast } from '../composables/useToast'
 import { openTrustedExternalUrl } from '../utils/download'
+import FolderPermissionsModal from '../components/files/FolderPermissionsModal.vue'
 
 export default {
   name: 'FilesCatalog',
+  components: { FolderPermissionsModal },
   setup() {
     const toast = useToast()
     const showToast = (message, type = 'success') => {
@@ -493,6 +511,8 @@ export default {
     const showMoveModal = ref(false)
     const moveTarget = ref(null)
     const moveTargetPath = ref('')
+    const showPermissionsModal = ref(false)
+    const permissionsPath = ref('')
 
     const stripDiskPrefix = (path) => {
       if (!path) return ''
@@ -1156,6 +1176,18 @@ export default {
       }
     }
 
+    const openPermissions = (item) => {
+      activeMenu.value = null
+      if (!item || item.type !== 'folder' || !item.path) return
+      permissionsPath.value = item.path
+      showPermissionsModal.value = true
+    }
+
+    const closePermissions = () => {
+      showPermissionsModal.value = false
+      permissionsPath.value = ''
+    }
+
     const deleteItem = async (item) => {
       activeMenu.value = null
       if (!item?.path) return
@@ -1238,6 +1270,7 @@ export default {
       filterType, sortBy, viewMode, isDragOver, activeMenu, uploadStatus, downloadStatus,
       uploadInput, folderInput, showCreateModal, createFolderName,
       showRenameModal, renameValue, showMoveModal, moveTargetPath,
+      showPermissionsModal, permissionsPath,
       storageUsage,
       sortedItems, breadcrumbs, canGoBack, displayCurrentPath,
       refresh, applySearch, clearSearch, openPath, openItem,
@@ -1245,6 +1278,7 @@ export default {
       downloadItem, triggerUpload, handleUpload, triggerFolderUpload, handleFolderUpload, handleDrop,
       handleDragEnter, handleDragOver, handleDragLeave,
       toggleMenu, openCreateFolder, closeCreateFolder, createFolder,
+      openPermissions, closePermissions,
       openRename, closeRename, renameItem,
       openMove, closeMove, moveItem, deleteItem, goBack,
       getItemIcon, getIconClass, getFileExt, formatBytes, formatDateTime
