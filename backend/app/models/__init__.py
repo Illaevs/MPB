@@ -37,6 +37,7 @@ from .task_subtask import TaskSubtask
 from .task_assignee import TaskAssignee
 from .task_watcher import TaskWatcher
 from .chat_conversation import ChatConversation, ChatConversationMember
+from .chat_message_reaction import ChatMessageReaction
 from .global_chat_message import GlobalChatMessage
 from .legal_case import LegalCase, LegalCaseEvent, LegalCaseEventFile, LegalCaseTask
 from .task_auction import TaskAuction
@@ -96,8 +97,10 @@ from .approval import (
     ApprovalTemplate,
     ApprovalTemplateStep,
 )
+from .file_folder_permission import FileFolderPermission
 
 __all__ = [
+    "FileFolderPermission",
     "Company",
     "Role",
     "RolePermission",
@@ -133,6 +136,7 @@ __all__ = [
     "TaskWatcher",
     "ChatConversation",
     "ChatConversationMember",
+    "ChatMessageReaction",
     "GlobalChatMessage",
     "LegalCase",
     "LegalCaseEvent",

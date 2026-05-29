@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { api } from '../services/api'
+import { useNotificationSound } from '../composables/useNotificationSound'
 
 /**
  * Состояние уведомлений: список + счётчик непрочитанных + поллинг.
@@ -30,6 +31,15 @@ export const useNotificationsStore = defineStore('notifications', () => {
   const DEFAULT_POLL_SECONDS = 30
   const LIST_LIMIT = 50
   let pollSeconds = DEFAULT_POLL_SECONDS
+
+  // Звуковые уведомления (см. useNotificationSound). Звук триггерится
+  // когда unreadCount вырос ИЛИ появился новый id в списке. Первый
+  // poll (сразу после mount) — пропускаем, иначе пингало бы при
+  // каждом открытии страницы.
+  const { playNotificationDing } = useNotificationSound()
+  let _firstPollDone = false
+  let _lastSeenUnread = 0
+  let _seenIds = new Set()
 
   // 0 = ручной режим (только разовый refresh, без таймера).
   function normalizeSeconds(value) {
@@ -74,6 +84,32 @@ export const useNotificationsStore = defineStore('notifications', () => {
 
   async function refresh({ silent = false } = {}) {
     await Promise.all([fetchList({ silent }), fetchUnreadCount()])
+    // Sound detection: после первого фуллл-фетча запоминаем baseline.
+    // На последующих фетчах сравниваем и пингаем при росте unread
+    // или появлении свежих id.
+    if (!_firstPollDone) {
+      _firstPollDone = true
+      _lastSeenUnread = Number(unreadCount.value) || 0
+      _seenIds = new Set((items.value || []).map((it) => String(it.id)))
+      return
+    }
+    const currentUnread = Number(unreadCount.value) || 0
+    const grew = currentUnread > _lastSeenUnread
+    let freshSeen = false
+    if (Array.isArray(items.value)) {
+      for (const it of items.value) {
+        const id = String(it?.id || '')
+        if (!id) continue
+        if (!_seenIds.has(id) && !it?.is_read) {
+          freshSeen = true
+        }
+        _seenIds.add(id)
+      }
+    }
+    _lastSeenUnread = currentUnread
+    if (grew || freshSeen) {
+      playNotificationDing()
+    }
   }
 
   function startPolling(intervalSeconds) {
@@ -109,6 +145,9 @@ export const useNotificationsStore = defineStore('notifications', () => {
     stopPolling()
     items.value = []
     unreadCount.value = 0
+    _firstPollDone = false
+    _lastSeenUnread = 0
+    _seenIds = new Set()
   }
 
   async function markRead(id) {

@@ -116,6 +116,8 @@ class UserResponse(UserBase):
     rating: Optional[float] = None
     rating_count: Optional[int] = None
     ui_preferences: Optional[Dict[str, Any]] = None
+    # Phase C.2: presence — фронт сравнивает с now() для зелёной точки.
+    last_seen_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

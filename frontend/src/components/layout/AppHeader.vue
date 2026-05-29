@@ -263,6 +263,15 @@
                 </select>
               </div>
 
+              <label class="uip-toggle">
+                <input type="checkbox" v-model="uiSoundEnabled">
+                <span>Звук уведомлений</span>
+              </label>
+              <label class="uip-toggle">
+                <input type="checkbox" v-model="uiMessengerSoundEnabled">
+                <span>Звук сообщений мессенджера</span>
+              </label>
+
               <div class="uip-row">
                 <label>Часовой пояс</label>
                 <select class="uip-select" v-model="uiTimezone">
@@ -503,6 +512,8 @@ export default {
       setWallpaperDim,
       setStartPage,
       setPollSeconds,
+      setSoundEnabled,
+      setMessengerSoundEnabled,
       setLocale,
       resetAppearance,
       resetWallpaper,
@@ -581,6 +592,15 @@ export default {
     const uiPollSeconds = computed({
       get: () => uiPrefs.notifications.pollSeconds,
       set: (v) => setPollSeconds(Number(v)),
+    })
+    // Стейдж 2 имплицитного DM: звуковые уведомления (два независимых).
+    const uiSoundEnabled = computed({
+      get: () => uiPrefs.notifications.soundEnabled !== false,
+      set: (v) => setSoundEnabled(v),
+    })
+    const uiMessengerSoundEnabled = computed({
+      get: () => uiPrefs.notifications.messengerSoundEnabled !== false,
+      set: (v) => setMessengerSoundEnabled(v),
     })
     const tzOptions = [
       { value: '', label: 'Системная' },
@@ -661,6 +681,8 @@ export default {
       uiStartPage,
       pollOptions,
       uiPollSeconds,
+      uiSoundEnabled,
+      uiMessengerSoundEnabled,
       tzOptions,
       uiTimezone,
       applyUiPrefs,

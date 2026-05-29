@@ -7,7 +7,7 @@ from typing import Dict, List, Optional, Tuple, Union
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
-from sqlalchemy import select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 from starlette.datastructures import UploadFile as StarletteUploadFile
@@ -18,8 +18,12 @@ from app.database.session import get_db
 from app.models import (
     ChatConversation,
     ChatConversationMember,
+    ChatMessageReaction,
+    Deal,
     GlobalChatMessage,
     RolePermission,
+    Task,
+    TaskAssignee,
     User,
 )
 from app.schemas.chat import (
@@ -28,9 +32,17 @@ from app.schemas.chat import (
     ChatConversationMemberAdd,
     ChatConversationMemberResponse,
     ChatConversationResponse,
+    ChatConversationStateUpdate,
     ChatConversationUpdate,
     ChatMessageReferenceResponse,
+    MentionItem,
+    MessageReactionAggregate,
+    MessageSearchResult,
+    ReactionToggleRequest,
+    SearchableUserResponse,
+    TypingPresence,
 )
+from app.services.permissions import get_section_permissions
 from app.schemas.global_chat_message import GlobalChatMessageResponse, GlobalChatMessageUpdate
 from app.services.notifications import create_notification
 from app.services.storage import (
@@ -45,6 +57,113 @@ router = APIRouter()
 
 MAX_CHAT_FILE_BYTES = 50 * 1024 * 1024
 MANAGEABLE_CONVERSATION_TYPES = {"group", "channel"}
+
+# Phase B.5 — rate-limit anti-spam.
+# Окно 60 секунд, лимит 5 «первых сообщений незнакомцам». В памяти
+# процесса (per-worker; для multi-worker нужен Redis — Stage E).
+# «Первое сообщение» = я отправляю в DM, в котором ещё нет моих
+# предыдущих сообщений.
+import time as _time_module  # noqa: E402
+
+_FIRST_MSG_WINDOW_SEC = 60
+_FIRST_MSG_LIMIT = 5
+_first_msg_recents: Dict[str, List[float]] = {}
+
+
+def _trim_old_first_msg_ts(user_id: str, now: float) -> None:
+    """Удаляет старые timestamp'ы (< now - window) из ring buffer'а."""
+    cutoff = now - _FIRST_MSG_WINDOW_SEC
+    arr = _first_msg_recents.get(user_id, [])
+    if not arr:
+        return
+    # отсечь головной хвост старых
+    while arr and arr[0] < cutoff:
+        arr.pop(0)
+    if arr:
+        _first_msg_recents[user_id] = arr
+    else:
+        _first_msg_recents.pop(user_id, None)
+
+
+# Phase C.1 — typing indicator.
+# In-memory state: {conversation_id: {user_id: last_typing_at}}.
+# Эфемерное — на рестарте теряется, что нормально для presence.
+# Per-process; для multi-worker нужен Redis или WS (Stage E).
+_TYPING_WINDOW_SEC = 5
+_typing_state: Dict[str, Dict[str, datetime]] = {}
+
+
+def _record_typing(conversation_id: str, user_id: str) -> None:
+    """Запомнить «X печатает сейчас в Y»."""
+    bucket = _typing_state.setdefault(str(conversation_id), {})
+    bucket[str(user_id)] = _utcnow()
+
+
+def _list_typing(conversation_id: str, exclude_user_id: str) -> List[str]:
+    """Вернуть список user_id, у которых typing-сигнал свежее
+    `_TYPING_WINDOW_SEC` секунд (исключая вызывающего).
+    """
+    bucket = _typing_state.get(str(conversation_id))
+    if not bucket:
+        return []
+    now = _utcnow()
+    fresh_ids: List[str] = []
+    stale_keys: List[str] = []
+    for uid, ts in list(bucket.items()):
+        try:
+            age = (now - ts).total_seconds()
+        except TypeError:
+            stale_keys.append(uid)
+            continue
+        if age > _TYPING_WINDOW_SEC:
+            stale_keys.append(uid)
+            continue
+        if uid == str(exclude_user_id):
+            continue
+        fresh_ids.append(uid)
+    for k in stale_keys:
+        bucket.pop(k, None)
+    if not bucket:
+        _typing_state.pop(str(conversation_id), None)
+    return fresh_ids
+
+
+async def _enforce_first_msg_rate_limit(
+    db: AsyncSession,
+    user_id: str,
+    conversation: ChatConversation,
+) -> None:
+    """Срабатывает на отправке сообщения в DM, в котором у юзера ещё
+    нет своих сообщений. Если за последние 60с уже было ≥5 таких
+    «первых» — 429.
+    """
+    if conversation.type != "direct":
+        return
+    # Есть ли у меня уже сообщения в этом DM?
+    prior = (
+        await db.execute(
+            select(func.count(GlobalChatMessage.id)).where(
+                GlobalChatMessage.conversation_id == str(conversation.id),
+                GlobalChatMessage.user_id == str(user_id),
+            )
+        )
+    ).scalar() or 0
+    if prior > 0:
+        return  # уже не «первое»
+
+    now = _time_module.time()
+    _trim_old_first_msg_ts(str(user_id), now)
+    recent = _first_msg_recents.setdefault(str(user_id), [])
+    if len(recent) >= _FIRST_MSG_LIMIT:
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                f"Слишком много новых чатов за короткое время "
+                f"(лимит {_FIRST_MSG_LIMIT} за {_FIRST_MSG_WINDOW_SEC}с). "
+                f"Подождите минуту."
+            ),
+        )
+    recent.append(now)
 MESSAGE_LOAD_OPTIONS = [
     joinedload(GlobalChatMessage.user),
     joinedload(GlobalChatMessage.pinned_by),
@@ -137,7 +256,10 @@ def _serialize_message_reference(message: Optional[GlobalChatMessage]) -> Option
     )
 
 
-def _serialize_message(message: GlobalChatMessage) -> GlobalChatMessageResponse:
+def _serialize_message(
+    message: GlobalChatMessage,
+    reactions: Optional[List[MessageReactionAggregate]] = None,
+) -> GlobalChatMessageResponse:
     attachments = []
     if not message.is_deleted:
         for item in message.attachments or []:
@@ -159,11 +281,50 @@ def _serialize_message(message: GlobalChatMessage) -> GlobalChatMessageResponse:
         pinned_by_user_id=str(message.pinned_by_user_id) if message.pinned_by_user_id else None,
         reply_to_message=_serialize_message_reference(message.__dict__.get("reply_to_message")),
         forwarded_from_message=_serialize_message_reference(message.__dict__.get("forwarded_from_message")),
+        reactions=reactions or [],
         created_at=message.created_at,
         updated_at=message.updated_at,
         edited_at=message.edited_at,
         deleted_at=message.deleted_at,
     )
+
+
+# Phase B.3: batch-загрузка реакций для списка сообщений.
+async def _load_reactions_map(
+    db: AsyncSession,
+    message_ids: List[str],
+    current_user_id: str,
+) -> Dict[str, List[MessageReactionAggregate]]:
+    """Один SQL на весь список сообщений → группировка в Python.
+
+    Возврат: {message_id: [MessageReactionAggregate, ...]}
+    Каждый агрегат — по уникальной emoji-метке внутри одного сообщения,
+    с count, user_ids и флагом reacted_by_me.
+    """
+    if not message_ids:
+        return {}
+    result = await db.execute(
+        select(ChatMessageReaction).where(
+            ChatMessageReaction.message_id.in_([str(m) for m in message_ids])
+        )
+    )
+    rows = result.scalars().all()
+    # group by (message_id, emoji)
+    grouped: Dict[str, Dict[str, MessageReactionAggregate]] = {}
+    me = str(current_user_id)
+    for r in rows:
+        mid = str(r.message_id)
+        emoji = r.emoji
+        bucket = grouped.setdefault(mid, {})
+        agg = bucket.get(emoji)
+        if agg is None:
+            agg = MessageReactionAggregate(emoji=emoji, count=0, user_ids=[])
+            bucket[emoji] = agg
+        agg.count += 1
+        agg.user_ids.append(str(r.user_id))
+        if str(r.user_id) == me:
+            agg.reacted_by_me = True
+    return {mid: list(bucket.values()) for mid, bucket in grouped.items()}
 
 
 def _serialize_member(user: User, role: str = "member", joined_at=None) -> ChatConversationMemberResponse:
@@ -179,6 +340,65 @@ def _serialize_member(user: User, role: str = "member", joined_at=None) -> ChatC
 
 def _conversation_member_lookup(conversation: ChatConversation) -> Dict[str, ChatConversationMember]:
     return {str(member.user_id): member for member in conversation.members or []}
+
+
+# Дата-«никогда»: используется для muted_forever. SQLite спокойно ест
+# datetime до 9999, JSON-сериализация тоже.
+_FOREVER = datetime(9999, 12, 31, 23, 59, 59)
+
+
+def _is_muted_now(member: Optional[ChatConversationMember]) -> bool:
+    """Активен ли mute прямо сейчас (для UI badge / push gate)."""
+    if not member or member.muted_until is None:
+        return False
+    try:
+        return member.muted_until > _utcnow()
+    except TypeError:
+        # tz mismatch (naive vs aware) — на всякий случай считаем
+        # mute активным, лучше тише чем громче.
+        return True
+
+
+async def _unread_count_for_member(
+    db: AsyncSession,
+    conversation_id: str,
+    user_id: str,
+    last_read_at: Optional[datetime],
+) -> int:
+    """Сколько сообщений ОТ ДРУГИХ юзеров приехало после last_read_at.
+
+    Свои собственные не считаем — они для UI всегда «прочитаны».
+    Удалённые (is_deleted=True) тоже не показываем — это soft-delete,
+    в badge их учитывать смысла нет.
+    """
+    stmt = (
+        select(func.count(GlobalChatMessage.id))
+        .where(
+            GlobalChatMessage.conversation_id == str(conversation_id),
+            GlobalChatMessage.is_deleted == False,  # noqa: E712
+            GlobalChatMessage.user_id != str(user_id),
+        )
+    )
+    if last_read_at is not None:
+        stmt = stmt.where(GlobalChatMessage.created_at > last_read_at)
+    result = await db.execute(stmt)
+    return int(result.scalar() or 0)
+
+
+async def _conversation_has_messages(
+    db: AsyncSession,
+    conversation_id: str,
+) -> bool:
+    """Используется для фильтрации «пустых» DM — чтобы открытый-и-не-
+    написанный чат не светился у второго участника в списке.
+    """
+    stmt = (
+        select(func.count(GlobalChatMessage.id))
+        .where(GlobalChatMessage.conversation_id == str(conversation_id))
+        .limit(1)
+    )
+    result = await db.execute(stmt)
+    return int(result.scalar() or 0) > 0
 
 
 def _conversation_manage_allowed(request: Request, user: User, conversation: ChatConversation) -> bool:
@@ -353,6 +573,43 @@ async def _serialize_conversation(
     last_message, pinned_message = await _conversation_last_and_pinned(db, conversation.id)
     title = _conversation_display_title(conversation, str(user.id), members)
     description = _conversation_description(conversation, str(user.id), members)
+
+    # Per-user state. global чат не имеет member-строк (виртуальный
+    # список), поэтому для него отдаём нули — unread по global пока
+    # не считаем (отдельная задача, требует «last_read глобалки» per user).
+    member_lookup_data = _conversation_member_lookup(conversation)
+    my_member = member_lookup_data.get(str(user.id))
+    peer_last_read_at: Optional[datetime] = None
+    peer_last_seen_at: Optional[datetime] = None
+
+    if conversation.type == "global" or my_member is None:
+        unread = 0
+        is_archived = False
+        muted_until = None
+        last_read_at = None
+        is_pinned = False
+    else:
+        last_read_at = my_member.last_read_at
+        unread = await _unread_count_for_member(
+            db, str(conversation.id), str(user.id), last_read_at
+        )
+        is_archived = bool(my_member.is_archived)
+        muted_until = my_member.muted_until
+        is_pinned = bool(getattr(my_member, "is_pinned", False))
+
+        # Phase B.2 + C.2: для DM-чатов берём last_read_at и
+        # last_seen_at второго участника. Фронт использует:
+        #   last_read_at → ✓ vs ✓✓ на моих сообщениях
+        #   last_seen_at → зелёная точка online в шапке/карточке
+        if conversation.type == "direct":
+            for member in conversation.members or []:
+                if str(member.user_id) != str(user.id):
+                    peer_last_read_at = member.last_read_at
+                    peer_user_obj = member.__dict__.get("user")
+                    if peer_user_obj is not None:
+                        peer_last_seen_at = getattr(peer_user_obj, "last_seen_at", None)
+                    break
+
     return ChatConversationResponse(
         id=str(conversation.id),
         type=conversation.type,
@@ -365,6 +622,13 @@ async def _serialize_conversation(
         pinned_message=_serialize_message_reference(pinned_message),
         created_at=conversation.created_at,
         updated_at=conversation.updated_at,
+        unread_count=unread,
+        is_archived=is_archived,
+        muted_until=muted_until,
+        last_read_at=last_read_at,
+        is_pinned=is_pinned,
+        peer_last_read_at=peer_last_read_at,
+        peer_last_seen_at=peer_last_seen_at,
     )
 
 
@@ -372,13 +636,28 @@ async def _list_visible_conversations(
     request: Request,
     db: AsyncSession,
     user: User,
+    include_archived: bool = False,
 ) -> List[ChatConversation]:
+    """Список conversations, видимых текущему юзеру.
+
+    Stage 1 правила фильтрации:
+      - Глобальный чат — всегда.
+      - DM:
+          * только если я участник;
+          * только если в чате есть хотя бы 1 сообщение (пустые DM
+            не светятся; см. UX в плане messenger-implicit-dm);
+          * если у меня is_archived=True — скрываем (если только
+            include_archived не запрошен явно).
+      - Group/channel:
+          * только если я участник или админ;
+          * скрытие по моему is_archived аналогично.
+    """
     await _require_chat_access(request, db, user)
     global_conversation = await _ensure_global_conversation(db, user)
 
     result = await db.execute(
         select(ChatConversation)
-        .where(ChatConversation.is_archived == False)
+        .where(ChatConversation.is_archived == False)  # noqa: E712 — глобальный архив чата
         .options(*CONVERSATION_LOAD_OPTIONS)
         .order_by(ChatConversation.created_at.asc())
     )
@@ -397,9 +676,21 @@ async def _list_visible_conversations(
             lookup[str(conversation.id)] = conversation
             continue
         member_lookup = _conversation_member_lookup(conversation)
-        is_member = str(user.id) in member_lookup
+        my_member = member_lookup.get(str(user.id))
+        is_member = my_member is not None
+        # Per-user archive filter.
+        if my_member and my_member.is_archived and not include_archived:
+            continue
         if conversation.type == "direct":
             if not is_member:
+                continue
+            # Пустой DM (без сообщений) НЕ светится для собеседника —
+            # «я открыл и не написал» не должно создавать карточку у
+            # второго участника. Создателю чат остаётся виден сразу
+            # (иначе после клика «написать коллеге» получишь пустой
+            # экран — DM в БД есть, но в списке нет).
+            has_msg = await _conversation_has_messages(db, str(conversation.id))
+            if not has_msg and str(conversation.created_by_user_id) != str(user.id):
                 continue
             member_ids = sorted(str(member.user_id) for member in conversation.members or [])
             peer_ids = [member_id for member_id in member_ids if member_id != str(user.id)]
@@ -446,14 +737,35 @@ async def _load_conversation_messages(
     return result.scalars().all()
 
 
-def _parse_mentions(mentions: Optional[str]) -> List[str]:
-    mentions_list: List[str] = []
+def _parse_mentions(mentions: Optional[str]) -> List:
+    """
+    Phase D.3 — расширенный формат mentions:
+      - старый: список строк-user_id (обратная совместимость для старых клиентов)
+      - новый: список объектов {kind, id, label, href} — для рендера ссылок
+        на сущности (user/deal/task/contract/project/lead).
+    Возвращаем как есть; downstream код знает оба формата.
+    """
+    mentions_list: List = []
     if not mentions:
         return mentions_list
     try:
         parsed = json.loads(mentions)
         if isinstance(parsed, list):
-            mentions_list = [str(item) for item in parsed if item]
+            for item in parsed:
+                if not item:
+                    continue
+                # dict — валидный новый формат, прокидываем как есть
+                if isinstance(item, dict):
+                    if item.get("id") and item.get("kind"):
+                        mentions_list.append({
+                            "kind": str(item["kind"]),
+                            "id": str(item["id"]),
+                            "label": str(item.get("label") or ""),
+                            "href": str(item.get("href") or ""),
+                        })
+                else:
+                    # строка → старый формат user_id
+                    mentions_list.append(str(item))
     except Exception:
         mentions_list = []
     return mentions_list
@@ -570,6 +882,10 @@ async def _create_message(
     if not content and not files_list and not forwarded_from_message:
         raise HTTPException(status_code=400, detail="Message, forward target or files are required")
 
+    # Phase B.5: anti-spam — rate-limit на «первое сообщение незнакомцу».
+    # Срабатывает ТОЛЬКО на DM (group/channel/global не трогаем).
+    await _enforce_first_msg_rate_limit(db, str(user.id), conversation)
+
     message = GlobalChatMessage(
         user_id=str(user.id),
         conversation_id=str(conversation.id),
@@ -631,16 +947,28 @@ async def _find_direct_conversation(
 @router.get("/conversations", response_model=List[ChatConversationResponse])
 async def list_conversations(
     request: Request,
+    include_archived: bool = False,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(CurrentUser),
 ):
-    conversations = await _list_visible_conversations(request, db, user)
+    conversations = await _list_visible_conversations(
+        request, db, user, include_archived=include_archived
+    )
     serialized = []
     for conversation in conversations:
         payload = await _serialize_conversation(request, db, user, conversation)
         last_message_at = payload.last_message.created_at if payload.last_message else None
         timestamp = last_message_at.timestamp() if last_message_at else 0
-        priority = 0 if conversation.type == "global" else 1
+        # Sort buckets (Phase B.1):
+        #   0 — global чат (всегда сверху)
+        #   1 — мои закреплённые (per-user is_pinned)
+        #   2 — всё остальное
+        if conversation.type == "global":
+            priority = 0
+        elif payload.is_pinned:
+            priority = 1
+        else:
+            priority = 2
         serialized.append((priority, -timestamp, payload.title.lower(), payload))
     serialized.sort(key=lambda item: (item[0], item[1], item[2]))
     return [item[3] for item in serialized]
@@ -664,6 +992,13 @@ async def create_or_open_direct_conversation(
     existing = await _find_direct_conversation(db, str(user.id), str(target_user.id))
     if existing:
         await _require_conversation_access(request, db, user, existing)
+        # Open-from-archive: если я раньше архивировал этот чат, при
+        # повторном открытии его снова покажем в списке. Архив второго
+        # участника НЕ трогаем.
+        my_member = _conversation_member_lookup(existing).get(str(user.id))
+        if my_member is not None and my_member.is_archived:
+            my_member.is_archived = False
+            await db.commit()
         return await _serialize_conversation(request, db, user, existing)
 
     conversation = ChatConversation(
@@ -835,6 +1170,477 @@ async def remove_conversation_member(
     return await _serialize_conversation(request, db, user, loaded)
 
 
+@router.patch("/conversations/{conversation_id}/me", response_model=ChatConversationResponse)
+async def update_my_conversation_state(
+    conversation_id: str,
+    payload: ChatConversationStateUpdate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(CurrentUser),
+):
+    """Per-user state: is_archived / muted_until.
+
+    Глобальный чат не имеет member-строк (виртуальный список из всех
+    активных), поэтому состояние для него настраивать нельзя — здесь
+    отдаём 400. Если понадобится — нужно отдельное хранилище
+    «global_chat_member_state».
+    """
+    conversation = await _get_conversation(db, conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation.type == "global":
+        raise HTTPException(
+            status_code=400,
+            detail="Global chat doesn't support per-user state in Stage 1",
+        )
+
+    await _require_conversation_access(request, db, user, conversation)
+    my_member = _conversation_member_lookup(conversation).get(str(user.id))
+    if my_member is None:
+        raise HTTPException(status_code=403, detail="Not a conversation member")
+
+    changed = False
+
+    if payload.is_archived is not None:
+        my_member.is_archived = bool(payload.is_archived)
+        changed = True
+
+    if payload.is_pinned is not None:
+        my_member.is_pinned = bool(payload.is_pinned)
+        changed = True
+
+    # mute_logic:
+    #   muted_forever=True  → ставим _FOREVER в muted_until.
+    #   muted_forever=False → снимаем mute (None).
+    #   muted_until=<dt>    → ставим конкретный дедлайн.
+    #   muted_until=None И muted_forever=None → не меняем (sentinel).
+    if payload.muted_forever is True:
+        my_member.muted_until = _FOREVER
+        changed = True
+    elif payload.muted_forever is False:
+        my_member.muted_until = None
+        changed = True
+    elif payload.muted_until is not None:
+        my_member.muted_until = payload.muted_until
+        changed = True
+
+    if changed:
+        await db.commit()
+
+    loaded = await _get_conversation(db, conversation_id)
+    if not loaded:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return await _serialize_conversation(request, db, user, loaded)
+
+
+@router.get("/users/searchable", response_model=List[SearchableUserResponse])
+async def list_searchable_users(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(CurrentUser),
+):
+    """Все активные юзеры (кроме самого вызывающего) для поиска
+    «написать коллеге». Помечает `has_dm=True`, если у нас уже есть
+    direct chat — фронт показывает «уже есть чат» / «новый».
+    """
+    await _require_chat_access(request, db, user)
+
+    # Все активные юзеры кроме меня.
+    users_result = await db.execute(
+        select(User)
+        .where(User.is_active == True, User.id != str(user.id))  # noqa: E712
+        .order_by(User.full_name.asc())
+    )
+    users_list = users_result.scalars().all()
+
+    # Карта peer_user_id → conversation_id для моих DM.
+    dm_lookup: Dict[str, str] = {}
+    conv_result = await db.execute(
+        select(ChatConversation)
+        .where(
+            ChatConversation.type == "direct",
+            ChatConversation.is_archived == False,  # noqa: E712
+        )
+        .options(selectinload(ChatConversation.members))
+    )
+    for conv in conv_result.scalars().unique().all():
+        member_ids = {str(m.user_id) for m in conv.members or []}
+        if str(user.id) not in member_ids:
+            continue
+        for peer_id in member_ids - {str(user.id)}:
+            dm_lookup[peer_id] = str(conv.id)
+
+    return [
+        SearchableUserResponse(
+            id=str(u.id),
+            full_name=u.full_name,
+            email=u.email,
+            avatar_url=getattr(u, "avatar_url", None),
+            has_dm=str(u.id) in dm_lookup,
+            dm_conversation_id=dm_lookup.get(str(u.id)),
+            last_seen_at=getattr(u, "last_seen_at", None),
+        )
+        for u in users_list
+    ]
+
+
+# ────────────────────────────────────────────────────────────────────
+# Phase C.1 — typing indicator endpoints
+# ────────────────────────────────────────────────────────────────────
+
+
+@router.post("/conversations/{conversation_id}/typing", status_code=204)
+async def signal_typing(
+    conversation_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(CurrentUser),
+):
+    """Сигнал «я печатаю» — фронт шлёт debounced раз в ~1с при вводе.
+
+    Доступ: я должен иметь доступ к conversation. На global чате
+    typing намеренно не работает (слишком шумно — N людей пишут
+    параллельно), 400.
+    """
+    conversation = await _get_conversation(db, conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation.type == "global":
+        raise HTTPException(
+            status_code=400,
+            detail="Typing indicator is disabled for global chat",
+        )
+    await _require_conversation_access(request, db, user, conversation)
+    _record_typing(str(conversation.id), str(user.id))
+    return None  # 204
+
+
+@router.get("/conversations/{conversation_id}/typing", response_model=List[TypingPresence])
+async def list_conversation_typing(
+    conversation_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(CurrentUser),
+):
+    """Кто сейчас печатает в этом чате (кроме меня). Фильтр окна
+    5 секунд внутри _list_typing.
+    """
+    conversation = await _get_conversation(db, conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation.type == "global":
+        return []
+    await _require_conversation_access(request, db, user, conversation)
+
+    fresh_user_ids = _list_typing(str(conversation.id), str(user.id))
+    if not fresh_user_ids:
+        return []
+
+    users_result = await db.execute(
+        select(User).where(User.id.in_(fresh_user_ids))
+    )
+    users_lookup = {str(u.id): u for u in users_result.scalars().all()}
+
+    bucket = _typing_state.get(str(conversation.id), {})
+    out: List[TypingPresence] = []
+    for uid in fresh_user_ids:
+        u = users_lookup.get(uid)
+        out.append(
+            TypingPresence(
+                user_id=uid,
+                user_name=getattr(u, "full_name", None) if u else None,
+                at=bucket.get(uid, _utcnow()),
+            )
+        )
+    return out
+
+
+# ────────────────────────────────────────────────────────────────────
+# Phase B.4 — mention сделок/задач/юзеров с ACL-фильтром
+# ────────────────────────────────────────────────────────────────────
+
+
+@router.get("/mention-search", response_model=List[MentionItem])
+async def mention_search(
+    request: Request,
+    q: str = "",
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(CurrentUser),
+):
+    """Объединённый поиск для @-меншенов в composer'е чата.
+
+    Возвращает до 20 элементов разных типов (user/deal/task), отранжированных
+    префиксом «совпадение по началу» → «содержит». ACL-фильтр:
+      - users: все активные кроме меня
+      - deals: superuser ИЛИ has read_all на «deals» ИЛИ created_by == me
+      - tasks: superuser ИЛИ has read_all на «tasks» ИЛИ
+               created_by == me ИЛИ я в task_assignees
+
+    Минимальная длина q = 1. Пустой q возвращает [] (UI обычно ждёт
+    хотя бы один символ).
+    """
+    await _require_chat_access(request, db, user)
+    query = (q or "").strip()
+    if not query:
+        return []
+    like = f"%{query}%"
+    is_super = bool(getattr(request.state, "is_superuser", False))
+
+    items: List[MentionItem] = []
+
+    # --- Users (top 10) ---
+    user_rows = (
+        await db.execute(
+            select(User)
+            .where(
+                User.is_active == True,  # noqa: E712
+                User.id != str(user.id),
+                (User.full_name.ilike(like)) | (User.email.ilike(like)),
+            )
+            .order_by(User.full_name.asc())
+            .limit(10)
+        )
+    ).scalars().all()
+    for u in user_rows:
+        items.append(
+            MentionItem(
+                kind="user",
+                id=str(u.id),
+                label=u.full_name or u.email or str(u.id),
+                sublabel=u.email if u.full_name else None,
+                avatar_url=getattr(u, "avatar_url", None),
+                href=None,
+            )
+        )
+
+    # --- Deals (top 5) ---
+    deals_read_all, _ = await get_section_permissions(db, user.role_id, "deals")
+    deal_stmt = (
+        select(Deal)
+        .where(
+            (Deal.title.ilike(like)) | (Deal.obj_name.ilike(like))
+        )
+        .order_by(Deal.created_at.desc())
+        .limit(5)
+    )
+    if not is_super and not deals_read_all:
+        deal_stmt = deal_stmt.where(Deal.created_by == str(user.id))
+    deal_rows = (await db.execute(deal_stmt)).scalars().all()
+    for d in deal_rows:
+        title = d.title or d.obj_name or f"Сделка {str(d.id)[:8]}"
+        items.append(
+            MentionItem(
+                kind="deal",
+                id=str(d.id),
+                label=title,
+                sublabel=d.obj_name if d.obj_name and d.obj_name != title else None,
+                avatar_url=None,
+                # В этом CRM «сделка» (Deal) рендерится через
+                # ProjectDetail.vue по маршруту /projects/:id.
+                # Старого /deals/:id роутера нет.
+                href=f"/projects/{d.id}",
+            )
+        )
+
+    # --- Tasks (top 5) ---
+    tasks_read_all, _ = await get_section_permissions(db, user.role_id, "tasks")
+    task_stmt = (
+        select(Task)
+        .where(Task.title.ilike(like))
+        .order_by(Task.created_at.desc())
+        .limit(5)
+    )
+    if not is_super and not tasks_read_all:
+        # created_by == me OR me ∈ task_assignees
+        my_assigned = select(TaskAssignee.task_id).where(
+            TaskAssignee.user_id == str(user.id)
+        )
+        task_stmt = task_stmt.where(
+            (Task.created_by == str(user.id)) | (Task.id.in_(my_assigned))
+        )
+    task_rows = (await db.execute(task_stmt)).scalars().all()
+    for t in task_rows:
+        items.append(
+            MentionItem(
+                kind="task",
+                id=str(t.id),
+                label=t.title or f"Задача {str(t.id)[:8]}",
+                sublabel=None,
+                avatar_url=None,
+                # У /tasks нет detail-роута; даём query-param,
+                # Tasks.vue может позже подхватить ?focus=<id>.
+                # Пока — открывается список задач (лучше пустого экрана).
+                href=f"/tasks?focus={t.id}",
+            )
+        )
+
+    return items
+
+
+# Phase D.1 — глобальный поиск по сообщениям мессенджера.
+# Substring (ILIKE) по body всех видимых мне чатов: DM/group/channel,
+# где я участвую, плюс глобальный чат. Удалённые сообщения исключены.
+# MVP без FTS5/embeddings — простой и предсказуемый: 50–100k сообщений
+# на хост, ILIKE по индексу created_at + LIMIT 50 укладывается в ~100мс.
+# Если корпус вырастет — апгрейд на FTS5 messages-index, схема готова.
+_MSG_SEARCH_LIMIT_MAX = 100
+_MSG_SEARCH_SNIPPET_RADIUS = 80  # символов слева/справа от первого матча
+
+
+def _build_snippet(body: str, query: str) -> tuple[str, str]:
+    """Готовит (html_snippet_with_mark, plain_preview).
+
+    Возвращает:
+      - html_snippet: текст с `<mark>` вокруг найденного фрагмента;
+                      HTML-экранирован, безопасен к v-html
+      - plain_preview: тот же фрагмент без markup
+    Если query пустой или не найден — возвращает «голову» сообщения.
+    """
+    body = body or ""
+    if not body:
+        return "", ""
+    haystack_lc = body.lower()
+    needle_lc = (query or "").lower()
+    idx = haystack_lc.find(needle_lc) if needle_lc else -1
+    if idx < 0:
+        # fallback — первые 160 символов
+        preview = body[:160]
+        suffix = "…" if len(body) > 160 else ""
+        from html import escape as _html_escape
+        return _html_escape(preview) + suffix, preview + suffix
+    start = max(0, idx - _MSG_SEARCH_SNIPPET_RADIUS)
+    end = min(len(body), idx + len(needle_lc) + _MSG_SEARCH_SNIPPET_RADIUS)
+    chunk_before = body[start:idx]
+    chunk_match = body[idx:idx + len(needle_lc)]
+    chunk_after = body[idx + len(needle_lc):end]
+    prefix = "…" if start > 0 else ""
+    suffix = "…" if end < len(body) else ""
+    plain = f"{prefix}{chunk_before}{chunk_match}{chunk_after}{suffix}"
+    from html import escape as _html_escape
+    html = (
+        prefix
+        + _html_escape(chunk_before)
+        + "<mark>"
+        + _html_escape(chunk_match)
+        + "</mark>"
+        + _html_escape(chunk_after)
+        + suffix
+    )
+    return html, plain
+
+
+@router.get("/search", response_model=List[MessageSearchResult])
+async def search_messages(
+    request: Request,
+    q: str = "",
+    skip: int = 0,
+    limit: int = 50,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(CurrentUser),
+):
+    """Глобальный поиск по сообщениям мессенджера.
+
+    Phase D.1: подстрочный (ILIKE) поиск по body. ACL — мембершип:
+      - чаты, где я ChatConversationMember
+      - + глобальный чат (общий для всех)
+    Удалённые сообщения исключены. Сортировка — по убыванию created_at
+    (последние сверху). Возвращает уже сериализованные результаты с
+    title чата + snippet для UI.
+
+    Минимальная длина q — 2 символа (избегаем дурацких O(N) сканов).
+    Пустой q → [].
+    """
+    await _require_chat_access(request, db, user)
+    query = (q or "").strip()
+    if len(query) < 2:
+        return []
+    limit_clamped = max(1, min(int(limit or 50), _MSG_SEARCH_LIMIT_MAX))
+    skip_clamped = max(0, int(skip or 0))
+
+    # Какие conversation_id видны юзеру:
+    #   1) where ChatConversationMember.user_id == me
+    #   2) + global conversation id
+    my_member_subq = (
+        select(ChatConversationMember.conversation_id)
+        .where(ChatConversationMember.user_id == str(user.id))
+    )
+    global_conv = await _ensure_global_conversation(db, user)
+    global_conv_id = str(global_conv.id)
+
+    like = f"%{query}%"
+    msg_stmt = (
+        select(GlobalChatMessage)
+        .where(
+            GlobalChatMessage.is_deleted == False,  # noqa: E712
+            GlobalChatMessage.body.isnot(None),
+            GlobalChatMessage.body.ilike(like),
+            (
+                GlobalChatMessage.conversation_id.in_(my_member_subq)
+                | (GlobalChatMessage.conversation_id == global_conv_id)
+            ),
+        )
+        .options(joinedload(GlobalChatMessage.user))
+        .order_by(GlobalChatMessage.created_at.desc())
+        .offset(skip_clamped)
+        .limit(limit_clamped)
+    )
+    rows = (await db.execute(msg_stmt)).scalars().all()
+    if not rows:
+        return []
+
+    # Подтянем все conversation'ы одним запросом (для title и type).
+    conv_ids = sorted({str(r.conversation_id) for r in rows if r.conversation_id})
+    conv_map: Dict[str, ChatConversation] = {}
+    if conv_ids:
+        conv_result = await db.execute(
+            select(ChatConversation)
+            .where(ChatConversation.id.in_(conv_ids))
+            .options(*CONVERSATION_LOAD_OPTIONS)
+        )
+        for conv in conv_result.scalars().unique().all():
+            conv_map[str(conv.id)] = conv
+
+    results: List[MessageSearchResult] = []
+    for msg in rows:
+        cid = str(msg.conversation_id) if msg.conversation_id else ""
+        conv = conv_map.get(cid)
+        if not conv:
+            continue
+        # Для DM показываем имя собеседника, а не «Direct».
+        if conv.type == "direct":
+            peer_name = None
+            for member in conv.members or []:
+                if str(member.user_id) != str(user.id):
+                    peer_user = member.__dict__.get("user")
+                    if peer_user:
+                        peer_name = (
+                            getattr(peer_user, "full_name", None)
+                            or getattr(peer_user, "email", None)
+                        )
+                    break
+            title = peer_name or "Личный чат"
+        elif conv.type == "global":
+            title = conv.title or "Общий чат"
+        else:
+            title = conv.title or ("Канал" if conv.type == "channel" else "Чат")
+        snippet_html, snippet_plain = _build_snippet(msg.body or "", query)
+        author = msg.__dict__.get("user")
+        results.append(
+            MessageSearchResult(
+                message_id=str(msg.id),
+                conversation_id=cid,
+                conversation_title=title,
+                conversation_type=conv.type,  # type: ignore[arg-type]
+                user_id=str(msg.user_id) if msg.user_id else None,
+                user_name=getattr(author, "full_name", None),
+                snippet=snippet_html,
+                body_preview=snippet_plain,
+                created_at=msg.created_at,
+            )
+        )
+    return results
+
+
 @router.get("/conversations/{conversation_id}/messages", response_model=List[GlobalChatMessageResponse])
 async def list_conversation_messages(
     conversation_id: str,
@@ -849,7 +1655,23 @@ async def list_conversation_messages(
         raise HTTPException(status_code=404, detail="Conversation not found")
     await _require_conversation_access(request, db, user, conversation)
     messages = await _load_conversation_messages(db, conversation_id, skip, limit)
-    return [_serialize_message(message) for message in messages]
+
+    # Auto mark-read: открыли чат → обновляем last_read_at у моей
+    # member-строки. Глобальный чат не имеет member-строк, скип.
+    if conversation.type != "global":
+        my_member = _conversation_member_lookup(conversation).get(str(user.id))
+        if my_member is not None:
+            my_member.last_read_at = _utcnow()
+            await db.commit()
+
+    # Phase B.3: batch-загрузка реакций ОДНИМ запросом на весь список.
+    reactions_map = await _load_reactions_map(
+        db, [str(m.id) for m in messages], str(user.id)
+    )
+    return [
+        _serialize_message(message, reactions_map.get(str(message.id), []))
+        for message in messages
+    ]
 
 
 @router.post("/conversations/{conversation_id}/messages", response_model=GlobalChatMessageResponse)
@@ -945,6 +1767,73 @@ async def unpin_message(
     return _serialize_message(loaded)
 
 
+# ────────────────────────────────────────────────────────────────────
+# Phase B.3 — emoji reactions
+# ────────────────────────────────────────────────────────────────────
+
+
+@router.post("/messages/{message_id}/reactions", response_model=GlobalChatMessageResponse)
+async def toggle_message_reaction(
+    message_id: str,
+    payload: ReactionToggleRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(CurrentUser),
+):
+    """Idempotent toggle: если такой эмодзи от меня уже есть — снимаем,
+    нет — ставим. Возвращает обновлённое сообщение целиком.
+
+    Доступ: я должен иметь доступ к conversation сообщения
+    (require_conversation_access). На удалённые сообщения не реагируем
+    (400).
+    """
+    emoji = (payload.emoji or "").strip()
+    if not emoji:
+        raise HTTPException(status_code=400, detail="emoji is required")
+
+    message = await _get_message(db, message_id)
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+    if message.is_deleted:
+        raise HTTPException(status_code=400, detail="Message is deleted")
+
+    conversation = await _get_conversation(db, str(message.conversation_id))
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    await _require_conversation_access(request, db, user, conversation)
+
+    # Ищем существующую реакцию (me, emoji) на этом сообщении.
+    existing = (
+        await db.execute(
+            select(ChatMessageReaction).where(
+                ChatMessageReaction.message_id == str(message.id),
+                ChatMessageReaction.user_id == str(user.id),
+                ChatMessageReaction.emoji == emoji,
+            )
+        )
+    ).scalar_one_or_none()
+
+    if existing:
+        await db.delete(existing)
+    else:
+        db.add(
+            ChatMessageReaction(
+                message_id=str(message.id),
+                user_id=str(user.id),
+                emoji=emoji,
+            )
+        )
+
+    await db.commit()
+
+    # Загружаем актуальные реакции для отдачи свежего сообщения.
+    reactions_map = await _load_reactions_map(db, [str(message.id)], str(user.id))
+    loaded = await _get_message(db, str(message.id))
+    if not loaded:
+        raise HTTPException(status_code=404, detail="Message not found")
+    return _serialize_message(loaded, reactions_map.get(str(message.id), []))
+
+
 @router.get("/messages", response_model=List[GlobalChatMessageResponse])
 async def list_global_messages(
     request: Request,
@@ -956,7 +1845,13 @@ async def list_global_messages(
     global_conversation = await _ensure_global_conversation(db, user)
     await _require_conversation_access(request, db, user, global_conversation)
     messages = await _load_conversation_messages(db, str(global_conversation.id), skip, limit)
-    return [_serialize_message(message) for message in messages]
+    reactions_map = await _load_reactions_map(
+        db, [str(m.id) for m in messages], str(user.id)
+    )
+    return [
+        _serialize_message(message, reactions_map.get(str(message.id), []))
+        for message in messages
+    ]
 
 
 @router.post("/messages", response_model=GlobalChatMessageResponse)

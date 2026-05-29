@@ -2,14 +2,21 @@
 Pydantic schemas for TaskMessage model.
 """
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel
 
 
+# Phase D.3 — расширенный формат mentions.
+# Старый: список строк-user_id.
+# Новый: список объектов {kind, id, label, href} для рендера ссылок
+# на сущности (user/deal/task/contract/lead).
+MentionItem = Union[str, Dict[str, Any]]
+
+
 class TaskMessageCreate(BaseModel):
     body: Optional[str] = None
-    mentions: Optional[List[str]] = []
+    mentions: Optional[List[MentionItem]] = []
 
 
 class TaskMessageUpdate(BaseModel):
@@ -23,7 +30,7 @@ class TaskMessageResponse(BaseModel):
     user_name: Optional[str] = None
     body: Optional[str] = None
     attachments: List[Dict[str, Any]] = []
-    mentions: List[str] = []
+    mentions: List[MentionItem] = []
     is_deleted: bool = False
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None

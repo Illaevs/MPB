@@ -67,49 +67,206 @@
               <i class="fas fa-times"></i>
             </button>
           </label>
+          <!-- Phase D.1 — глобальный поиск по сообщениям всех моих чатов. -->
+          <button
+            type="button"
+            class="messenger-icon-btn"
+            :class="{ 'is-active': messageSearchPanelOpen }"
+            :title="messageSearchPanelOpen ? 'Закрыть поиск по сообщениям' : 'Поиск по сообщениям'"
+            @click="toggleGlobalMessageSearch"
+          >
+            <i class="fas" :class="messageSearchPanelOpen ? 'fa-times' : 'fa-comment-dots'"></i>
+          </button>
         </div>
 
-        <div class="messenger-sidebar__content">
-          <button
+        <!-- Phase D.1 — панель глобального поиска по сообщениям.
+             Перекрывает список чатов когда открыта; результаты сгруппированы
+             по чатам. Клик по результату — открывает чат и прыгает на
+             сообщение с highlight (механика A.4). -->
+        <div v-if="messageSearchPanelOpen" class="messenger-sidebar__search-panel">
+          <label class="messenger-sidebar__search messenger-sidebar__search--global">
+            <i class="fas fa-search"></i>
+            <input
+              :value="messageSearchQuery"
+              type="text"
+              placeholder="Поиск по сообщениям (мин. 2 символа)"
+              autofocus
+              @input="onGlobalSearchInput($event.target.value)"
+            >
+            <button
+              v-if="messageSearchQuery"
+              type="button"
+              class="messenger-sidebar__search-clear"
+              @click="onGlobalSearchInput('')"
+              title="Очистить"
+            >
+              <i class="fas fa-times"></i>
+            </button>
+          </label>
+
+          <div class="messenger-sidebar__search-meta">
+            <span v-if="messageSearchLoading">
+              <i class="fas fa-spinner fa-spin"></i> Ищем…
+            </span>
+            <span v-else-if="messageSearchQuery.trim().length < 2">
+              Введите минимум 2 символа
+            </span>
+            <span v-else-if="!messageSearchResults.length">
+              Ничего не найдено
+            </span>
+            <span v-else>
+              Найдено: {{ messageSearchResults.length }}
+            </span>
+          </div>
+
+          <div class="messenger-sidebar__search-results">
+            <div
+              v-for="group in messageSearchResultsByChat"
+              :key="group.conversation_id"
+              class="search-result-group"
+            >
+              <div class="search-result-group__header">
+                <i class="fas" :class="searchResultGroupIcon(group)"></i>
+                <strong>{{ group.conversation_title }}</strong>
+                <span class="search-result-group__count">{{ group.items.length }}</span>
+              </div>
+              <button
+                v-for="item in group.items"
+                :key="item.message_id"
+                type="button"
+                class="search-result-item"
+                @click="openSearchResult(item)"
+              >
+                <span class="search-result-item__topline">
+                  <strong>{{ item.user_name || 'Пользователь' }}</strong>
+                  <span class="search-result-item__time">{{ formatSidebarTime(item.created_at) }}</span>
+                </span>
+                <!-- v-html: backend возвращает уже HTML-экранированный snippet
+                     с <mark> вокруг найденного. XSS-безопасно — escape сделан
+                     на сервере перед вставкой <mark>. -->
+                <span class="search-result-item__snippet" v-html="item.snippet"></span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div v-else class="messenger-sidebar__content">
+          <div
             v-for="conversation in filteredFlatConversations"
             :key="conversation.id"
-            type="button"
-            class="conversation-card"
-            :class="{ 'is-active': conversation.type === 'direct' ? isDirectEntryActive(conversation) : String(conversation.id) === String(activeConversationId) }"
-            @click="conversation.type === 'direct' ? openDirectConversation(conversation) : openConversation(conversation.id)"
+            class="conversation-card-wrap"
+            :class="{ 'is-muted': isConversationMuted(conversation) }"
           >
-            <span
-              class="conversation-card__avatar"
-              :class="conversation.type === 'direct' ? '' : conversationAvatarClass(conversation)"
-              :style="conversation.type === 'direct' && !getConversationUserAvatarUrl(conversation) ? getAvatarStyle(conversation.title) : null"
+            <button
+              type="button"
+              class="conversation-card"
+              :class="{ 'is-active': conversation.type === 'direct' ? isDirectEntryActive(conversation) : String(conversation.id) === String(activeConversationId) }"
+              @click="conversation.type === 'direct' ? openDirectConversation(conversation) : openConversation(conversation.id)"
             >
-              <template v-if="conversation.type === 'direct'">
-                <img
-                  v-if="getConversationUserAvatarUrl(conversation) && !isAvatarBroken(getConversationUserAvatarUrl(conversation))"
-                  :src="getConversationUserAvatarUrl(conversation)"
-                  :alt="conversation.title"
-                  class="messenger-avatar-image"
-                  @error="markAvatarBroken(getConversationUserAvatarUrl(conversation))"
-                >
-                <template v-else>{{ getInitial(conversation.title) }}</template>
-              </template>
-              <template v-else>
-                <i v-if="conversation.type === 'global'" class="fas fa-shopping-bag"></i>
-                <i v-else-if="conversation.type === 'channel'" class="fas fa-bullhorn"></i>
-                <i v-else class="fas fa-users"></i>
-              </template>
-            </span>
-
-            <span class="conversation-card__content">
-              <span class="conversation-card__topline">
-                <strong>{{ conversation.title }}</strong>
-                <span class="conversation-card__time">{{ formatSidebarTime(conversation.last_message?.created_at) }}</span>
+              <span
+                class="conversation-card__avatar"
+                :class="conversation.type === 'direct' ? '' : conversationAvatarClass(conversation)"
+                :style="conversation.type === 'direct' && !getConversationUserAvatarUrl(conversation) ? getAvatarStyle(conversation.title) : null"
+              >
+                <span
+                  v-if="conversation.type === 'direct' && conversationPresenceStatus(conversation) !== 'offline'"
+                  class="presence-dot"
+                  :class="'presence-dot--' + conversationPresenceStatus(conversation)"
+                  :title="conversationPresenceStatus(conversation) === 'online' ? 'Сейчас в сети' : 'Был(а) недавно'"
+                ></span>
+                <template v-if="conversation.type === 'direct'">
+                  <img
+                    v-if="getConversationUserAvatarUrl(conversation) && !isAvatarBroken(getConversationUserAvatarUrl(conversation))"
+                    :src="getConversationUserAvatarUrl(conversation)"
+                    :alt="conversation.title"
+                    class="messenger-avatar-image"
+                    @error="markAvatarBroken(getConversationUserAvatarUrl(conversation))"
+                  >
+                  <template v-else>{{ getInitial(conversation.title) }}</template>
+                </template>
+                <template v-else>
+                  <i v-if="conversation.type === 'global'" class="fas fa-shopping-bag"></i>
+                  <i v-else-if="conversation.type === 'channel'" class="fas fa-bullhorn"></i>
+                  <i v-else class="fas fa-users"></i>
+                </template>
               </span>
-              <span class="conversation-card__preview">{{ conversationPreview(conversation) }}</span>
-            </span>
 
-            <span v-if="isConversationUnread(conversation)" class="conversation-card__badge"></span>
-          </button>
+              <span class="conversation-card__content">
+                <span class="conversation-card__topline">
+                  <strong>{{ conversation.title }}</strong>
+                  <span class="conversation-card__time">
+                    <i v-if="isConversationPinned(conversation)" class="fas fa-thumbtack" title="Закреплён"></i>
+                    <i v-if="isConversationMuted(conversation)" class="fas fa-bell-slash" title="Беззвучный"></i>
+                    {{ formatSidebarTime(conversation.last_message?.created_at) }}
+                  </span>
+                </span>
+                <span class="conversation-card__preview">{{ conversationPreview(conversation) }}</span>
+              </span>
+
+              <span
+                v-if="conversationUnreadCount(conversation) > 0"
+                class="conversation-card__badge"
+                :title="`${conversationUnreadCount(conversation)} непрочитанных`"
+              >{{ conversationUnreadCount(conversation) > 99 ? '99+' : conversationUnreadCount(conversation) }}</span>
+            </button>
+
+            <button
+              v-if="conversation.type !== 'global'"
+              type="button"
+              class="conversation-card__menu-btn"
+              :class="{ 'is-open': openCardMenuId === String(conversation.id) }"
+              :aria-label="`Действия с чатом ${conversation.title}`"
+              @click.stop="toggleCardMenu(conversation)"
+            >
+              <i class="fas fa-ellipsis-v"></i>
+            </button>
+
+            <div
+              v-if="openCardMenuId === String(conversation.id)"
+              class="conversation-card__menu"
+              @click.stop
+            >
+              <button
+                v-if="!isConversationPinned(conversation)"
+                type="button"
+                class="conversation-card__menu-item"
+                @click="pinCard(conversation)"
+              >
+                <i class="fas fa-thumbtack"></i> Закрепить вверху
+              </button>
+              <button
+                v-else
+                type="button"
+                class="conversation-card__menu-item"
+                @click="unpinCard(conversation)"
+              >
+                <i class="fas fa-thumbtack" style="transform:rotate(45deg)"></i> Открепить
+              </button>
+              <button
+                v-if="!isConversationMuted(conversation)"
+                type="button"
+                class="conversation-card__menu-item"
+                @click="muteCardForever(conversation)"
+              >
+                <i class="fas fa-bell-slash"></i> Беззвучный
+              </button>
+              <button
+                v-else
+                type="button"
+                class="conversation-card__menu-item"
+                @click="unmuteCard(conversation)"
+              >
+                <i class="fas fa-bell"></i> Включить звук
+              </button>
+              <button
+                type="button"
+                class="conversation-card__menu-item"
+                @click="archiveCard(conversation)"
+              >
+                <i class="fas fa-archive"></i> Скрыть из списка
+              </button>
+            </div>
+          </div>
 
           <div v-if="!filteredFlatConversations.length && !loading" class="messenger-sidebar__empty">
             <i class="fas" :class="sidebarSearch ? 'fa-search' : 'fa-inbox'"></i>
@@ -127,10 +284,29 @@
         </button>
       </aside>
 
-      <section class="messenger-thread">
+      <section
+        class="messenger-thread"
+        :class="{ 'is-drop-target': composerDragOver }"
+        @dragenter.prevent="onComposerDragEnter"
+        @dragover.prevent="onComposerDragOver"
+        @dragleave.prevent="onComposerDragLeave"
+        @drop.prevent="onComposerDrop"
+      >
+        <div v-if="composerDragOver" class="messenger-thread__drop-overlay">
+          <div class="messenger-thread__drop-card">
+            <i class="fas fa-cloud-upload-alt"></i>
+            <span>Бросьте файлы — добавим к сообщению</span>
+          </div>
+        </div>
         <header v-if="activeConversation" class="messenger-thread__header">
           <div class="thread-title">
             <div class="thread-title__avatar" :class="conversationAvatarClass(activeConversation)" :style="threadAvatarStyle">
+              <span
+                v-if="activeConversation.type === 'direct' && conversationPresenceStatus(activeConversation) !== 'offline'"
+                class="presence-dot presence-dot--lg"
+                :class="'presence-dot--' + conversationPresenceStatus(activeConversation)"
+                :title="conversationPresenceStatus(activeConversation) === 'online' ? 'Сейчас в сети' : 'Был(а) недавно'"
+              ></span>
               <template v-if="activeConversation.type === 'direct'">
                 <img
                   v-if="getConversationUserAvatarUrl(activeConversation) && !isAvatarBroken(getConversationUserAvatarUrl(activeConversation))"
@@ -147,7 +323,13 @@
             </div>
             <div class="thread-title__content">
               <strong>{{ activeConversation.title }}</strong>
-              <span>{{ activeConversation.description || subtitleText }}</span>
+              <!-- Phase C.1: typing indicator выводится поверх subtitle.
+                   typingUsers — массив {user_id, user_name, at} от бэкенда. -->
+              <span v-if="typingUsers.length" class="thread-title__typing">
+                {{ typingHumanText }}
+                <span class="thread-title__typing-dots"><span></span><span></span><span></span></span>
+              </span>
+              <span v-else>{{ activeConversation.description || subtitleText }}</span>
             </div>
           </div>
 
@@ -175,8 +357,17 @@
         <div v-if="messageSearchOpen" class="messenger-thread__searchbar">
           <label class="messenger-thread__searchbox">
             <i class="fas fa-search"></i>
-            <input v-model="messageSearch" type="text" placeholder="Поиск">
+            <input v-model="messageSearch" type="text" placeholder="Поиск" autofocus>
           </label>
+
+          <span
+            v-if="messageSearch.trim()"
+            class="messenger-thread__search-meta"
+            :class="{ 'is-empty': !visibleMessages.length }"
+          >
+            <template v-if="visibleMessages.length">Найдено: {{ visibleMessages.length }}</template>
+            <template v-else>Ничего не найдено</template>
+          </span>
 
           <div class="messenger-thread__search-actions">
             <button type="button" class="messenger-icon-btn" title="Очистить" :disabled="!messageSearch" @click="messageSearch = ''">
@@ -205,16 +396,33 @@
                 <span>{{ item.label }}</span>
               </div>
 
+              <div
+                v-else-if="item.type === 'unread'"
+                class="messenger-thread__unread-divider"
+              >
+                <span>Новые сообщения</span>
+              </div>
+
               <article
                 v-else
                 :id="`message-${item.message.id}`"
                 class="message-row"
-                :class="{ 'is-own': isOwn(item.message), 'is-editing': editingId === item.message.id }"
+                :class="{
+                  'is-own': isOwn(item.message),
+                  'is-editing': editingId === item.message.id,
+                  'is-group-first': item.isFirstFromAuthor,
+                  'is-group-last': item.isLastFromAuthor,
+                  'is-group-mid': !item.isFirstFromAuthor && !item.isLastFromAuthor,
+                  'is-highlighted': highlightedMessageId === String(item.message.id),
+                }"
                 @mouseenter="hoveredMessageId = item.message.id"
                 @mouseleave="hoveredMessageId = null"
               >
+                <!-- Аватар: только на ПЕРВОМ сообщении в группе у не-меня.
+                     В середине группы вместо аватара — пустой слот для
+                     сохранения отступа (см. CSS .message-row__avatar-placeholder). -->
                 <div
-                  v-if="!isOwn(item.message)"
+                  v-if="!isOwn(item.message) && item.isFirstFromAuthor"
                   class="message-row__avatar"
                   :style="getMessageAvatarUrl(item.message) ? null : getAvatarStyle(getMessageAuthor(item.message), 'user')"
                 >
@@ -227,10 +435,15 @@
                   >
                   <template v-else>{{ getMessageInitial(item.message) }}</template>
                 </div>
+                <div
+                  v-else-if="!isOwn(item.message)"
+                  class="message-row__avatar-placeholder"
+                  aria-hidden="true"
+                ></div>
 
                 <div class="message-bubble" :class="{ 'is-deleted': item.message.is_deleted }">
                   <div
-                    v-if="!isOwn(item.message) && activeConversation && activeConversation.type !== 'direct' && !item.message.is_deleted"
+                    v-if="!isOwn(item.message) && item.isFirstFromAuthor && activeConversation && activeConversation.type !== 'direct' && !item.message.is_deleted"
                     class="message-bubble__author"
                     :style="{ color: getAuthorColor(getMessageAuthor(item.message)) }"
                   >
@@ -278,6 +491,35 @@
                       </button>
                     </div>
 
+                    <div v-if="messageVideoAttachments(item.message).length" class="message-bubble__video-grid">
+                      <video
+                        v-for="file in messageVideoAttachments(item.message)"
+                        :key="`video:${file.path || file.name}`"
+                        :src="file.download_url"
+                        controls
+                        preload="metadata"
+                        playsinline
+                        class="message-video"
+                      ></video>
+                    </div>
+
+                    <!-- Phase D.2 — голосовые сообщения / любое audio/* -->
+                    <div v-if="messageAudioAttachments(item.message).length" class="message-bubble__audio-list">
+                      <div
+                        v-for="file in messageAudioAttachments(item.message)"
+                        :key="`audio:${file.path || file.name}`"
+                        class="message-audio"
+                      >
+                        <i class="fas fa-microphone"></i>
+                        <audio
+                          :src="file.download_url"
+                          controls
+                          preload="metadata"
+                          class="message-audio__player"
+                        ></audio>
+                      </div>
+                    </div>
+
                     <div v-if="messageFileAttachments(item.message).length" class="message-bubble__attachments">
                       <div v-for="file in messageFileAttachments(item.message)" :key="file.path || file.name" class="message-file">
                         <button type="button" class="message-file__icon" :title="file.name || 'Файл'" @click="downloadAttachment(file)">
@@ -290,7 +532,26 @@
                       </div>
                     </div>
 
-                    <p v-if="item.message.body" class="message-bubble__text">{{ item.message.body }}</p>
+                    <p v-if="item.message.body" class="message-bubble__text">
+                      <!-- Phase D.3: @-меншены рендерятся как ссылки/чипы.
+                           renderMessageBody возвращает массив сегментов:
+                           text → обычный текст, mention → router-link
+                           если есть href, иначе span. -->
+                      <template v-for="(seg, sidx) in renderMessageBody(item.message.body, item.message.mentions)" :key="`seg-${item.message.id}-${sidx}`">
+                        <router-link
+                          v-if="seg.type === 'mention' && seg.href"
+                          :to="seg.href"
+                          class="message-mention"
+                          :data-kind="seg.kind"
+                        >@{{ seg.label }}</router-link>
+                        <span
+                          v-else-if="seg.type === 'mention'"
+                          class="message-mention message-mention--inert"
+                          :data-kind="seg.kind"
+                        >@{{ seg.label }}</span>
+                        <template v-else>{{ seg.value }}</template>
+                      </template>
+                    </p>
 
                     <div v-if="extractMessageLinks(item.message).length" class="message-bubble__links">
                       <a
@@ -310,11 +571,68 @@
                   <span class="message-bubble__meta">
                     <span v-if="item.message.edited_at" class="message-bubble__edited">ред.</span>
                     <span class="message-bubble__time">{{ formatMessageTime(item.message.created_at) }}</span>
-                    <i v-if="isOwn(item.message) && !item.message.is_deleted" class="fas fa-check-double message-bubble__ticks"></i>
+                    <!-- Phase B.2: ✓ delivered / ✓✓ read.
+                         Логика: ticks показываются на моих сообщениях.
+                         Для DM сравниваем created_at сообщения с
+                         peer_last_read_at собеседника:
+                           created_at <= peer_last_read_at → ✓✓ (read)
+                           иначе → ✓ (delivered)
+                         Для group/global Stage 2 ticks → всегда ✓ (read
+                         receipts per N участников — отдельная задача). -->
+                    <template v-if="isOwn(item.message) && !item.message.is_deleted">
+                      <i
+                        v-if="isMessageRead(item.message)"
+                        class="fas fa-check-double message-bubble__ticks message-bubble__ticks--read"
+                        title="Прочитано"
+                      ></i>
+                      <i
+                        v-else
+                        class="fas fa-check message-bubble__ticks"
+                        title="Доставлено"
+                      ></i>
+                    </template>
                   </span>
+
+                  <!-- Phase B.3: уже поставленные реакции, click → toggle. -->
+                  <div
+                    v-if="(item.message.reactions || []).length && !item.message.is_deleted"
+                    class="message-bubble__reactions"
+                  >
+                    <button
+                      v-for="r in item.message.reactions"
+                      :key="r.emoji"
+                      type="button"
+                      class="message-bubble__reaction"
+                      :class="{ 'is-mine': r.reacted_by_me }"
+                      :title="`${r.count} ${r.reacted_by_me ? '(включая вас)' : ''}`"
+                      @click="toggleMessageReaction(item.message.id, r.emoji)"
+                    >
+                      <span class="message-bubble__reaction-emoji">{{ r.emoji }}</span>
+                      <span class="message-bubble__reaction-count">{{ r.count }}</span>
+                    </button>
+                  </div>
+
+                  <!-- Phase B.3: мини-пикер эмодзи поверх баббла. -->
+                  <div
+                    v-if="reactionPickerOpenFor === String(item.message.id)"
+                    class="message-bubble__reaction-picker"
+                    @click.stop
+                  >
+                    <button
+                      v-for="emoji in REACTION_PRESETS"
+                      :key="emoji"
+                      type="button"
+                      class="message-bubble__reaction-picker-item"
+                      :title="`Реагировать ${emoji}`"
+                      @click="applyReaction(item.message.id, emoji)"
+                    >{{ emoji }}</button>
+                  </div>
                 </div>
 
                 <div v-if="messageActionsVisible(item.message)" class="message-row__actions">
+                  <button type="button" title="Реакция" @click="openReactionPicker(item.message)">
+                    <i class="far fa-smile"></i>
+                  </button>
                   <button type="button" title="Ответить" @click="replyToMessage(item.message)">
                     <i class="fas fa-reply"></i>
                   </button>
@@ -423,8 +741,42 @@
                   :placeholder="isEditMode ? 'Измените сообщение...' : 'Сообщение'"
                   @input="onComposerInput"
                   @paste="onComposerPaste"
+                  @keydown="onComposerKeydownMention"
                   @keydown.enter.exact.prevent="submitComposer"
                 ></textarea>
+
+                <!-- Phase B.4: @-mention autocomplete dropdown. -->
+                <div
+                  v-if="mentionAutoOpen && mentionAutoResults.length"
+                  class="messenger-composer__mention-auto"
+                  @mousedown.prevent
+                >
+                  <button
+                    v-for="(item, idx) in mentionAutoResults"
+                    :key="`${item.kind}:${item.id}`"
+                    type="button"
+                    class="messenger-composer__mention-auto-item"
+                    :class="{ 'is-active': idx === mentionAutoActiveIdx }"
+                    @click="pickMentionAutoItem(item)"
+                    @mouseenter="mentionAutoActiveIdx = idx"
+                  >
+                    <span class="mention-auto__kind" :data-kind="item.kind">
+                      <i
+                        :class="
+                          item.kind === 'user'
+                            ? 'fas fa-user'
+                            : item.kind === 'deal'
+                              ? 'fas fa-briefcase'
+                              : 'fas fa-tasks'
+                        "
+                      ></i>
+                    </span>
+                    <span class="mention-auto__copy">
+                      <strong>{{ item.label }}</strong>
+                      <small v-if="item.sublabel">{{ item.sublabel }}</small>
+                    </span>
+                  </button>
+                </div>
               </div>
 
               <button
@@ -451,6 +803,31 @@
                 @click="insertEmoji"
               >
                 <i class="far fa-smile"></i>
+              </button>
+              <!-- Phase D.2 — кнопка записи голосового сообщения. -->
+              <button
+                type="button"
+                class="messenger-composer__icon"
+                :class="{ 'is-recording': isRecording }"
+                :title="isRecording ? 'Остановить запись' : 'Голосовое сообщение'"
+                @click="isRecording ? stopRecording() : startRecording()"
+              >
+                <i class="fas" :class="isRecording ? 'fa-stop' : 'fa-microphone'"></i>
+              </button>
+            </div>
+
+            <!-- Phase D.2 — индикатор активной записи (внутри composer). -->
+            <div v-if="isRecording" class="messenger-composer__recording">
+              <span class="messenger-composer__recording-dot"></span>
+              <span class="messenger-composer__recording-time">{{ recordingDurationLabel }}</span>
+              <span class="messenger-composer__recording-hint">Запись… отпустите Stop, чтобы прикрепить</span>
+              <button
+                type="button"
+                class="messenger-composer__recording-cancel"
+                title="Отменить запись"
+                @click="cancelRecording"
+              >
+                <i class="fas fa-times"></i>
               </button>
             </div>
 
@@ -573,18 +950,49 @@
           </section>
 
           <section class="detail-section">
+            <button type="button" class="detail-section__toggle" @click="toggleSection('media')">
+              <span><i class="fas fa-photo-film"></i> Медиа<small v-if="mediaItems.length"> · {{ mediaItems.length }}</small></span>
+              <i class="fas" :class="detailSections.media ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+            </button>
+            <div v-if="detailSections.media" class="detail-section__body">
+              <div v-if="mediaItems.length" class="detail-media-grid">
+                <button
+                  v-for="item in mediaItems"
+                  :key="item.key"
+                  type="button"
+                  class="detail-media"
+                  :title="item.name || 'Медиа'"
+                  @click="isInlineVideo(item) ? downloadAttachment(item) : openImageViewer(item, mediaItems)"
+                >
+                  <img
+                    v-if="isInlineImage(item) && item.download_url"
+                    :src="item.download_url"
+                    :alt="item.name || 'Изображение'"
+                    loading="lazy"
+                    class="detail-media__img"
+                  >
+                  <span v-else-if="isInlineVideo(item)" class="detail-media__video">
+                    <i class="fas fa-play"></i>
+                  </span>
+                </button>
+              </div>
+              <div v-else class="detail-section__empty">Медиа пока нет</div>
+            </div>
+          </section>
+
+          <section class="detail-section">
             <button type="button" class="detail-section__toggle" @click="toggleSection('files')">
-              <span><i class="fas fa-paperclip"></i> Файлы</span>
+              <span><i class="fas fa-paperclip"></i> Файлы<small v-if="documentItems.length"> · {{ documentItems.length }}</small></span>
               <i class="fas" :class="detailSections.files ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
             </button>
             <div v-if="detailSections.files" class="detail-section__body">
-              <div v-if="files.length" class="detail-file-list">
+              <div v-if="documentItems.length" class="detail-file-list">
                 <button
-                  v-for="file in files"
+                  v-for="file in documentItems"
                   :key="file.key"
                   type="button"
                   class="detail-file"
-                  @click="isInlineImage(file) ? openImageViewer(file, files) : downloadAttachment(file)"
+                  @click="downloadAttachment(file)"
                 >
                   <span class="detail-file__icon"><i class="fas fa-paperclip"></i></span>
                   <span class="detail-file__body">
@@ -642,7 +1050,7 @@
               <label class="messenger-field">
                 <span>Тип</span>
                 <select v-model="conversationForm.type" class="form-control">
-                  <option value="direct">Личный чат</option>
+                  <option value="direct">Написать коллеге</option>
                   <option value="group">Группа</option>
                   <option value="channel">Канал</option>
                 </select>
@@ -660,14 +1068,48 @@
               </label>
             </template>
 
+            <!-- Stage 1 implicit DM: searchable users (любой активный
+                 юзер, не только «без чата»). Помечаем «уже есть чат» —
+                 клик переключает на существующий, а не плодит дубль. -->
             <template v-if="!renameMode && conversationForm.type === 'direct'">
               <label class="messenger-field">
-                <span>Пользователь</span>
-                <select v-model="conversationForm.directUserId" class="form-control">
-                  <option value="">Выберите пользователя</option>
-                  <option v-for="user in availableDirectUsers" :key="user.id" :value="user.id">{{ user.full_name || user.email }}</option>
-                </select>
+                <span>Кому написать</span>
+                <input
+                  v-model="writeColleagueSearch"
+                  class="form-control"
+                  type="text"
+                  placeholder="Поиск по имени или email…"
+                  @keydown.esc.stop="writeColleagueSearch = ''"
+                >
               </label>
+              <div class="messenger-write-list">
+                <button
+                  v-for="user in filteredSearchableUsers"
+                  :key="user.id"
+                  type="button"
+                  class="messenger-write-row"
+                  @click="pickColleagueAndOpen(user)"
+                >
+                  <UiAvatar
+                    :name="user.full_name || user.email || ''"
+                    :src="user.avatar_url || null"
+                    size="sm"
+                  />
+                  <span class="messenger-write-row__copy">
+                    <strong>{{ user.full_name || user.email || user.id }}</strong>
+                    <small>
+                      <template v-if="user.has_dm"><i class="fas fa-comment-dots"></i> Уже есть чат</template>
+                      <template v-else-if="user.email">{{ user.email }}</template>
+                    </small>
+                  </span>
+                </button>
+                <div v-if="loadingSearchableUsers && !filteredSearchableUsers.length" class="messenger-write-empty">
+                  Загрузка…
+                </div>
+                <div v-else-if="!filteredSearchableUsers.length" class="messenger-write-empty">
+                  {{ writeColleagueSearch ? 'Никого не нашли' : 'Нет доступных коллег' }}
+                </div>
+              </div>
             </template>
 
             <template v-if="!renameMode && conversationForm.type !== 'direct'">
@@ -684,7 +1126,13 @@
           </div>
           <div class="messenger-dialog__actions">
             <button type="button" class="btn btn-outline-secondary btn-sm" @click="closeConversationModal">Отмена</button>
-            <button type="button" class="btn btn-primary btn-sm" :disabled="savingConversation" @click="submitConversationModal">Сохранить</button>
+            <button
+              v-if="renameMode || conversationForm.type !== 'direct'"
+              type="button"
+              class="btn btn-primary btn-sm"
+              :disabled="savingConversation"
+              @click="submitConversationModal"
+            >Сохранить</button>
           </div>
         </div>
       </div>
@@ -772,6 +1220,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useMessenger } from '../composables/useMessenger'
 import { useToast } from '../composables/useToast'
 import { normalizeAvatarUrl } from '../utils/avatar'
+import UiAvatar from '../components/ui/UiAvatar.vue'
 
 const URL_RE = /https?:\/\/[^\s<>"']+/gi
 const INLINE_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
@@ -779,6 +1228,7 @@ const INLINE_IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp', '.gif']
 
 export default {
   name: 'Messenger',
+  components: { UiAvatar },
   setup() {
     const route = useRoute()
     const router = useRouter()
@@ -797,7 +1247,7 @@ export default {
     const viewportWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 0)
     const autoScrollPending = ref(true)
     const userNearBottom = ref(true)
-    const detailSections = ref({ info: true, members: true, files: true, links: false })
+    const detailSections = ref({ info: true, members: true, media: true, files: true, links: false })
     const confirmModalOpen = ref(false)
     const confirmTitle = ref('')
     const confirmText = ref('')
@@ -846,6 +1296,29 @@ export default {
       isEditMode,
       canManageMembers,
       isConversationUnread,
+      conversationUnreadCount,
+      isConversationMuted,
+      isConversationArchived,
+      isConversationPinned,
+      searchableUsers,
+      loadingSearchableUsers,
+      loadSearchableUsers,
+      archiveConversationForMe,
+      muteConversationForever,
+      unmuteConversation,
+      pinConversation,
+      unpinConversation,
+      toggleMessageReaction,
+      messageSearchQuery,
+      messageSearchResults,
+      messageSearchResultsByChat,
+      messageSearchLoading,
+      messageSearchPanelOpen,
+      runMessageSearch,
+      openMessageSearchPanel,
+      closeMessageSearchPanel,
+      typingUsers,
+      noteUserTyping,
       isOwn,
       canEdit,
       formatDateTime,
@@ -879,6 +1352,72 @@ export default {
       unpinMessage,
       downloadAttachment
     } = useMessenger()
+
+    // Stage 1 implicit DM: state для «написать коллеге» + per-card menu.
+    const writeColleagueSearch = ref('')
+    const openCardMenuId = ref(null)
+
+    // Phase A.2: drag-and-drop файлов в чат. dragDepth — стандартный
+    // патт для устранения мерцания overlay (dragenter/dragleave
+    // у дочерних элементов триггерит лишние события).
+    const composerDragOver = ref(false)
+    let _composerDragDepth = 0
+
+    const onComposerDragEnter = (event) => {
+      // На простой text-drag не реагируем.
+      if (!event?.dataTransfer?.types || !Array.from(event.dataTransfer.types).includes('Files')) {
+        return
+      }
+      _composerDragDepth += 1
+      composerDragOver.value = true
+    }
+
+    const onComposerDragOver = (event) => {
+      // dropEffect=copy визуально показывает «добавим к сообщению».
+      if (event?.dataTransfer && Array.from(event.dataTransfer.types || []).includes('Files')) {
+        event.dataTransfer.dropEffect = 'copy'
+        composerDragOver.value = true
+      }
+    }
+
+    const onComposerDragLeave = () => {
+      _composerDragDepth = Math.max(0, _composerDragDepth - 1)
+      if (_composerDragDepth === 0) {
+        composerDragOver.value = false
+      }
+    }
+
+    const onComposerDrop = (event) => {
+      _composerDragDepth = 0
+      composerDragOver.value = false
+      const files = Array.from(event?.dataTransfer?.files || [])
+      if (!files.length) return
+      // Используем тот же канал, что и file-picker / paste — это
+      // делает проверки размера/типа единообразными.
+      appendPendingFiles(files)
+    }
+
+    // Phase A.3: разделяем files на «Медиа» (картинки + видео,
+    // отображаются grid'ом превью) и «Файлы» (остальное, list-карточки).
+    // files уже flattened из useMessenger — здесь только split.
+    const mediaItems = computed(() =>
+      (files.value || []).filter((file) => isInlineImage(file) || isInlineVideo(file))
+    )
+    const documentItems = computed(() =>
+      (files.value || []).filter((file) => !isInlineImage(file) && !isInlineVideo(file))
+    )
+
+    const filteredSearchableUsers = computed(() => {
+      const q = String(writeColleagueSearch.value || '').trim().toLowerCase()
+      const list = searchableUsers.value || []
+      if (!q) return list.slice(0, 60)
+      return list
+        .filter((u) => {
+          const hay = `${u.full_name || ''} ${u.email || ''}`.toLowerCase()
+          return hay.includes(q)
+        })
+        .slice(0, 60)
+    })
 
     const isCompactMessenger = computed(() => viewportWidth.value <= 1180)
     const activeMobilePane = computed(() => {
@@ -1016,8 +1555,109 @@ export default {
       return INLINE_IMAGE_EXTENSIONS.some((ext) => name.endsWith(ext))
     }
 
+    // Phase A.1 — inline-видео. mp4/webm играем прямо в бабблe, не
+    // выкидываем как download-карточку. preload="metadata" грузит
+    // только заголовки до play — никакого автотрафика.
+    //
+    // MIME имеет приоритет над расширением. Phase D.2 voice messages
+    // используют контейнер `.webm`/`.ogg` — но с MIME audio/webm, и
+    // НЕ должны попадать сюда. Поэтому если content_type явно audio/* —
+    // возвращаем false до проверки расширения.
+    const isInlineVideo = (file = {}) => {
+      const contentType = String(file.content_type || file.type || '').toLowerCase()
+      if (contentType.startsWith('video/')) return true
+      if (contentType.startsWith('audio/')) return false
+      const name = String(file.name || '').toLowerCase()
+      return ['.mp4', '.webm', '.ogg', '.mov', '.m4v'].some((ext) => name.endsWith(ext))
+    }
+
+    // Phase D.2 — inline-аудио. Голосовые сообщения от MediaRecorder
+    // приходят как audio/webm или audio/mp4. Рендерим встроенный
+    // <audio controls preload="metadata"> вместо download-карточки.
+    // Распознавание по MIME (надёжно) + расширению (страховка для
+    // случаев когда MIME отсутствует; .webm/.ogg ambiguous, но если
+    // браузер не выставил MIME — не угадаешь).
+    const isInlineAudio = (file = {}) => {
+      const contentType = String(file.content_type || file.type || '').toLowerCase()
+      if (contentType.startsWith('audio/')) return true
+      if (contentType.startsWith('video/')) return false
+      const name = String(file.name || '').toLowerCase()
+      return ['.mp3', '.wav', '.oga', '.m4a', '.weba', '.opus', '.aac'].some((ext) => name.endsWith(ext))
+    }
+
+    // Phase D.3 — рендер @-mentions в теле сообщения.
+    // На вход: body + mentions (расширенный формат: массив объектов
+    // {kind, id, label, href} ИЛИ массив строк-user_id для legacy).
+    // На выход: массив сегментов [{type:'text',value} | {type:'mention',label,href}],
+    // которые шаблон отрендерит через v-for + <router-link>.
+    //
+    // Алгоритм: для каждого расширенного mention'а ищем в body первое
+    // вхождение `@label` (как substring) — если нашли, разрезаем body
+    // на куски и помечаем mention. Жадно слева-направо. Если label
+    // не найден (например, юзер вручную поправил текст) — пропускаем.
+    // Legacy string-mentions (только user_id) не рендерим ссылкой —
+    // у нас нет label, оставляем body как plain text.
+    const renderMessageBody = (body, mentions) => {
+      const text = String(body || '')
+      if (!text) return []
+      const extMentions = (mentions || [])
+        .filter((m) => m && typeof m === 'object' && m.label)
+        .map((m) => ({ ...m, label: String(m.label) }))
+      if (!extMentions.length) return [{ type: 'text', value: text }]
+
+      const segments = []
+      let rest = text
+      let consumed = 0
+      // Делаем копию списка, чтобы каждый mention был использован
+      // максимум один раз (защита от дублей одного и того же тега).
+      const pool = extMentions.slice()
+
+      while (pool.length) {
+        // Ищем самое раннее вхождение любого `@label` из пула.
+        let bestIdx = -1
+        let bestPick = -1
+        for (let i = 0; i < pool.length; i += 1) {
+          const needle = `@${pool[i].label}`
+          const at = rest.indexOf(needle)
+          if (at >= 0 && (bestIdx < 0 || at < bestIdx)) {
+            bestIdx = at
+            bestPick = i
+          }
+        }
+        if (bestPick < 0) break
+        const m = pool[bestPick]
+        const needle = `@${m.label}`
+        // Текст до меншена
+        if (bestIdx > 0) {
+          segments.push({ type: 'text', value: rest.slice(0, bestIdx) })
+        }
+        // Defensive: старые сообщения (отправленные до фикса) могут иметь
+        // href = /deals/<id>, а такого роутера в этом CRM нет — сделки
+        // живут как ProjectDetail по /projects/<id>. Переписываем на лету.
+        let href = m.href || ''
+        if (href.startsWith('/deals/')) href = '/projects/' + href.slice('/deals/'.length)
+        segments.push({
+          type: 'mention',
+          label: m.label,
+          href,
+          kind: m.kind || '',
+          id: m.id || '',
+        })
+        rest = rest.slice(bestIdx + needle.length)
+        consumed += bestIdx + needle.length
+        pool.splice(bestPick, 1)
+      }
+      if (rest) segments.push({ type: 'text', value: rest })
+      return segments
+    }
+
     const messageImageAttachments = (message) => (message?.attachments || []).filter((file) => isInlineImage(file) && file.download_url)
-    const messageFileAttachments = (message) => (message?.attachments || []).filter((file) => !isInlineImage(file) || !file.download_url)
+    const messageVideoAttachments = (message) => (message?.attachments || []).filter((file) => isInlineVideo(file) && file.download_url)
+    const messageAudioAttachments = (message) => (message?.attachments || []).filter((file) => isInlineAudio(file) && file.download_url)
+    // Файлы — то, что НЕ inline-картинка, НЕ видео, НЕ аудио.
+    const messageFileAttachments = (message) => (message?.attachments || []).filter(
+      (file) => (!isInlineImage(file) && !isInlineVideo(file) && !isInlineAudio(file)) || !file.download_url
+    )
 
     const openImageViewer = (file, sourceFiles = []) => {
       const mediaItems = (sourceFiles || []).filter((item) => isInlineImage(item) && item.download_url)
@@ -1060,18 +1700,78 @@ export default {
       })
     })
 
+    const GROUP_GAP_MS = 5 * 60 * 1000 // 5 минут — порог группировки соседних сообщений одного автора
+
     const messageFeed = computed(() => {
       const feed = []
       let lastDay = ''
-      visibleMessages.value.forEach((message) => {
+      let lastAuthor = null
+      let lastTime = 0
+      const visible = visibleMessages.value
+
+      // Stage 1: last_read_at приходит на activeConversation (per-user
+      // state). Ищем первое сообщение от ДРУГОГО юзера, пришедшее
+      // после моего last_read_at — туда поставим разделитель
+      // «Новые сообщения». Если у меня нет last_read_at (первое
+      // открытие) — анкор на первом не-моём сообщении (всё новое).
+      const myId = String(activeUser.value?.id || '')
+      const lastReadAt = activeConversation.value?.last_read_at
+      let unreadAnchorIdx = -1
+      const lastReadMs = lastReadAt ? new Date(lastReadAt).getTime() : 0
+      for (let i = 0; i < visible.length; i += 1) {
+        const m = visible[i]
+        if (!m || !m.created_at) continue
+        if (String(m.user_id || '') === myId) continue
+        const ts = new Date(m.created_at).getTime()
+        if (!lastReadMs || ts > lastReadMs) {
+          unreadAnchorIdx = i
+          break
+        }
+      }
+
+      for (let i = 0; i < visible.length; i += 1) {
+        const message = visible[i]
         const date = message.created_at ? new Date(message.created_at) : null
         const dayKey = date ? date.toISOString().slice(0, 10) : 'unknown'
         if (dayKey !== lastDay) {
           lastDay = dayKey
+          lastAuthor = null
+          lastTime = 0
           feed.push({ type: 'day', key: `day-${dayKey}`, label: formatDayChip(message.created_at) })
         }
-        feed.push({ type: 'message', key: message.id, message })
-      })
+
+        if (i === unreadAnchorIdx) {
+          feed.push({ type: 'unread', key: `unread-${message.id}` })
+        }
+
+        const author = String(message.user_id || '')
+        const time = date ? date.getTime() : 0
+
+        // Группировка: сообщение «первое в группе», если автор сменился
+        // или прошло >5 мин с предыдущего. «Последнее в группе» —
+        // если у следующего другой автор / >5мин позже / смена дня.
+        const isFirstFromAuthor = author !== lastAuthor || (time - lastTime) > GROUP_GAP_MS
+        const next = visible[i + 1]
+        const nextDate = next?.created_at ? new Date(next.created_at) : null
+        const nextDayKey = nextDate ? nextDate.toISOString().slice(0, 10) : ''
+        const nextSameAuthor = next
+          && String(next.user_id || '') === author
+          && nextDate && date
+          && (nextDate.getTime() - time) <= GROUP_GAP_MS
+          && nextDayKey === dayKey
+        const isLastFromAuthor = !nextSameAuthor
+
+        feed.push({
+          type: 'message',
+          key: message.id,
+          message,
+          isFirstFromAuthor,
+          isLastFromAuthor,
+        })
+
+        lastAuthor = author
+        lastTime = time
+      }
       return feed
     })
 
@@ -1238,6 +1938,75 @@ export default {
       if (userNearBottom.value) await scrollThreadToBottom(true)
     }
 
+    // Phase D.1 — глобальный поиск по сообщениям (sidebar panel).
+    // Debounce 300мс: пока юзер печатает — таймер сбрасывается, запрос
+    // уходит только после паузы. Меньше нагрузки на бэк и меньше
+    // мерцания в UI.
+    let _globalSearchDebounce = null
+    const toggleGlobalMessageSearch = () => {
+      if (messageSearchPanelOpen.value) {
+        closeMessageSearchPanel()
+      } else {
+        openMessageSearchPanel()
+      }
+    }
+
+    const onGlobalSearchInput = (value) => {
+      const next = String(value || '')
+      messageSearchQuery.value = next
+      if (_globalSearchDebounce) clearTimeout(_globalSearchDebounce)
+      // Если пусто — не зовём backend; синхронно очищаем.
+      if (!next.trim()) {
+        runMessageSearch('')
+        return
+      }
+      _globalSearchDebounce = setTimeout(() => {
+        runMessageSearch(next)
+        _globalSearchDebounce = null
+      }, 300)
+    }
+
+    // Иконка для группы результатов по chat-типу.
+    const searchResultGroupIcon = (group) => {
+      const t = String(group?.conversation_type || '')
+      if (t === 'direct') return 'fa-user'
+      if (t === 'channel') return 'fa-bullhorn'
+      if (t === 'global') return 'fa-shopping-bag'
+      return 'fa-users'
+    }
+
+    // Клик по результату: открываем chat, ждём загрузки сообщений,
+    // прыгаем на сообщение с highlight. Если найдено в другом чате —
+    // подгружаем; если в текущем — просто скроллим.
+    const openSearchResult = async (item) => {
+      if (!item?.conversation_id || !item?.message_id) return
+      const targetCid = String(item.conversation_id)
+      const targetMid = String(item.message_id)
+      // Закрываем панель — UX: result выбран, юзер хочет читать чат.
+      closeMessageSearchPanel()
+      if (String(activeConversationId.value) !== targetCid) {
+        await openConversation(targetCid)
+      }
+      // Сообщение могло уйти за пределы первой страницы listMessages
+      // (load 500). Сейчас — best-effort scroll. Если позже на больших
+      // чатах появятся «пропуски» — добавим явный fetch around messageId.
+      await nextTick()
+      // Дать DOM время отрисоваться: scrollToMessage сам делает
+      // getElementById, если узла нет — тихо вернётся; в этом случае
+      // пробуем ещё раз через 300мс.
+      let attempts = 0
+      const tryScroll = () => {
+        const el = document.getElementById(`message-${targetMid}`)
+        if (el) {
+          scrollToMessage(targetMid)
+          return
+        }
+        attempts += 1
+        if (attempts < 4) setTimeout(tryScroll, 250)
+      }
+      tryScroll()
+    }
+
     const toggleDetails = async () => {
       detailsOpen.value = !detailsOpen.value
       if (isCompactMessenger.value && activeConversation.value) {
@@ -1272,6 +2041,169 @@ export default {
     const triggerFilePicker = () => {
       openFilePicker(fileInput.value)
     }
+
+    // Phase D.2 — голосовые сообщения (MediaRecorder).
+    // Воркфлоу:
+    //   click microphone → запрашиваем getUserMedia({audio})
+    //     ↳ если отказ — toastError, состояние не меняется
+    //     ↳ если ok — стартуем MediaRecorder, тикаем duration
+    //   click stop → останавливаем recorder, audio blob → File →
+    //     appendPendingFiles → юзер видит в pendingFiles + может
+    //     отправить кнопкой send (как обычный аттач)
+    //   click cancel → останавливаем, отбрасываем blob
+    //
+    // Формат: MediaRecorder сам выбирает поддерживаемый container
+    // (Chrome/FF — audio/webm с opus; Safari — audio/mp4 с aac).
+    // Backend принимает любой content_type (existing _store_attachments).
+    const isRecording = ref(false)
+    const recordingDuration = ref(0)  // в секундах, для UI таймера
+    let _mediaRecorder = null
+    let _mediaStream = null
+    let _recordedChunks = []
+    let _durationTimer = null
+    let _recordingCancelled = false
+
+    const _pickAudioMime = () => {
+      // Предпочтительный порядок: opus в webm (лучшее качество/размер),
+      // затем mp4/aac (Safari), затем дефолт MediaRecorder'а.
+      if (typeof MediaRecorder === 'undefined' || !MediaRecorder.isTypeSupported) return ''
+      const candidates = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/ogg;codecs=opus',
+        'audio/mp4',
+      ]
+      for (const mime of candidates) {
+        try {
+          if (MediaRecorder.isTypeSupported(mime)) return mime
+        } catch (e) {
+          // ignore
+        }
+      }
+      return ''
+    }
+
+    const _resetRecorderState = () => {
+      isRecording.value = false
+      recordingDuration.value = 0
+      _recordedChunks = []
+      _recordingCancelled = false
+      if (_durationTimer) {
+        clearInterval(_durationTimer)
+        _durationTimer = null
+      }
+      if (_mediaStream) {
+        try {
+          _mediaStream.getTracks().forEach((t) => t.stop())
+        } catch (e) {
+          // ignore
+        }
+        _mediaStream = null
+      }
+      _mediaRecorder = null
+    }
+
+    const startRecording = async () => {
+      if (isRecording.value) return
+      if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+        toastError('Браузер не поддерживает запись с микрофона')
+        return
+      }
+      if (typeof MediaRecorder === 'undefined') {
+        toastError('Браузер не поддерживает MediaRecorder')
+        return
+      }
+      let stream
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      } catch (err) {
+        // NotAllowedError / NotFoundError — отказ или нет микрофона.
+        toastError('Не удалось получить доступ к микрофону')
+        return
+      }
+      _mediaStream = stream
+      _recordedChunks = []
+      _recordingCancelled = false
+      const mimeType = _pickAudioMime()
+      try {
+        _mediaRecorder = mimeType
+          ? new MediaRecorder(stream, { mimeType })
+          : new MediaRecorder(stream)
+      } catch (err) {
+        toastError('Не удалось запустить запись')
+        _resetRecorderState()
+        return
+      }
+      _mediaRecorder.addEventListener('dataavailable', (event) => {
+        if (event.data && event.data.size > 0) _recordedChunks.push(event.data)
+      })
+      _mediaRecorder.addEventListener('stop', () => {
+        const wasCancelled = _recordingCancelled
+        const chunks = _recordedChunks.slice()
+        const recorderMime = _mediaRecorder?.mimeType || mimeType || 'audio/webm'
+        _resetRecorderState()
+        if (wasCancelled || !chunks.length) return
+        const blob = new Blob(chunks, { type: recorderMime })
+        // Имя: voice_YYYYMMDD_HHMMSS.<ext>
+        const ext = recorderMime.includes('mp4')
+          ? 'm4a'
+          : recorderMime.includes('ogg')
+            ? 'ogg'
+            : 'webm'
+        const ts = new Date()
+        const pad = (n) => String(n).padStart(2, '0')
+        const stamp =
+          `${ts.getFullYear()}${pad(ts.getMonth() + 1)}${pad(ts.getDate())}` +
+          `_${pad(ts.getHours())}${pad(ts.getMinutes())}${pad(ts.getSeconds())}`
+        const file = new File([blob], `voice_${stamp}.${ext}`, { type: recorderMime })
+        appendPendingFiles([file])
+      })
+      _mediaRecorder.start()
+      isRecording.value = true
+      recordingDuration.value = 0
+      // Таймер длительности — на UI отображаем «0:03».
+      _durationTimer = setInterval(() => {
+        recordingDuration.value += 1
+      }, 1000)
+    }
+
+    const stopRecording = () => {
+      if (!isRecording.value || !_mediaRecorder) return
+      try {
+        _mediaRecorder.stop()
+      } catch (e) {
+        _resetRecorderState()
+      }
+    }
+
+    const cancelRecording = () => {
+      if (!isRecording.value || !_mediaRecorder) {
+        _resetRecorderState()
+        return
+      }
+      _recordingCancelled = true
+      try {
+        _mediaRecorder.stop()
+      } catch (e) {
+        _resetRecorderState()
+      }
+    }
+
+    const recordingDurationLabel = computed(() => {
+      const total = recordingDuration.value
+      const m = Math.floor(total / 60)
+      const s = total % 60
+      return `${m}:${String(s).padStart(2, '0')}`
+    })
+
+    // Безопасность: если юзер закрыл вкладку или сменил чат во время
+    // записи — гасим recorder, чтобы микрофон не остался активным.
+    onBeforeUnmount(() => {
+      if (isRecording.value) cancelRecording()
+    })
+    watch(activeConversationId, () => {
+      if (isRecording.value) cancelRecording()
+    })
 
     const submitComposer = async () => {
       if (isEditMode.value) {
@@ -1346,7 +2278,143 @@ export default {
     const openConversationModal = () => {
       renameMode.value = false
       conversationForm.value = { type: 'direct', title: '', description: '', directUserId: '', memberIds: [] }
+      writeColleagueSearch.value = ''
       showConversationModal.value = true
+      // Stage 1: подтягиваем список юзеров для inline-поиска. Ленивая
+      // загрузка — не пытаемся обновить, если список уже есть.
+      if (!searchableUsers.value?.length) {
+        loadSearchableUsers()
+      }
+    }
+
+    // Stage 1: клик по карточке юзера в «написать коллеге» — открываем
+    // существующий DM (если has_dm=true) или создаём новый. Закрываем
+    // модал сразу.
+    const pickColleagueAndOpen = async (user) => {
+      if (!user || !user.id) return
+      try {
+        if (user.has_dm && user.dm_conversation_id) {
+          await selectConversation(user.dm_conversation_id, { silent: true })
+        } else {
+          await createDirectConversation(user.id)
+        }
+      } finally {
+        showConversationModal.value = false
+      }
+    }
+
+    // Per-card actions ----------------------------------------------------
+
+    const toggleCardMenu = (conversation) => {
+      const id = String(conversation?.id || '')
+      if (openCardMenuId.value === id) {
+        openCardMenuId.value = null
+      } else {
+        openCardMenuId.value = id
+      }
+    }
+
+    const closeCardMenuOnDocumentClick = (event) => {
+      const t = event.target
+      if (openCardMenuId.value) {
+        if (!t || !t.closest || (!t.closest('.conversation-card__menu') && !t.closest('.conversation-card__menu-btn'))) {
+          openCardMenuId.value = null
+        }
+      }
+      // Phase B.3: то же самое для reaction-picker.
+      if (reactionPickerOpenFor.value) {
+        if (!t || !t.closest || (!t.closest('.message-bubble__reaction-picker') && !t.closest('.message-row__actions'))) {
+          reactionPickerOpenFor.value = null
+        }
+      }
+    }
+
+    const archiveCard = async (conversation) => {
+      const id = String(conversation?.id || '')
+      if (!id) return
+      openCardMenuId.value = null
+      await archiveConversationForMe(id)
+      toastSuccess('Чат скрыт из списка')
+    }
+
+    const muteCardForever = async (conversation) => {
+      const id = String(conversation?.id || '')
+      if (!id) return
+      openCardMenuId.value = null
+      await muteConversationForever(id)
+    }
+
+    const unmuteCard = async (conversation) => {
+      const id = String(conversation?.id || '')
+      if (!id) return
+      openCardMenuId.value = null
+      await unmuteConversation(id)
+    }
+
+    // Phase C.2: online-status helper.
+    // online: last_seen <  2 минут назад → зелёная точка
+    // recent: 2–10 минут        → жёлтая точка
+    // offline: >10 минут / null → точку не рисуем
+    const presenceStatus = (lastSeenAt) => {
+      if (!lastSeenAt) return 'offline'
+      try {
+        const ageMs = Date.now() - new Date(lastSeenAt).getTime()
+        if (ageMs < 0) return 'online'
+        if (ageMs < 2 * 60 * 1000) return 'online'
+        if (ageMs < 10 * 60 * 1000) return 'recent'
+        return 'offline'
+      } catch (e) {
+        return 'offline'
+      }
+    }
+
+    // Для DM-конвера: статус собеседника. Глобал/группа — null
+    // (групповой presence — отдельная задача Stage E).
+    const conversationPresenceStatus = (conversation) => {
+      if (!conversation || conversation.type !== 'direct') return 'offline'
+      return presenceStatus(conversation.peer_last_seen_at)
+    }
+
+    // Phase C.1: humanized "X печатает..." / "X и Y печатают..." /
+    // "X, Y и ещё 2 печатают...".
+    const typingHumanText = computed(() => {
+      const list = typingUsers.value || []
+      if (!list.length) return ''
+      const names = list.map((u) => u.user_name || 'Кто-то').filter(Boolean)
+      if (!names.length) return 'Печатает…'
+      if (names.length === 1) return `${names[0]} печатает…`
+      if (names.length === 2) return `${names[0]} и ${names[1]} печатают…`
+      return `${names[0]}, ${names[1]} и ещё ${names.length - 2} печатают…`
+    })
+
+    // Phase B.3: emoji reactions presets + picker state.
+    const REACTION_PRESETS = ['👍', '❤️', '😂', '🎉', '🔥', '👏', '😮', '😢']
+    const reactionPickerOpenFor = ref(null)
+
+    const openReactionPicker = (message) => {
+      reactionPickerOpenFor.value = String(message?.id || '')
+    }
+    const closeReactionPicker = () => {
+      reactionPickerOpenFor.value = null
+    }
+    const applyReaction = async (messageId, emoji) => {
+      closeReactionPicker()
+      await toggleMessageReaction(messageId, emoji)
+    }
+
+    // Phase B.1: pin / unpin
+    const pinCard = async (conversation) => {
+      const id = String(conversation?.id || '')
+      if (!id) return
+      openCardMenuId.value = null
+      await pinConversation(id)
+    }
+
+    const unpinCard = async (conversation) => {
+      const id = String(conversation?.id || '')
+      if (!id) return
+      openCardMenuId.value = null
+      await unpinConversation(id)
     }
 
     const openRenameModal = () => {
@@ -1411,8 +2479,140 @@ export default {
       nextTick(syncComposerHeight)
     }
 
+    // Phase B.4 — @-mention autocomplete в composer'е.
+    // При вводе текста проверяем, есть ли активный «@» (символ перед
+    // курсором, за которым идут не-пробельные символы). Если есть —
+    // фетчим /mention-search и показываем dropdown.
+    const mentionAutoOpen = ref(false)
+    const mentionAutoQuery = ref('')
+    const mentionAutoResults = ref([])
+    const mentionAutoStart = ref(-1)   // позиция «@» в тексте
+    const mentionAutoActiveIdx = ref(0) // курсор в результатах (для ↑↓ Enter)
+    let _mentionFetchTimer = null
+
+    const _detectMentionTrigger = () => {
+      const inputEl = composerInputRef.value
+      if (!inputEl) return null
+      const text = composerText.value || ''
+      const caret = inputEl.selectionStart ?? text.length
+      // Найти последний '@' до курсора, у которого слева пробел/начало.
+      let i = caret - 1
+      while (i >= 0) {
+        const ch = text[i]
+        if (ch === '@') {
+          const prev = i > 0 ? text[i - 1] : ''
+          if (i === 0 || /\s/.test(prev)) {
+            return { at: i, query: text.slice(i + 1, caret) }
+          }
+          return null
+        }
+        if (/\s/.test(ch)) return null
+        i -= 1
+      }
+      return null
+    }
+
+    const _fetchMentionResults = async (q) => {
+      if (_mentionFetchTimer) clearTimeout(_mentionFetchTimer)
+      _mentionFetchTimer = setTimeout(async () => {
+        try {
+          const data = await import('../services/api/messenger').then((m) => m.mentionSearch(q))
+          mentionAutoResults.value = Array.isArray(data) ? data : []
+          mentionAutoActiveIdx.value = 0
+        } catch (e) {
+          mentionAutoResults.value = []
+        }
+      }, 180)
+    }
+
     const onComposerInput = () => {
       syncComposerHeight()
+      // Phase C.1: typing signal (debounced 1с в composable).
+      noteUserTyping()
+      const trig = _detectMentionTrigger()
+      if (trig && trig.query.length >= 0) {
+        mentionAutoOpen.value = true
+        mentionAutoStart.value = trig.at
+        mentionAutoQuery.value = trig.query
+        if (trig.query.length >= 1) _fetchMentionResults(trig.query)
+        else mentionAutoResults.value = []
+      } else {
+        mentionAutoOpen.value = false
+        mentionAutoResults.value = []
+        mentionAutoStart.value = -1
+      }
+    }
+
+    const closeMentionAutocomplete = () => {
+      mentionAutoOpen.value = false
+      mentionAutoResults.value = []
+      mentionAutoStart.value = -1
+    }
+
+    const pickMentionAutoItem = (item) => {
+      if (!item || mentionAutoStart.value < 0) {
+        closeMentionAutocomplete()
+        return
+      }
+      const text = composerText.value || ''
+      const start = mentionAutoStart.value
+      // заменяем «@query» на «@label »
+      const inputEl = composerInputRef.value
+      const caret = inputEl?.selectionStart ?? text.length
+      const before = text.slice(0, start)
+      const after = text.slice(caret)
+      const insert = `@${item.label} `
+      composerText.value = `${before}${insert}${after}`
+      // Phase D.3: запоминаем структурированный mention (kind/id/label/href)
+      // в selectedMentions — пойдёт на бэк как объект, renderer сделает
+      // из @label кликабельную ссылку.
+      selectedMentions.value = [
+        ...selectedMentions.value,
+        {
+          kind: item.kind,
+          id: item.id,
+          label: item.label,
+          href: item.href || '',
+          name: item.label, // backward compat: старый renderer ждал .name
+        },
+      ]
+      closeMentionAutocomplete()
+      nextTick(() => {
+        const el = composerInputRef.value
+        if (el && el.focus) {
+          el.focus()
+          const newCaret = before.length + insert.length
+          try { el.setSelectionRange(newCaret, newCaret) } catch (e) { /* ignore */ }
+        }
+      })
+    }
+
+    const onComposerKeydownMention = (event) => {
+      if (!mentionAutoOpen.value || !mentionAutoResults.value.length) return false
+      if (event.key === 'ArrowDown') {
+        event.preventDefault()
+        mentionAutoActiveIdx.value =
+          (mentionAutoActiveIdx.value + 1) % mentionAutoResults.value.length
+        return true
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault()
+        mentionAutoActiveIdx.value =
+          (mentionAutoActiveIdx.value - 1 + mentionAutoResults.value.length) %
+          mentionAutoResults.value.length
+        return true
+      }
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault()
+        pickMentionAutoItem(mentionAutoResults.value[mentionAutoActiveIdx.value])
+        return true
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        closeMentionAutocomplete()
+        return true
+      }
+      return false
     }
 
     const onComposerPaste = (event) => {
@@ -1439,9 +2639,21 @@ export default {
       }
     }
 
+    // Phase A.4 — jump-to-message: после scrollIntoView ставим
+    // highlighted-класс на 2 секунды, чтобы юзер визуально нашёл
+    // прыжок (особенно если контент похожий и target слегка вне поля).
+    let _highlightTimer = null
+    const highlightedMessageId = ref(null)
     const scrollToMessage = (messageId) => {
       const target = document.getElementById(`message-${messageId}`)
-      target?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      if (!target) return
+      target.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      highlightedMessageId.value = String(messageId)
+      if (_highlightTimer) clearTimeout(_highlightTimer)
+      _highlightTimer = setTimeout(() => {
+        highlightedMessageId.value = null
+        _highlightTimer = null
+      }, 2000)
     }
 
     const scrollToPinned = () => {
@@ -1449,6 +2661,22 @@ export default {
     }
 
     const messageActionsVisible = (message) => hoveredMessageId.value === message.id && !message.is_deleted
+
+    // Phase B.2: read-receipt logic.
+    // Возвращает true, если моё сообщение было прочитано собеседником
+    // (в DM-чате). Для group/global сейчас всегда false — нет
+    // peer_last_read_at, ticks деградируют до «доставлено» (✓).
+    const isMessageRead = (message) => {
+      if (!message?.created_at) return false
+      if (activeConversation.value?.type !== 'direct') return false
+      const peerReadAt = activeConversation.value?.peer_last_read_at
+      if (!peerReadAt) return false
+      try {
+        return new Date(peerReadAt).getTime() >= new Date(message.created_at).getTime()
+      } catch (e) {
+        return false
+      }
+    }
 
     const messageSignature = computed(() =>
       messages.value
@@ -1542,11 +2770,13 @@ export default {
       handleViewportResize()
       window.addEventListener('resize', handleViewportResize, { passive: true })
       window.addEventListener('keydown', handleViewerKeydown)
+      document.addEventListener('click', closeCardMenuOnDocumentClick)
     })
 
     onBeforeUnmount(() => {
       window.removeEventListener('resize', handleViewportResize)
       window.removeEventListener('keydown', handleViewerKeydown)
+      document.removeEventListener('click', closeCardMenuOnDocumentClick)
     })
 
     return {
@@ -1572,10 +2802,35 @@ export default {
       isEditMode,
       canManageMembers,
       isConversationUnread,
+      conversationUnreadCount,
+      isConversationMuted,
+      isConversationArchived,
+      isConversationPinned,
+      typingUsers,
+      writeColleagueSearch,
+      loadingSearchableUsers,
+      filteredSearchableUsers,
+      openCardMenuId,
+      composerDragOver,
+      onComposerDragEnter,
+      onComposerDragOver,
+      onComposerDragLeave,
+      onComposerDrop,
+      highlightedMessageId,
+      visibleMessages,
       groupsOpen,
       directOpen,
       messageSearchOpen,
       messageSearch,
+      messageSearchPanelOpen,
+      messageSearchQuery,
+      messageSearchResults,
+      messageSearchResultsByChat,
+      messageSearchLoading,
+      toggleGlobalMessageSearch,
+      onGlobalSearchInput,
+      openSearchResult,
+      searchResultGroupIcon,
       detailsOpen,
       mobilePane,
       activeMobilePane,
@@ -1615,6 +2870,8 @@ export default {
       formatDateTime,
       formatMessageTime,
       formatSize,
+      isMessageRead,
+      toggleMessageReaction,
       refreshAll,
       openConversation,
       openDirectConversation,
@@ -1625,6 +2882,11 @@ export default {
       setMobilePane,
       toggleSection,
       triggerFilePicker,
+      isRecording,
+      recordingDurationLabel,
+      startRecording,
+      stopRecording,
+      cancelRecording,
       onFilesPicked,
       removeFile,
       toggleMentions,
@@ -1646,12 +2908,38 @@ export default {
       openRenameModal,
       closeConversationModal,
       submitConversationModal,
+      pickColleagueAndOpen,
+      toggleCardMenu,
+      archiveCard,
+      muteCardForever,
+      unmuteCard,
+      pinCard,
+      unpinCard,
+      REACTION_PRESETS,
+      reactionPickerOpenFor,
+      openReactionPicker,
+      closeReactionPicker,
+      applyReaction,
+      mentionAutoOpen,
+      mentionAutoResults,
+      mentionAutoActiveIdx,
+      pickMentionAutoItem,
+      onComposerKeydownMention,
+      typingHumanText,
+      conversationPresenceStatus,
       submitAddMembers,
       insertLinkToken,
       insertEmoji,
       isInlineImage,
+      isInlineVideo,
+      isInlineAudio,
+      renderMessageBody,
       messageImageAttachments,
+      messageVideoAttachments,
+      messageAudioAttachments,
       messageFileAttachments,
+      mediaItems,
+      documentItems,
       openImageViewer,
       closeImageViewer,
       showPreviousImage,
@@ -1820,3 +3108,42 @@ function getAvatarStyle(seed, kind = 'user') {
 </script>
 
 <style scoped src="../styles/messenger-view.css"></style>
+
+<!-- Phase D.3: @-mention chip — non-scoped, так как <router-link>
+     рендерит <a> без data-v атрибута, scoped селектор не матчится. -->
+<style>
+.message-mention {
+  display: inline-block;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: rgba(99, 102, 241, 0.14);
+  color: #4f46e5;
+  text-decoration: none !important;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background-color 0.15s ease;
+}
+.message-mention:hover,
+.message-mention:focus {
+  background: rgba(99, 102, 241, 0.24);
+  text-decoration: none !important;
+}
+.message-mention--inert {
+  cursor: default;
+  opacity: 0.85;
+}
+.message-mention[data-kind="deal"]    { color: #16a34a; background: rgba(22, 163, 74, 0.12); }
+.message-mention[data-kind="task"]    { color: #d97706; background: rgba(217, 119, 6, 0.12); }
+.message-mention[data-kind="user"]    { color: #4f46e5; background: rgba(99, 102, 241, 0.14); }
+.message-mention[data-kind="deal"]:hover { background: rgba(22, 163, 74, 0.20); }
+.message-mention[data-kind="task"]:hover { background: rgba(217, 119, 6, 0.20); }
+/* В own-баббле (свои сообщения, тёмный/цветной фон) — белый текст
+   на полупрозрачной белой подложке, читается лучше. */
+.message-row.is-own .message-mention {
+  background: rgba(255, 255, 255, 0.22) !important;
+  color: #ffffff !important;
+}
+.message-row.is-own .message-mention:hover {
+  background: rgba(255, 255, 255, 0.32) !important;
+}
+</style>

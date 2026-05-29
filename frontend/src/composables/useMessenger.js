@@ -2,6 +2,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as messengerApi from '../services/api/messenger'
 import { getActiveUser, hasSectionAccess } from '../utils/permissions'
 import { useToast } from './useToast'
+import { useNotificationSound } from './useNotificationSound'
 import { useUsersStore } from '../stores/users'
 import { downloadFromApi } from '../utils/download'
 import { formatDateTime as fmtDateTime, formatTime as fmtTime } from '../utils/format'
@@ -35,7 +36,14 @@ const createPendingFileEntry = (file) => {
 
 export function useMessenger() {
   const { error: toastError, success: toastSuccess } = useToast()
+  const { playMessengerDing } = useNotificationSound()
   const usersStore = useUsersStore()
+
+  // Звуковые уведомления messenger: сравниваем last_message.id per chat
+  // между двумя последовательными loadConversations. Первый поллинг
+  // (сразу после mount) — пропускаем, иначе пингало бы при открытии.
+  let _convPollDone = false
+  let _lastMessageIdByConv = new Map()
 
   const permissionsVersion = ref(0)
   const loadingConversations = ref(false)
@@ -46,6 +54,8 @@ export function useMessenger() {
   const activeConversationId = ref('')
   const messages = ref([])
   const users = ref([])
+  const searchableUsers = ref([])
+  const loadingSearchableUsers = ref(false)
   const draft = ref('')
   const pendingFiles = ref([])
   const mentionPickerOpen = ref(false)
@@ -169,11 +179,37 @@ export function useMessenger() {
   }
 
   const isConversationUnread = (conversation) => {
-    if (!conversation?.last_message?.created_at) return false
+    if (!conversation) return false
+    // Stage 1: backend отдаёт unread_count per user. Если поле есть —
+    // доверяем ему. Старый localStorage-фолбэк оставлен на случай
+    // open-from-cache до первого fetch.
+    if (typeof conversation.unread_count === 'number') {
+      return conversation.unread_count > 0
+    }
+    if (!conversation.last_message?.created_at) return false
     if (String(conversation.last_message.user_id || '') === String(activeUser.value?.id || '')) return false
     const lastSeenAt = getLastSeenAt(conversation.id)
     return new Date(conversation.last_message.created_at).getTime() > lastSeenAt
   }
+
+  const conversationUnreadCount = (conversation) => {
+    if (!conversation) return 0
+    if (typeof conversation.unread_count === 'number') {
+      return Math.max(0, conversation.unread_count)
+    }
+    return isConversationUnread(conversation) ? 1 : 0
+  }
+
+  const isConversationMuted = (conversation) => {
+    if (!conversation?.muted_until) return false
+    try {
+      return new Date(conversation.muted_until).getTime() > Date.now()
+    } catch (error) {
+      return false
+    }
+  }
+
+  const isConversationArchived = (conversation) => !!conversation?.is_archived
 
   const isOwn = (message) => String(message?.user_id || '') === String(activeUser.value?.id || '')
 
@@ -241,6 +277,42 @@ export function useMessenger() {
       } else {
         activeConversationId.value = String(conversations.value[0]?.id || '')
       }
+
+      // Звуковое уведомление: проверяем, появилось ли НОВОЕ
+      // last_message.id (не моё, не в активном фокусированном чате,
+      // не muted). Первый polling — baseline без пинга.
+      try {
+        const myId = String(activeUser.value?.id || '')
+        const tabFocused =
+          typeof document !== 'undefined' && document.hasFocus && document.hasFocus()
+        const activeId = String(activeConversationId.value || '')
+        let shouldDing = false
+        const nextMap = new Map()
+        for (const conv of conversations.value) {
+          const cId = String(conv?.id || '')
+          const lastMsg = conv?.last_message
+          const lastId = lastMsg?.id ? String(lastMsg.id) : ''
+          if (cId && lastId) nextMap.set(cId, lastId)
+          if (!_convPollDone) continue
+          if (!cId || !lastId) continue
+          const prev = _lastMessageIdByConv.get(cId)
+          if (prev === lastId) continue
+          // Новое сообщение появилось.
+          if (String(lastMsg?.user_id || '') === myId) continue
+          if (cId === activeId && tabFocused) continue
+          if (isConversationMuted(conv)) continue
+          shouldDing = true
+        }
+        _lastMessageIdByConv = nextMap
+        if (!_convPollDone) {
+          _convPollDone = true
+        } else if (shouldDing) {
+          playMessengerDing()
+        }
+      } catch (e) {
+        // защитный try — звук не критичен, не валим loadConversations.
+      }
+
       return conversations.value
     } catch (error) {
       conversations.value = []
@@ -370,6 +442,256 @@ export function useMessenger() {
     }
   }
 
+  // ------ Stage 1 implicit DM: searchable users + per-user state -------
+
+  /**
+   * Загружает список всех активных юзеров (кроме меня) с пометкой
+   * has_dm / dm_conversation_id. Используется в новом sidebar-поиске
+   * «написать коллеге».
+   */
+  const loadSearchableUsers = async () => {
+    if (!enabled.value) {
+      searchableUsers.value = []
+      return []
+    }
+    loadingSearchableUsers.value = true
+    try {
+      const result = await messengerApi.listSearchableUsers()
+      searchableUsers.value = Array.isArray(result) ? result : []
+      return searchableUsers.value
+    } catch (error) {
+      searchableUsers.value = []
+      return []
+    } finally {
+      loadingSearchableUsers.value = false
+    }
+  }
+
+  /**
+   * PATCH /chat/conversations/{id}/me — управление моими настройками
+   * этого чата: is_archived / muted_until / muted_forever.
+   *
+   * После успеха перезагружает список (т.к. is_archived влияет на
+   * видимость, а сервер фильтрует).
+   */
+  const updateMyConversationState = async (conversationId, payload) => {
+    if (!conversationId) return null
+    try {
+      const result = await messengerApi.updateMyState(conversationId, payload)
+      const preferred =
+        payload && payload.is_archived === true
+          ? null // архивирован — переключимся на следующий
+          : String(conversationId)
+      await loadConversations({ silent: true, preferredId: preferred })
+      return result || null
+    } catch (error) {
+      toastError(error.response?.data?.detail || 'Не удалось обновить состояние чата')
+      return null
+    }
+  }
+
+  const archiveConversationForMe = (conversationId) =>
+    updateMyConversationState(conversationId, { is_archived: true })
+
+  const unarchiveConversationForMe = (conversationId) =>
+    updateMyConversationState(conversationId, { is_archived: false })
+
+  const muteConversationForever = (conversationId) =>
+    updateMyConversationState(conversationId, { muted_forever: true })
+
+  const unmuteConversation = (conversationId) =>
+    updateMyConversationState(conversationId, { muted_forever: false })
+
+  // Phase B.1: закрепить / открепить чат у себя.
+  const pinConversation = (conversationId) =>
+    updateMyConversationState(conversationId, { is_pinned: true })
+
+  const unpinConversation = (conversationId) =>
+    updateMyConversationState(conversationId, { is_pinned: false })
+
+  const isConversationPinned = (conversation) => !!conversation?.is_pinned
+
+  // Phase C.1 — typing indicator.
+  // Backend держит in-memory state; frontend POSTs «я печатаю»
+  // debounced 1с при вводе, и GETs «кто печатает» каждые 3с пока
+  // открыт чат. typingUsers — отрендеренный список объектов
+  // {user_id, user_name} от других участников.
+  const typingUsers = ref([])
+  let _typingSignalTimer = null
+  let _typingPollTimer = null
+
+  const _doSignalTyping = (conversationId) => {
+    if (!conversationId) return
+    messengerApi.signalTyping(conversationId).catch(() => {
+      // 400 на global / 404 на удалённом чате — глотаем.
+    })
+  }
+
+  /** Вызывается на каждый ввод в composer'е. Debounced 1c —
+   *  пока юзер печатает непрерывно, шлём один POST в секунду. */
+  const noteUserTyping = (conversationId = activeConversationId.value) => {
+    if (!conversationId) return
+    if (_typingSignalTimer) return // throttle
+    _typingSignalTimer = setTimeout(() => {
+      _typingSignalTimer = null
+    }, 1000)
+    _doSignalTyping(conversationId)
+  }
+
+  const _pollTypingOnce = async (conversationId) => {
+    if (!conversationId) {
+      typingUsers.value = []
+      return
+    }
+    try {
+      const data = await messengerApi.listTyping(conversationId)
+      typingUsers.value = Array.isArray(data) ? data : []
+    } catch (e) {
+      typingUsers.value = []
+    }
+  }
+
+  const startTypingPoll = () => {
+    if (_typingPollTimer) return
+    if (!activeConversationId.value) return
+    // мгновенный первый запрос + интервал 3с.
+    _pollTypingOnce(activeConversationId.value)
+    _typingPollTimer = setInterval(
+      () => _pollTypingOnce(activeConversationId.value),
+      3000,
+    )
+  }
+
+  const stopTypingPoll = () => {
+    if (_typingPollTimer) {
+      clearInterval(_typingPollTimer)
+      _typingPollTimer = null
+    }
+    typingUsers.value = []
+  }
+
+  // Перезапускаем поллинг при смене активного чата.
+  watch(activeConversationId, () => {
+    stopTypingPoll()
+    startTypingPoll()
+  })
+
+  onMounted(() => {
+    if (activeConversationId.value) startTypingPoll()
+  })
+
+  onBeforeUnmount(() => {
+    stopTypingPoll()
+    if (_typingSignalTimer) {
+      clearTimeout(_typingSignalTimer)
+      _typingSignalTimer = null
+    }
+  })
+
+  // Phase D.1 — глобальный поиск по сообщениям.
+  // Полный stateful searcher: query + результаты + флаги «идёт ли поиск»
+  // и «панель открыта». View подписывается на messageSearchQuery
+  // и подёргивает runMessageSearch(); сам debounce — на стороне Vue.
+  const messageSearchQuery = ref('')
+  const messageSearchResults = ref([])
+  const messageSearchLoading = ref(false)
+  const messageSearchPanelOpen = ref(false)
+
+  let _msgSearchSeq = 0
+
+  const runMessageSearch = async (query = messageSearchQuery.value) => {
+    const q = String(query || '').trim()
+    messageSearchQuery.value = q
+    // <2 символов — синхронно очищаем, никаких сетевых запросов.
+    if (q.length < 2) {
+      messageSearchResults.value = []
+      messageSearchLoading.value = false
+      return []
+    }
+    const seq = ++_msgSearchSeq
+    messageSearchLoading.value = true
+    try {
+      const data = await messengerApi.searchMessages(q)
+      // Если за время запроса юзер ввёл новое значение — игнорим
+      // устаревший ответ.
+      if (seq !== _msgSearchSeq) return []
+      messageSearchResults.value = Array.isArray(data) ? data : []
+      return messageSearchResults.value
+    } catch (e) {
+      if (seq === _msgSearchSeq) {
+        messageSearchResults.value = []
+      }
+      return []
+    } finally {
+      if (seq === _msgSearchSeq) {
+        messageSearchLoading.value = false
+      }
+    }
+  }
+
+  const openMessageSearchPanel = () => {
+    messageSearchPanelOpen.value = true
+  }
+
+  const closeMessageSearchPanel = () => {
+    messageSearchPanelOpen.value = false
+    messageSearchQuery.value = ''
+    messageSearchResults.value = []
+    messageSearchLoading.value = false
+  }
+
+  // Результаты сгруппированные по chat — для UI «по чату → список
+  // сообщений». Сохраняем порядок появления (т.е. самые свежие чаты
+  // сверху, т.к. backend сортирует по created_at desc).
+  const messageSearchResultsByChat = computed(() => {
+    const groups = []
+    const byId = new Map()
+    for (const item of messageSearchResults.value || []) {
+      const cid = String(item.conversation_id || '')
+      if (!cid) continue
+      let group = byId.get(cid)
+      if (!group) {
+        group = {
+          conversation_id: cid,
+          conversation_title: item.conversation_title,
+          conversation_type: item.conversation_type,
+          items: [],
+        }
+        byId.set(cid, group)
+        groups.push(group)
+      }
+      group.items.push(item)
+    }
+    return groups
+  })
+
+  // Phase B.3 — emoji reactions.
+  // Idempotent toggle: backend сам решит создать/удалить. Frontend
+  // оптимистично патчит messages.value для мгновенного отклика, потом
+  // подменяет на серверный ответ.
+  const toggleMessageReaction = async (messageId, emoji) => {
+    if (!messageId || !emoji) return null
+    try {
+      const updated = await messengerApi.toggleReaction(messageId, emoji)
+      if (updated && updated.id) {
+        // Подменяем сообщение в локальном списке (атомарно — Vue
+        // среагирует автоматически).
+        const idx = messages.value.findIndex((m) => String(m.id) === String(updated.id))
+        if (idx >= 0) {
+          messages.value = [
+            ...messages.value.slice(0, idx),
+            updated,
+            ...messages.value.slice(idx + 1),
+          ]
+        }
+      }
+      return updated || null
+    } catch (error) {
+      toastError(error.response?.data?.detail || 'Не удалось поставить реакцию')
+      return null
+    }
+  }
+
   const createConversation = async (payload) => {
     savingConversation.value = true
     try {
@@ -441,7 +763,20 @@ export function useMessenger() {
       const form = new FormData()
       if (text) form.append('body', text)
       if (selectedMentions.value.length) {
-        form.append('mentions', JSON.stringify(selectedMentions.value.map((item) => item.id)))
+        // Phase D.3 — отправляем расширенный формат если есть kind,
+        // иначе оставляем backward-compat (просто user_id строки).
+        const payload = selectedMentions.value.map((item) => {
+          if (item.kind) {
+            return {
+              kind: item.kind,
+              id: item.id,
+              label: item.label || item.name || '',
+              href: item.href || '',
+            }
+          }
+          return String(item.id)
+        })
+        form.append('mentions', JSON.stringify(payload))
       }
       if (replyTarget.value?.id) {
         form.append('reply_to_message_id', replyTarget.value.id)
@@ -652,6 +987,31 @@ export function useMessenger() {
     isEditMode,
     canManageMembers,
     isConversationUnread,
+    conversationUnreadCount,
+    isConversationMuted,
+    isConversationArchived,
+    isConversationPinned,
+    searchableUsers,
+    loadingSearchableUsers,
+    loadSearchableUsers,
+    updateMyConversationState,
+    archiveConversationForMe,
+    unarchiveConversationForMe,
+    muteConversationForever,
+    unmuteConversation,
+    pinConversation,
+    unpinConversation,
+    toggleMessageReaction,
+    messageSearchQuery,
+    messageSearchResults,
+    messageSearchResultsByChat,
+    messageSearchLoading,
+    messageSearchPanelOpen,
+    runMessageSearch,
+    openMessageSearchPanel,
+    closeMessageSearchPanel,
+    typingUsers,
+    noteUserTyping,
     isOwn,
     canEdit,
     formatDateTime,

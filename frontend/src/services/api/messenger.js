@@ -14,8 +14,8 @@ const BASE = '/api/v1/chat'
 
 // ---- conversations: list/getById/create/update/remove ----------------------
 
-export const list = (options) =>
-  get(`${BASE}/conversations`, undefined, options)
+export const list = (params, options) =>
+  get(`${BASE}/conversations`, params, options)
 
 export const getById = (conversationId, options) =>
   get(`${BASE}/conversations/${conversationId}`, undefined, options)
@@ -39,6 +39,25 @@ export const addMembers = (conversationId, userIds, options) =>
 
 export const removeMember = (conversationId, userId, options) =>
   del(`${BASE}/conversations/${conversationId}/members/${userId}`, options)
+
+// ---- per-user conversation state (Stage 1 implicit DM) ---------------------
+
+/**
+ * PATCH /chat/conversations/{id}/me — мои настройки этого чата.
+ * Поля опциональны; передаём только то, что меняем.
+ *
+ *   updateMyState(id, { is_archived: true })       // скрыть у себя
+ *   updateMyState(id, { muted_forever: true })     // тишина навсегда
+ *   updateMyState(id, { muted_until: '2026-...' }) // тишина до момента
+ *   updateMyState(id, { muted_forever: false })    // снять mute
+ */
+export const updateMyState = (conversationId, payload, options) =>
+  patch(`${BASE}/conversations/${conversationId}/me`, payload, options)
+
+// ---- user search (для «написать коллеге») ---------------------------------
+
+export const listSearchableUsers = (options) =>
+  get(`${BASE}/users/searchable`, undefined, options)
 
 // ---- conversation messages (мессенджер) ------------------------------------
 
@@ -65,6 +84,32 @@ export const pinMessage = (messageId, options) =>
 
 export const unpinMessage = (messageId, options) =>
   del(`${BASE}/messages/${messageId}/pin`, options)
+
+// Phase B.3: эмодзи-реакции на сообщения.
+// POST идемпотентно toggle'ит реакцию (me, emoji) — если уже стоит, снимет.
+export const toggleReaction = (messageId, emoji, options) =>
+  post(`${BASE}/messages/${messageId}/reactions`, { emoji }, options)
+
+// Phase B.4: @-mention search для composer'а. Возвращает смешанный
+// список users/deals/tasks с ACL-фильтром на бэке.
+export const mentionSearch = (q, options) =>
+  get(`${BASE}/mention-search`, { q }, options)
+
+// Phase C.1: typing indicator. POST — фронт шлёт debounced при вводе,
+// GET — короткий poll каждые ~3с пока чат открыт.
+export const signalTyping = (conversationId, options) =>
+  post(`${BASE}/conversations/${conversationId}/typing`, undefined, options)
+
+export const listTyping = (conversationId, options) =>
+  get(`${BASE}/conversations/${conversationId}/typing`, undefined, options)
+
+// Phase D.1: глобальный поиск по сообщениям всех моих чатов + глобалки.
+// Возвращает [{message_id, conversation_id, conversation_title,
+// conversation_type, user_id, user_name, snippet, body_preview, created_at}].
+// MVP без FTS5: backend делает ILIKE %q% c ACL-фильтром по membership.
+// Минимум 2 символа в q — иначе пустой массив.
+export const searchMessages = (q, params = {}, options) =>
+  get(`${BASE}/search`, { q, ...params }, options)
 
 // ---- global chat (плоский /messages, без conversation_id) ------------------
 

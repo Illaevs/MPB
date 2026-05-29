@@ -47,5 +47,16 @@ class ChatConversationMember(Base):
     role = Column(String(32), nullable=False, default="member")
     joined_at = Column(DateTime(timezone=True), server_default=func.now())
 
+    # Per-user state (Stage 1 implicit DM + Phase B):
+    #   last_read_at — отметка «прочитано до этого момента», для unread count.
+    #   is_archived  — скрыть чат из своего списка (не удаляя — у второго
+    #                  участника он остаётся).
+    #   muted_until  — заглушить уведомления; None / NULL означает звук-on.
+    #   is_pinned    — закрепить чат сверху сайдбара (Phase B.1).
+    last_read_at = Column(DateTime(timezone=True), nullable=True)
+    is_archived = Column(Boolean, nullable=False, default=False)
+    muted_until = Column(DateTime(timezone=True), nullable=True)
+    is_pinned = Column(Boolean, nullable=False, default=False)
+
     conversation = relationship("ChatConversation", back_populates="members")
     user = relationship("User")

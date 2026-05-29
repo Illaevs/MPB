@@ -1,10 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "_generated_at": "2026-05-27T13:30:14.851447+00:00",
+  "_generated_at": "2026-05-29T11:48:08.555398+00:00",
   "_generated_by": "backend/app/tools/dump_event_types.py",
   "_warning": "Этот файл — autogen-результат AST-обхода backend/app/. Не редактируйте руками: при следующем запуске будет перезаписан. Чтобы добавить событие — emit_event/dispatch_before/dispatch_after или @on в коде.",
   "stats": {
-    "total_event_keys": 117,
+    "total_event_keys": 120,
     "by_entity_type": {
       "approval_instance": 5,
       "approval_instance_step": 2,
@@ -15,6 +15,7 @@
       "document": 10,
       "document_dispatch": 2,
       "feed_post": 1,
+      "file_folder_permission": 3,
       "gosklyuch": 1,
       "income_expense_entry": 3,
       "kp_document": 2,
@@ -45,7 +46,8 @@
     "by_phase": {
       "after": 99,
       "batch": 1,
-      "before": 17
+      "before": 17,
+      "other": 3
     }
   },
   "events": [
@@ -270,7 +272,7 @@
       "phase": "after",
       "payload_version": 1,
       "emitted_from": [
-        "app/routers/deals.py:487"
+        "app/routers/deals.py:504"
       ],
       "handlers": []
     },
@@ -281,7 +283,7 @@
       "phase": "after",
       "payload_version": 1,
       "emitted_from": [
-        "app/routers/deals.py:935"
+        "app/routers/deals.py:1004"
       ],
       "handlers": []
     },
@@ -292,7 +294,7 @@
       "phase": "after",
       "payload_version": 1,
       "emitted_from": [
-        "app/routers/deals.py:919"
+        "app/routers/deals.py:988"
       ],
       "handlers": []
     },
@@ -450,7 +452,41 @@
       "phase": "after",
       "payload_version": 1,
       "emitted_from": [
-        "app/routers/feed.py:400"
+        "app/routers/feed.py:429"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "file_folder_permission.created",
+      "entity_type": "file_folder_permission",
+      "action": "created",
+      "phase": "other",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/file_folder_permissions.py:383",
+        "app/services/folder_acl.py:422"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "file_folder_permission.deleted",
+      "entity_type": "file_folder_permission",
+      "action": "deleted",
+      "phase": "other",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/file_folder_permissions.py:456"
+      ],
+      "handlers": []
+    },
+    {
+      "event_key": "file_folder_permission.updated",
+      "entity_type": "file_folder_permission",
+      "action": "updated",
+      "phase": "other",
+      "payload_version": 1,
+      "emitted_from": [
+        "app/routers/file_folder_permissions.py:392"
       ],
       "handlers": []
     },
@@ -949,7 +985,7 @@
       "phase": "after",
       "payload_version": 1,
       "emitted_from": [
-        "app/routers/tasks.py:750"
+        "app/routers/tasks.py:752"
       ],
       "handlers": []
     },
@@ -960,7 +996,7 @@
       "phase": "after",
       "payload_version": 1,
       "emitted_from": [
-        "app/routers/tasks.py:1351"
+        "app/routers/tasks.py:1356"
       ],
       "handlers": []
     },
@@ -971,7 +1007,7 @@
       "phase": "after",
       "payload_version": 1,
       "emitted_from": [
-        "app/routers/tasks.py:1425"
+        "app/routers/tasks.py:1444"
       ],
       "handlers": []
     },
@@ -982,7 +1018,7 @@
       "phase": "after",
       "payload_version": 1,
       "emitted_from": [
-        "app/routers/tasks.py:1327"
+        "app/routers/tasks.py:1332"
       ],
       "handlers": []
     },
@@ -993,8 +1029,8 @@
       "phase": "after",
       "payload_version": 1,
       "emitted_from": [
-        "app/routers/tasks.py:1177",
-        "app/routers/tasks.py:695"
+        "app/routers/tasks.py:1181",
+        "app/routers/tasks.py:697"
       ],
       "handlers": []
     },

@@ -309,6 +309,26 @@ async def clear_my_wallpaper(
     return current_user
 
 
+@router.post("/me/heartbeat", status_code=204)
+async def heartbeat(
+    db: AsyncSession = Depends(get_db),
+    user=Depends(CurrentUser),
+):
+    """Phase C.2 — presence heartbeat. Фронт пингует раз в ~60с с
+    любой страницы, бэк обновляет users.last_seen_at = NOW.
+
+    Лёгкий endpoint: ~1 UPDATE на одну строку. На 50 юзерах это
+    ~50 запросов в минуту — пренебрежимо.
+    """
+    from datetime import datetime as _dt
+    current_user = await User.get_by_id(db, str(user.id))
+    if not current_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    current_user.last_seen_at = _dt.utcnow()
+    await db.commit()
+    return None
+
+
 @router.get("/me/ui-preferences")
 async def get_my_ui_preferences(
     db: AsyncSession = Depends(get_db),

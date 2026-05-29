@@ -15,6 +15,15 @@ from app.core.auth_middleware import CurrentUser
 from app.core.config import settings
 from app.services.permissions import get_section_permissions
 from app.services.storage_authz import authorize_storage_path
+from app.services.folder_acl import (
+    Perm,
+    delete_folder_path_prefix,
+    grant_creator_manage_perms,
+    is_entity_path,
+    normalize_path as ffp_normalize_path,
+    rename_folder_path_prefix,
+    require_folder_perm,
+)
 from app.services.storage import (
     list_items,
     search_items,
@@ -137,6 +146,59 @@ async def _check_access(db: AsyncSession, user, request: Request) -> None:
         raise HTTPException(status_code=403, detail="Access denied")
 
 
+def _to_logical_path(storage_path: str) -> str:
+    """Конвертирует storage-абсолютный путь (с STORAGE_LOCAL_ROOT-префиксом)
+    в логический путь, под которым правила лежат в `file_folder_permissions`.
+
+    Логическая нормализация:
+      `/mnt/netdisk/CRM/Архив/2026/`  →  `/Архив/2026/`
+      `/mnt/netdisk/CRM/`             →  `/`
+      `/Архив/`                       →  `/Архив/` (если root пуст)
+      `disk:/foo`                     →  `/foo/` (префикс `disk:` снимается)
+
+    Хранить полный storage-путь в FFP-таблице было бы tight coupling на
+    конкретный mount-point. Логический путь стабилен при переезде.
+    """
+    root = settings.STORAGE_LOCAL_ROOT or ""
+    root_clean = _strip_disk_prefix(root).rstrip("/")
+    path_clean = _strip_disk_prefix(storage_path)
+    if root_clean and path_clean.startswith(root_clean):
+        rel = path_clean[len(root_clean):]
+    else:
+        rel = path_clean
+    return ffp_normalize_path(rel or "/")
+
+
+async def _gate_folder(
+    db: AsyncSession,
+    request: Request,
+    user,
+    storage_path: str,
+    perm: Perm,
+) -> str:
+    """Объединённый гейт «section + entity path + per-folder ACL».
+
+    Возвращает логический путь — пригодный для последующего вызова
+    `grant_creator_manage_perms` / `rename_folder_path_prefix` /
+    `delete_folder_path_prefix` без повторной конвертации.
+
+    Поведение:
+      - `authorize_storage_path` уже вызвана выше (она проверяет entity-
+        часть). Здесь мы не повторяем её.
+      - Если путь — entity (`/deals/`, `/contracts/`, ...): per-folder
+        ACL не активен, дополнительной проверки не делаем (доступ
+        определён сделкой/договором).
+      - Если путь — свободная папка: требуем `perm` через
+        `require_folder_perm`. В случае суперюзера / отсутствия FFP-правил
+        он отработает по section_fallback (как сегодня), так что без
+        правил поведение не меняется.
+    """
+    logical = _to_logical_path(storage_path)
+    if not is_entity_path(logical):
+        await require_folder_perm(db, user, logical, perm, request=request)
+    return logical
+
+
 @router.get("/files-catalog/list")
 async def list_catalog_items(
     request: Request,
@@ -152,6 +214,7 @@ async def list_catalog_items(
     path = _normalize_path(path)
     _ensure_within_root(path)
     await authorize_storage_path(db, request, user, path)
+    await _gate_folder(db, request, user, path, Perm.READ)
 
     root = _normalize_path(None)
     root = _with_root_prefix(path, root)
@@ -177,12 +240,21 @@ async def create_catalog_folder(
     parent = _normalize_path(payload.path)
     _ensure_within_root(parent)
     await authorize_storage_path(db, request, user, parent)
+    # Создание подпапки = write на родителе.
+    await _gate_folder(db, request, user, parent, Perm.WRITE)
     name = clean_name(payload.name or "")
     if not name:
         raise HTTPException(status_code=400, detail="Folder name is required")
     folder_path = f"{parent.rstrip('/')}/{name}"
     _ensure_within_root(folder_path)
     await ensure_path(folder_path)
+    # После успешного создания: автозапись «creator → manage_perms на этой
+    # папке» (только для свободных папок; на entity-paths grant_creator
+    # сам пропускает). Идемпотентно через unique constraint.
+    logical_new = _to_logical_path(folder_path)
+    if not is_entity_path(logical_new):
+        await grant_creator_manage_perms(db, user, logical_new)
+        await db.commit()
     return {"path": folder_path}
 
 
@@ -199,6 +271,8 @@ async def rename_catalog_item(
     source_path = _normalize_path(payload.path)
     _ensure_within_root(source_path)
     await authorize_storage_path(db, request, user, source_path)
+    # Rename = write на исходном пути.
+    logical_old = await _gate_folder(db, request, user, source_path, Perm.WRITE)
     name = clean_name(payload.name or "")
     if not name:
         raise HTTPException(status_code=400, detail="New name is required")
@@ -212,6 +286,13 @@ async def rename_catalog_item(
     target_path = f"{prefix}{target}"
     _ensure_within_root(target_path)
     await move_path(source_path, target_path, overwrite=True)
+    # Каскад: переписываем folder_path во всех FFP-правилах для папки и
+    # её подпапок. Если переименовываем файл (не папку) — функция найдёт
+    # 0 совпадений (на файл-путь правил нет) и тихо завершится.
+    logical_new = _to_logical_path(target_path)
+    if logical_old != logical_new:
+        await rename_folder_path_prefix(db, logical_old, logical_new)
+        await db.commit()
     return {"path": target_path}
 
 
@@ -235,9 +316,17 @@ async def move_catalog_item(
     _ensure_within_root(to_path)
     await authorize_storage_path(db, request, user, from_path)
     await authorize_storage_path(db, request, user, to_path)
+    # Move = write на ИСТОЧНИКЕ (мы уносим элемент) И на НАЗНАЧЕНИИ
+    # (мы добавляем туда). Иначе можно было бы «уплыть» в защищённую
+    # папку и обойти ACL.
+    logical_from = await _gate_folder(db, request, user, from_path, Perm.WRITE)
+    logical_to = await _gate_folder(db, request, user, to_path, Perm.WRITE)
     if _is_root_path(from_path):
         raise HTTPException(status_code=400, detail="Cannot move root folder")
     await move_path(from_path, to_path, overwrite=True)
+    if logical_from != logical_to:
+        await rename_folder_path_prefix(db, logical_from, logical_to)
+        await db.commit()
     return {"path": to_path}
 
 
@@ -259,6 +348,8 @@ async def upload_catalog_files(
     path = _normalize_path(path)
     _ensure_within_root(path)
     await authorize_storage_path(db, request, user, path)
+    # Upload = write на целевой папке.
+    await _gate_folder(db, request, user, path, Perm.WRITE)
     await ensure_path(path)
     if not files:
         raise HTTPException(status_code=400, detail="Files are required")
@@ -340,9 +431,16 @@ async def delete_catalog_item(
     path = _normalize_path(path)
     _ensure_within_root(path)
     await authorize_storage_path(db, request, user, path)
+    # Delete = delete на этом пути (применимо и к файлу, и к папке).
+    logical = await _gate_folder(db, request, user, path, Perm.DELETE)
     if _is_root_path(path):
         raise HTTPException(status_code=400, detail="Cannot delete root folder")
     await delete_path(path, permanently=permanent)
+    # Каскад: чистим FFP-правила для удалённой папки и её подпапок.
+    # Если это был файл — правил по этому пути нет, удалится 0 строк.
+    if not is_entity_path(logical):
+        await delete_folder_path_prefix(db, logical)
+        await db.commit()
     return {"deleted": True, "permanent": permanent}
 
 
@@ -360,6 +458,8 @@ async def download_catalog_item(
     path = _normalize_path(path)
     _ensure_within_root(path)
     await authorize_storage_path(db, request, user, path)
+    # Download = read.
+    await _gate_folder(db, request, user, path, Perm.READ)
     href = await get_download_href(path)
     if redirect:
         return RedirectResponse(url=href)
