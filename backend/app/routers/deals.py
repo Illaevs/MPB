@@ -1069,7 +1069,17 @@ async def get_deal_gips(
     if user_ids:
         user_result = await db.execute(select(User).where(User.id.in_(user_ids)))
         users = user_result.scalars().all()
-    return [{"id": str(u.id), "full_name": u.full_name, "email": u.email} for u in users]
+    # avatar_url нужен фронту для чипа ГИПа (Overview): без него после
+    # сохранения список перезагружается без аватара и он «пропадает».
+    return [
+        {
+            "id": str(u.id),
+            "full_name": u.full_name,
+            "email": u.email,
+            "avatar_url": getattr(u, "avatar_url", None),
+        }
+        for u in users
+    ]
 
 
 @router.put("/{deal_id}/gips")
