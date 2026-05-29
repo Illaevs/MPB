@@ -436,7 +436,26 @@
                   <span class="message-bubble__meta">
                     <span v-if="item.message.edited_at" class="message-bubble__edited">ред.</span>
                     <span class="message-bubble__time">{{ formatMessageTime(item.message.created_at) }}</span>
-                    <i v-if="isOwn(item.message) && !item.message.is_deleted" class="fas fa-check-double message-bubble__ticks"></i>
+                    <!-- Phase B.2: ✓ delivered / ✓✓ read.
+                         Логика: ticks показываются на моих сообщениях.
+                         Для DM сравниваем created_at сообщения с
+                         peer_last_read_at собеседника:
+                           created_at <= peer_last_read_at → ✓✓ (read)
+                           иначе → ✓ (delivered)
+                         Для group/global Stage 2 ticks → всегда ✓ (read
+                         receipts per N участников — отдельная задача). -->
+                    <template v-if="isOwn(item.message) && !item.message.is_deleted">
+                      <i
+                        v-if="isMessageRead(item.message)"
+                        class="fas fa-check-double message-bubble__ticks message-bubble__ticks--read"
+                        title="Прочитано"
+                      ></i>
+                      <i
+                        v-else
+                        class="fas fa-check message-bubble__ticks"
+                        title="Доставлено"
+                      ></i>
+                    </template>
                   </span>
                 </div>
 
@@ -1893,6 +1912,22 @@ export default {
 
     const messageActionsVisible = (message) => hoveredMessageId.value === message.id && !message.is_deleted
 
+    // Phase B.2: read-receipt logic.
+    // Возвращает true, если моё сообщение было прочитано собеседником
+    // (в DM-чате). Для group/global сейчас всегда false — нет
+    // peer_last_read_at, ticks деградируют до «доставлено» (✓).
+    const isMessageRead = (message) => {
+      if (!message?.created_at) return false
+      if (activeConversation.value?.type !== 'direct') return false
+      const peerReadAt = activeConversation.value?.peer_last_read_at
+      if (!peerReadAt) return false
+      try {
+        return new Date(peerReadAt).getTime() >= new Date(message.created_at).getTime()
+      } catch (e) {
+        return false
+      }
+    }
+
     const messageSignature = computed(() =>
       messages.value
         .map((message) => `${message.id}:${message.updated_at || message.edited_at || message.created_at}:${message.is_deleted ? 1 : 0}:${message.is_pinned ? 1 : 0}`)
@@ -2074,6 +2109,7 @@ export default {
       formatDateTime,
       formatMessageTime,
       formatSize,
+      isMessageRead,
       refreshAll,
       openConversation,
       openDirectConversation,

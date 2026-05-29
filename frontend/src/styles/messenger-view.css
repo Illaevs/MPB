@@ -1713,3 +1713,16 @@
   margin-right: 4px;
   color: var(--md-sys-color-primary, #6366f1);
 }
+
+/* ============================================================
+   Phase B.2 — read receipts ✓ / ✓✓
+   ============================================================ */
+.message-bubble__ticks {
+  font-size: 11px;
+  margin-left: 4px;
+  opacity: 0.7;
+}
+.message-bubble__ticks--read {
+  color: #38bdf8; /* sky-400 — telegram-style blue check */
+  opacity: 1;
+}
