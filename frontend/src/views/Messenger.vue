@@ -230,7 +230,13 @@
             </div>
             <div class="thread-title__content">
               <strong>{{ activeConversation.title }}</strong>
-              <span>{{ activeConversation.description || subtitleText }}</span>
+              <!-- Phase C.1: typing indicator выводится поверх subtitle.
+                   typingUsers — массив {user_id, user_name, at} от бэкенда. -->
+              <span v-if="typingUsers.length" class="thread-title__typing">
+                {{ typingHumanText }}
+                <span class="thread-title__typing-dots"><span></span><span></span><span></span></span>
+              </span>
+              <span v-else>{{ activeConversation.description || subtitleText }}</span>
             </div>
           </div>
 
@@ -1149,6 +1155,8 @@ export default {
       pinConversation,
       unpinConversation,
       toggleMessageReaction,
+      typingUsers,
+      noteUserTyping,
       isOwn,
       canEdit,
       formatDateTime,
@@ -1862,6 +1870,18 @@ export default {
       await unmuteConversation(id)
     }
 
+    // Phase C.1: humanized "X печатает..." / "X и Y печатают..." /
+    // "X, Y и ещё 2 печатают...".
+    const typingHumanText = computed(() => {
+      const list = typingUsers.value || []
+      if (!list.length) return ''
+      const names = list.map((u) => u.user_name || 'Кто-то').filter(Boolean)
+      if (!names.length) return 'Печатает…'
+      if (names.length === 1) return `${names[0]} печатает…`
+      if (names.length === 2) return `${names[0]} и ${names[1]} печатают…`
+      return `${names[0]}, ${names[1]} и ещё ${names.length - 2} печатают…`
+    })
+
     // Phase B.3: emoji reactions presets + picker state.
     const REACTION_PRESETS = ['👍', '❤️', '😂', '🎉', '🔥', '👏', '😮', '😢']
     const reactionPickerOpenFor = ref(null)
@@ -2002,6 +2022,8 @@ export default {
 
     const onComposerInput = () => {
       syncComposerHeight()
+      // Phase C.1: typing signal (debounced 1с в composable).
+      noteUserTyping()
       const trig = _detectMentionTrigger()
       if (trig && trig.query.length >= 0) {
         mentionAutoOpen.value = true
@@ -2368,6 +2390,7 @@ export default {
       mentionAutoActiveIdx,
       pickMentionAutoItem,
       onComposerKeydownMention,
+      typingHumanText,
       submitAddMembers,
       insertLinkToken,
       insertEmoji,

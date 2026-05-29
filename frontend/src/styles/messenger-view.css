@@ -1872,3 +1872,40 @@
   font-size: 11px;
   color: var(--md-sys-color-on-surface-variant, #6b7280);
 }
+
+/* ============================================================
+   Phase C.1 — typing indicator
+   ============================================================ */
+.thread-title__typing {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--md-sys-color-primary, #6366f1);
+  font-weight: 500;
+  animation: messenger-typing-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes messenger-typing-pulse {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 1; }
+}
+
+.thread-title__typing-dots {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: 4px;
+}
+.thread-title__typing-dots span {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--md-sys-color-primary, #6366f1);
+  animation: messenger-typing-dot 1.2s ease-in-out infinite;
+}
+.thread-title__typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+.thread-title__typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes messenger-typing-dot {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+  40% { transform: translateY(-3px); opacity: 1; }
+}

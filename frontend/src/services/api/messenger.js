@@ -95,6 +95,14 @@ export const toggleReaction = (messageId, emoji, options) =>
 export const mentionSearch = (q, options) =>
   get(`${BASE}/mention-search`, { q }, options)
 
+// Phase C.1: typing indicator. POST — фронт шлёт debounced при вводе,
+// GET — короткий poll каждые ~3с пока чат открыт.
+export const signalTyping = (conversationId, options) =>
+  post(`${BASE}/conversations/${conversationId}/typing`, undefined, options)
+
+export const listTyping = (conversationId, options) =>
+  get(`${BASE}/conversations/${conversationId}/typing`, undefined, options)
+
 // ---- global chat (плоский /messages, без conversation_id) ------------------
 
 export const listGlobalMessages = (options) =>

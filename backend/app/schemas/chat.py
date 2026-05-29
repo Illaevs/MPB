@@ -165,6 +165,22 @@ class SearchableUserResponse(BaseModel):
         from_attributes = True
 
 
+class TypingPresence(BaseModel):
+    """Один юзер, печатающий в conversation прямо сейчас.
+
+    `at` — timestamp последнего typing-сигнала, фронт использует для
+    fade-out (если at > 5с назад — считаем «остановился»).
+    """
+
+    user_id: str
+    user_name: Optional[str] = None
+    at: datetime
+
+    @field_serializer("at")
+    def serialize_at(self, value: datetime) -> str:
+        return serialize_utc_datetime(value)
+
+
 class MentionItem(BaseModel):
     """GET /chat/mention-search — единый формат для мiks результата.
 

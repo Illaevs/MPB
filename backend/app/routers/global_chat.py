@@ -39,6 +39,7 @@ from app.schemas.chat import (
     MessageReactionAggregate,
     ReactionToggleRequest,
     SearchableUserResponse,
+    TypingPresence,
 )
 from app.services.permissions import get_section_permissions
 from app.schemas.global_chat_message import GlobalChatMessageResponse, GlobalChatMessageUpdate
@@ -81,6 +82,49 @@ def _trim_old_first_msg_ts(user_id: str, now: float) -> None:
         _first_msg_recents[user_id] = arr
     else:
         _first_msg_recents.pop(user_id, None)
+
+
+# Phase C.1 — typing indicator.
+# In-memory state: {conversation_id: {user_id: last_typing_at}}.
+# Эфемерное — на рестарте теряется, что нормально для presence.
+# Per-process; для multi-worker нужен Redis или WS (Stage E).
+_TYPING_WINDOW_SEC = 5
+_typing_state: Dict[str, Dict[str, datetime]] = {}
+
+
+def _record_typing(conversation_id: str, user_id: str) -> None:
+    """Запомнить «X печатает сейчас в Y»."""
+    bucket = _typing_state.setdefault(str(conversation_id), {})
+    bucket[str(user_id)] = _utcnow()
+
+
+def _list_typing(conversation_id: str, exclude_user_id: str) -> List[str]:
+    """Вернуть список user_id, у которых typing-сигнал свежее
+    `_TYPING_WINDOW_SEC` секунд (исключая вызывающего).
+    """
+    bucket = _typing_state.get(str(conversation_id))
+    if not bucket:
+        return []
+    now = _utcnow()
+    fresh_ids: List[str] = []
+    stale_keys: List[str] = []
+    for uid, ts in list(bucket.items()):
+        try:
+            age = (now - ts).total_seconds()
+        except TypeError:
+            stale_keys.append(uid)
+            continue
+        if age > _TYPING_WINDOW_SEC:
+            stale_keys.append(uid)
+            continue
+        if uid == str(exclude_user_id):
+            continue
+        fresh_ids.append(uid)
+    for k in stale_keys:
+        bucket.pop(k, None)
+    if not bucket:
+        _typing_state.pop(str(conversation_id), None)
+    return fresh_ids
 
 
 async def _enforce_first_msg_rate_limit(
@@ -1208,6 +1252,77 @@ async def list_searchable_users(
         )
         for u in users_list
     ]
+
+
+# ────────────────────────────────────────────────────────────────────
+# Phase C.1 — typing indicator endpoints
+# ────────────────────────────────────────────────────────────────────
+
+
+@router.post("/conversations/{conversation_id}/typing", status_code=204)
+async def signal_typing(
+    conversation_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(CurrentUser),
+):
+    """Сигнал «я печатаю» — фронт шлёт debounced раз в ~1с при вводе.
+
+    Доступ: я должен иметь доступ к conversation. На global чате
+    typing намеренно не работает (слишком шумно — N людей пишут
+    параллельно), 400.
+    """
+    conversation = await _get_conversation(db, conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation.type == "global":
+        raise HTTPException(
+            status_code=400,
+            detail="Typing indicator is disabled for global chat",
+        )
+    await _require_conversation_access(request, db, user, conversation)
+    _record_typing(str(conversation.id), str(user.id))
+    return None  # 204
+
+
+@router.get("/conversations/{conversation_id}/typing", response_model=List[TypingPresence])
+async def list_conversation_typing(
+    conversation_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(CurrentUser),
+):
+    """Кто сейчас печатает в этом чате (кроме меня). Фильтр окна
+    5 секунд внутри _list_typing.
+    """
+    conversation = await _get_conversation(db, conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation.type == "global":
+        return []
+    await _require_conversation_access(request, db, user, conversation)
+
+    fresh_user_ids = _list_typing(str(conversation.id), str(user.id))
+    if not fresh_user_ids:
+        return []
+
+    users_result = await db.execute(
+        select(User).where(User.id.in_(fresh_user_ids))
+    )
+    users_lookup = {str(u.id): u for u in users_result.scalars().all()}
+
+    bucket = _typing_state.get(str(conversation.id), {})
+    out: List[TypingPresence] = []
+    for uid in fresh_user_ids:
+        u = users_lookup.get(uid)
+        out.append(
+            TypingPresence(
+                user_id=uid,
+                user_name=getattr(u, "full_name", None) if u else None,
+                at=bucket.get(uid, _utcnow()),
+            )
+        )
+    return out
 
 
 # ────────────────────────────────────────────────────────────────────

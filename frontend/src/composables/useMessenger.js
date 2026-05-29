@@ -511,6 +511,83 @@ export function useMessenger() {
 
   const isConversationPinned = (conversation) => !!conversation?.is_pinned
 
+  // Phase C.1 — typing indicator.
+  // Backend держит in-memory state; frontend POSTs «я печатаю»
+  // debounced 1с при вводе, и GETs «кто печатает» каждые 3с пока
+  // открыт чат. typingUsers — отрендеренный список объектов
+  // {user_id, user_name} от других участников.
+  const typingUsers = ref([])
+  let _typingSignalTimer = null
+  let _typingPollTimer = null
+
+  const _doSignalTyping = (conversationId) => {
+    if (!conversationId) return
+    messengerApi.signalTyping(conversationId).catch(() => {
+      // 400 на global / 404 на удалённом чате — глотаем.
+    })
+  }
+
+  /** Вызывается на каждый ввод в composer'е. Debounced 1c —
+   *  пока юзер печатает непрерывно, шлём один POST в секунду. */
+  const noteUserTyping = (conversationId = activeConversationId.value) => {
+    if (!conversationId) return
+    if (_typingSignalTimer) return // throttle
+    _typingSignalTimer = setTimeout(() => {
+      _typingSignalTimer = null
+    }, 1000)
+    _doSignalTyping(conversationId)
+  }
+
+  const _pollTypingOnce = async (conversationId) => {
+    if (!conversationId) {
+      typingUsers.value = []
+      return
+    }
+    try {
+      const data = await messengerApi.listTyping(conversationId)
+      typingUsers.value = Array.isArray(data) ? data : []
+    } catch (e) {
+      typingUsers.value = []
+    }
+  }
+
+  const startTypingPoll = () => {
+    if (_typingPollTimer) return
+    if (!activeConversationId.value) return
+    // мгновенный первый запрос + интервал 3с.
+    _pollTypingOnce(activeConversationId.value)
+    _typingPollTimer = setInterval(
+      () => _pollTypingOnce(activeConversationId.value),
+      3000,
+    )
+  }
+
+  const stopTypingPoll = () => {
+    if (_typingPollTimer) {
+      clearInterval(_typingPollTimer)
+      _typingPollTimer = null
+    }
+    typingUsers.value = []
+  }
+
+  // Перезапускаем поллинг при смене активного чата.
+  watch(activeConversationId, () => {
+    stopTypingPoll()
+    startTypingPoll()
+  })
+
+  onMounted(() => {
+    if (activeConversationId.value) startTypingPoll()
+  })
+
+  onBeforeUnmount(() => {
+    stopTypingPoll()
+    if (_typingSignalTimer) {
+      clearTimeout(_typingSignalTimer)
+      _typingSignalTimer = null
+    }
+  })
+
   // Phase B.3 — emoji reactions.
   // Idempotent toggle: backend сам решит создать/удалить. Frontend
   // оптимистично патчит messages.value для мгновенного отклика, потом
@@ -835,6 +912,8 @@ export function useMessenger() {
     pinConversation,
     unpinConversation,
     toggleMessageReaction,
+    typingUsers,
+    noteUserTyping,
     isOwn,
     canEdit,
     formatDateTime,
