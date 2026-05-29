@@ -21,6 +21,7 @@ from pathlib import Path
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import select
 
 # Allow `from app...` imports when running tests from any directory.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -424,6 +425,106 @@ class TestGrantCreatorManagePerms:
         rule = await grant_creator_manage_perms(db_session, u, "/Архив/")
         # Суперу не нужны формальные записи.
         assert rule is None
+
+
+# ────────────────────────────────────────────────────────────────────
+# Event Bus emission tests (Stage 5)
+# ────────────────────────────────────────────────────────────────────
+
+
+@pytest_asyncio.fixture
+async def event_db_session():
+    """Лёгкая фикстура только для тестов эмиссии событий.
+
+    `db_session` вверху использует `Base.metadata.create_all`, который
+    падает на других моделях с UUID-колонкой под SQLite (cb_rates и
+    т.п.). Здесь создаём ровно две таблицы: FileFolderPermission и
+    EventOutbox — этого достаточно для grant_creator_manage_perms.
+    """
+    from sqlalchemy.ext.asyncio import (
+        AsyncSession,
+        async_sessionmaker,
+        create_async_engine,
+    )
+    from app.models import EventOutbox
+
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+    async with engine.begin() as conn:
+        await conn.run_sync(
+            lambda sync_conn: Base.metadata.create_all(
+                sync_conn,
+                tables=[
+                    FileFolderPermission.__table__,
+                    EventOutbox.__table__,
+                ],
+            )
+        )
+
+    Session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with Session() as sess:
+        yield sess
+
+    await engine.dispose()
+
+
+class TestEventEmission:
+    """Smoke-тесты, что grant_creator_manage_perms кладёт событие в outbox.
+
+    Полные тесты роутера (upsert/delete + AuditLog) гоняются через
+    HTTP-фикстуры — это слишком тяжело для unit-уровня. Здесь только
+    sanity check на service-уровне.
+    """
+
+    @pytest.mark.asyncio
+    async def test_grant_creator_emits_event(self, event_db_session):
+        from app.models import EventOutbox
+
+        u = _make_user(user_id="u-creator")
+        rule = await grant_creator_manage_perms(event_db_session, u, "/Архив/2026/")
+        assert rule is not None
+        # NB: emit_event_safe внутри grant_creator делает flush, но
+        # commit делается caller'ом (mkdir). В тесте flush уже
+        # достаточно — SELECT в той же сессии увидит запись.
+
+        rows = (
+            await event_db_session.execute(
+                select(EventOutbox).where(
+                    EventOutbox.entity_type == "file_folder_permission"
+                )
+            )
+        ).scalars().all()
+        assert len(rows) == 1
+        row = rows[0]
+        assert row.event_type == "file_folder_permission.created"
+        assert row.entity_id == str(rule.id)
+        assert row.payload["source"] == "creator_grant"
+        assert row.payload["actor_user_id"] == "u-creator"
+        assert row.payload["flags"] == {
+            "can_read": True,
+            "can_write": True,
+            "can_delete": True,
+            "can_manage_perms": True,
+        }
+
+    @pytest.mark.asyncio
+    async def test_grant_creator_idempotent_emits_once(self, event_db_session):
+        """Повторный вызов на ту же папку возвращает существующее
+        правило и НЕ эмитит второй раз."""
+        from app.models import EventOutbox
+
+        u = _make_user(user_id="u-creator")
+        await grant_creator_manage_perms(event_db_session, u, "/Архив/2026/")
+        await grant_creator_manage_perms(event_db_session, u, "/Архив/2026/")
+
+        rows = (
+            await event_db_session.execute(
+                select(EventOutbox).where(
+                    EventOutbox.entity_type == "file_folder_permission"
+                )
+            )
+        ).scalars().all()
+        # Идемпотентность: второй вызов взял existing — emit не сработал.
+        assert len(rows) == 1
 
 
 # ────────────────────────────────────────────────────────────────────

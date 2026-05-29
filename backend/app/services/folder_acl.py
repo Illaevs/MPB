@@ -412,6 +412,38 @@ async def grant_creator_manage_perms(
     )
     db.add(rule)
     await db.flush()
+
+    # Event Bus: эмитим creator-grant. Лежит в той же транзакции,
+    # что и сам rule — каскадно закоммитится из mkdir. Если outbox
+    # сломан, emit_event_safe тихо проглотит — mkdir не упадёт.
+    try:
+        from app.services.event_outbox import emit_event_safe
+
+        await emit_event_safe(
+            db,
+            event_type="file_folder_permission.created",
+            entity_type="file_folder_permission",
+            entity_id=str(rule.id),
+            payload={
+                "id": str(rule.id),
+                "folder_path": rule.folder_path,
+                "principal_type": rule.principal_type,
+                "principal_id": str(rule.principal_id),
+                "flags": {
+                    "can_read": True,
+                    "can_write": True,
+                    "can_delete": True,
+                    "can_manage_perms": True,
+                },
+                "inherit_to_subfolders": False,
+                "actor_user_id": str(user.id),
+                "source": "creator_grant",
+            },
+            payload_version=1,
+        )
+    except Exception:  # pragma: no cover — defensive
+        pass
+
     return rule
 
 

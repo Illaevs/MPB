@@ -41,6 +41,8 @@ from app.schemas.file_folder_permission import (
     FolderPermissionUpsert,
     FolderPermissionsResponse,
 )
+from app.services.audit_log import create_audit_log
+from app.services.event_outbox import emit_event_safe
 from app.services.folder_acl import (
     Perm,
     effective_perms,
@@ -52,6 +54,32 @@ from app.services.folder_acl import (
 
 
 router = APIRouter()
+
+
+# ────────────────────────────────────────────────────────────────────
+# helpers: snapshot правила (для AuditLog before/after + payload эмита)
+# ────────────────────────────────────────────────────────────────────
+
+
+def _rule_snapshot(rule: FileFolderPermission) -> dict:
+    """Сериализация правила в dict для payload эмита и AuditLog.
+
+    Минимально достаточный набор: чтобы по строке аудита можно было
+    восстановить «кому и какие флаги были даны/убраны».
+    """
+    return {
+        "id": str(rule.id),
+        "folder_path": rule.folder_path,
+        "principal_type": rule.principal_type,
+        "principal_id": str(rule.principal_id),
+        "flags": {
+            "can_read": bool(rule.can_read),
+            "can_write": bool(rule.can_write),
+            "can_delete": bool(rule.can_delete),
+            "can_manage_perms": bool(rule.can_manage_perms),
+        },
+        "inherit_to_subfolders": bool(rule.inherit_to_subfolders),
+    }
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -311,14 +339,15 @@ async def upsert_folder_permission(
         )
     ).scalar_one_or_none()
 
+    is_create = existing is None
+    before_snapshot = None
     if existing:
+        before_snapshot = _rule_snapshot(existing)
         existing.can_read = payload.can_read
         existing.can_write = payload.can_write
         existing.can_delete = payload.can_delete
         existing.can_manage_perms = payload.can_manage_perms
         existing.inherit_to_subfolders = payload.inherit_to_subfolders
-        await db.commit()
-        await db.refresh(existing)
         rule = existing
     else:
         rule = FileFolderPermission(
@@ -333,8 +362,63 @@ async def upsert_folder_permission(
             created_by_user_id=str(user.id),
         )
         db.add(rule)
-        await db.commit()
-        await db.refresh(rule)
+
+    # flush — чтобы rule.id появился до эмита и попал в outbox.entity_id.
+    await db.flush()
+    after_snapshot = _rule_snapshot(rule)
+
+    # Event Bus: created / updated. payload содержит «итоговое» состояние;
+    # для updated дополнительно кладём before для удобства подписчика.
+    # Раздельные ветки — чтобы autogen-каталог (app.tools.dump_event_types)
+    # увидел оба event_type как литералы.
+    emit_payload = {
+        **after_snapshot,
+        "actor_user_id": str(user.id),
+        "source": "explicit",
+    }
+    if before_snapshot is not None:
+        emit_payload["before"] = before_snapshot
+
+    if is_create:
+        outbox = await emit_event_safe(
+            db,
+            event_type="file_folder_permission.created",
+            entity_type="file_folder_permission",
+            entity_id=str(rule.id),
+            payload=emit_payload,
+            payload_version=1,
+        )
+    else:
+        outbox = await emit_event_safe(
+            db,
+            event_type="file_folder_permission.updated",
+            entity_type="file_folder_permission",
+            entity_id=str(rule.id),
+            payload=emit_payload,
+            payload_version=1,
+        )
+
+    await db.commit()
+    await db.refresh(rule)
+
+    # AuditLog. Делает свой commit, но к этому моменту outbox-row уже
+    # закоммичен — оба окажутся в БД, последовательно.
+    await create_audit_log(
+        db,
+        entity_type="file_folder_permission",
+        entity_id=str(rule.id),
+        action="permission_granted" if is_create else "permission_updated",
+        user_id=str(user.id),
+        before=before_snapshot,
+        after=after_snapshot,
+        meta={
+            "folder_path": rule.folder_path,
+            "principal_type": rule.principal_type,
+            "principal_id": str(rule.principal_id),
+            "source": "explicit",
+        },
+        source_event_id=outbox.event_id if outbox else None,
+    )
 
     labels = await _resolve_principal_labels(db, [rule])
     return _rule_to_schema(rule, labels, source_kind="explicit", source_path=norm)
@@ -363,6 +447,39 @@ async def delete_folder_permission(
         db, user, rule.folder_path, Perm.MANAGE, request=request
     )
 
+    # Снимок ДО удаления — пригодится и в payload, и в AuditLog.before.
+    snapshot = _rule_snapshot(rule)
+    folder_path = rule.folder_path
+
     await db.delete(rule)
+
+    outbox = await emit_event_safe(
+        db,
+        event_type="file_folder_permission.deleted",
+        entity_type="file_folder_permission",
+        entity_id=str(rule_id),
+        payload={
+            **snapshot,
+            "actor_user_id": str(user.id),
+        },
+        payload_version=1,
+    )
+
     await db.commit()
+
+    await create_audit_log(
+        db,
+        entity_type="file_folder_permission",
+        entity_id=str(rule_id),
+        action="permission_revoked",
+        user_id=str(user.id),
+        before=snapshot,
+        meta={
+            "folder_path": folder_path,
+            "principal_type": snapshot["principal_type"],
+            "principal_id": snapshot["principal_id"],
+        },
+        source_event_id=outbox.event_id if outbox else None,
+    )
+
     return {"deleted": True, "id": rule_id}
