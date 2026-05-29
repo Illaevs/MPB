@@ -503,11 +503,13 @@ async def _list_visible_conversations(
         if conversation.type == "direct":
             if not is_member:
                 continue
-            # Пустой DM (без сообщений) не показываем НИКОМУ — фронт
-            # держит свой «virtual chat» по peer_user_id до первого
-            # отправленного сообщения.
+            # Пустой DM (без сообщений) НЕ светится для собеседника —
+            # «я открыл и не написал» не должно создавать карточку у
+            # второго участника. Создателю чат остаётся виден сразу
+            # (иначе после клика «написать коллеге» получишь пустой
+            # экран — DM в БД есть, но в списке нет).
             has_msg = await _conversation_has_messages(db, str(conversation.id))
-            if not has_msg:
+            if not has_msg and str(conversation.created_by_user_id) != str(user.id):
                 continue
             member_ids = sorted(str(member.user_id) for member in conversation.members or [])
             peer_ids = [member_id for member_id in member_ids if member_id != str(user.id)]
