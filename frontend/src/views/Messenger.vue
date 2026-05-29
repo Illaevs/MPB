@@ -503,6 +503,23 @@
                       ></video>
                     </div>
 
+                    <!-- Phase D.2 — голосовые сообщения / любое audio/* -->
+                    <div v-if="messageAudioAttachments(item.message).length" class="message-bubble__audio-list">
+                      <div
+                        v-for="file in messageAudioAttachments(item.message)"
+                        :key="`audio:${file.path || file.name}`"
+                        class="message-audio"
+                      >
+                        <i class="fas fa-microphone"></i>
+                        <audio
+                          :src="file.download_url"
+                          controls
+                          preload="metadata"
+                          class="message-audio__player"
+                        ></audio>
+                      </div>
+                    </div>
+
                     <div v-if="messageFileAttachments(item.message).length" class="message-bubble__attachments">
                       <div v-for="file in messageFileAttachments(item.message)" :key="file.path || file.name" class="message-file">
                         <button type="button" class="message-file__icon" :title="file.name || 'Файл'" @click="downloadAttachment(file)">
@@ -767,6 +784,31 @@
                 @click="insertEmoji"
               >
                 <i class="far fa-smile"></i>
+              </button>
+              <!-- Phase D.2 — кнопка записи голосового сообщения. -->
+              <button
+                type="button"
+                class="messenger-composer__icon"
+                :class="{ 'is-recording': isRecording }"
+                :title="isRecording ? 'Остановить запись' : 'Голосовое сообщение'"
+                @click="isRecording ? stopRecording() : startRecording()"
+              >
+                <i class="fas" :class="isRecording ? 'fa-stop' : 'fa-microphone'"></i>
+              </button>
+            </div>
+
+            <!-- Phase D.2 — индикатор активной записи (внутри composer). -->
+            <div v-if="isRecording" class="messenger-composer__recording">
+              <span class="messenger-composer__recording-dot"></span>
+              <span class="messenger-composer__recording-time">{{ recordingDurationLabel }}</span>
+              <span class="messenger-composer__recording-hint">Запись… отпустите Stop, чтобы прикрепить</span>
+              <button
+                type="button"
+                class="messenger-composer__recording-cancel"
+                title="Отменить запись"
+                @click="cancelRecording"
+              >
+                <i class="fas fa-times"></i>
               </button>
             </div>
 
@@ -1504,11 +1546,23 @@ export default {
       return ['.mp4', '.webm', '.ogg', '.mov', '.m4v'].some((ext) => name.endsWith(ext))
     }
 
+    // Phase D.2 — inline-аудио. Голосовые сообщения от MediaRecorder
+    // приходят как audio/webm или audio/mp4. Рендерим встроенный
+    // <audio controls preload="metadata"> вместо download-карточки.
+    // Распознавание по MIME (надёжно) + расширению (страховка).
+    const isInlineAudio = (file = {}) => {
+      const contentType = String(file.content_type || file.type || '').toLowerCase()
+      if (contentType.startsWith('audio/')) return true
+      const name = String(file.name || '').toLowerCase()
+      return ['.mp3', '.wav', '.ogg', '.oga', '.m4a', '.weba', '.opus', '.aac'].some((ext) => name.endsWith(ext))
+    }
+
     const messageImageAttachments = (message) => (message?.attachments || []).filter((file) => isInlineImage(file) && file.download_url)
     const messageVideoAttachments = (message) => (message?.attachments || []).filter((file) => isInlineVideo(file) && file.download_url)
-    // Файлы — то, что НЕ inline-картинка и НЕ inline-видео.
+    const messageAudioAttachments = (message) => (message?.attachments || []).filter((file) => isInlineAudio(file) && file.download_url)
+    // Файлы — то, что НЕ inline-картинка, НЕ видео, НЕ аудио.
     const messageFileAttachments = (message) => (message?.attachments || []).filter(
-      (file) => (!isInlineImage(file) && !isInlineVideo(file)) || !file.download_url
+      (file) => (!isInlineImage(file) && !isInlineVideo(file) && !isInlineAudio(file)) || !file.download_url
     )
 
     const openImageViewer = (file, sourceFiles = []) => {
@@ -1893,6 +1947,169 @@ export default {
     const triggerFilePicker = () => {
       openFilePicker(fileInput.value)
     }
+
+    // Phase D.2 — голосовые сообщения (MediaRecorder).
+    // Воркфлоу:
+    //   click microphone → запрашиваем getUserMedia({audio})
+    //     ↳ если отказ — toastError, состояние не меняется
+    //     ↳ если ok — стартуем MediaRecorder, тикаем duration
+    //   click stop → останавливаем recorder, audio blob → File →
+    //     appendPendingFiles → юзер видит в pendingFiles + может
+    //     отправить кнопкой send (как обычный аттач)
+    //   click cancel → останавливаем, отбрасываем blob
+    //
+    // Формат: MediaRecorder сам выбирает поддерживаемый container
+    // (Chrome/FF — audio/webm с opus; Safari — audio/mp4 с aac).
+    // Backend принимает любой content_type (existing _store_attachments).
+    const isRecording = ref(false)
+    const recordingDuration = ref(0)  // в секундах, для UI таймера
+    let _mediaRecorder = null
+    let _mediaStream = null
+    let _recordedChunks = []
+    let _durationTimer = null
+    let _recordingCancelled = false
+
+    const _pickAudioMime = () => {
+      // Предпочтительный порядок: opus в webm (лучшее качество/размер),
+      // затем mp4/aac (Safari), затем дефолт MediaRecorder'а.
+      if (typeof MediaRecorder === 'undefined' || !MediaRecorder.isTypeSupported) return ''
+      const candidates = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/ogg;codecs=opus',
+        'audio/mp4',
+      ]
+      for (const mime of candidates) {
+        try {
+          if (MediaRecorder.isTypeSupported(mime)) return mime
+        } catch (e) {
+          // ignore
+        }
+      }
+      return ''
+    }
+
+    const _resetRecorderState = () => {
+      isRecording.value = false
+      recordingDuration.value = 0
+      _recordedChunks = []
+      _recordingCancelled = false
+      if (_durationTimer) {
+        clearInterval(_durationTimer)
+        _durationTimer = null
+      }
+      if (_mediaStream) {
+        try {
+          _mediaStream.getTracks().forEach((t) => t.stop())
+        } catch (e) {
+          // ignore
+        }
+        _mediaStream = null
+      }
+      _mediaRecorder = null
+    }
+
+    const startRecording = async () => {
+      if (isRecording.value) return
+      if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+        toastError('Браузер не поддерживает запись с микрофона')
+        return
+      }
+      if (typeof MediaRecorder === 'undefined') {
+        toastError('Браузер не поддерживает MediaRecorder')
+        return
+      }
+      let stream
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      } catch (err) {
+        // NotAllowedError / NotFoundError — отказ или нет микрофона.
+        toastError('Не удалось получить доступ к микрофону')
+        return
+      }
+      _mediaStream = stream
+      _recordedChunks = []
+      _recordingCancelled = false
+      const mimeType = _pickAudioMime()
+      try {
+        _mediaRecorder = mimeType
+          ? new MediaRecorder(stream, { mimeType })
+          : new MediaRecorder(stream)
+      } catch (err) {
+        toastError('Не удалось запустить запись')
+        _resetRecorderState()
+        return
+      }
+      _mediaRecorder.addEventListener('dataavailable', (event) => {
+        if (event.data && event.data.size > 0) _recordedChunks.push(event.data)
+      })
+      _mediaRecorder.addEventListener('stop', () => {
+        const wasCancelled = _recordingCancelled
+        const chunks = _recordedChunks.slice()
+        const recorderMime = _mediaRecorder?.mimeType || mimeType || 'audio/webm'
+        _resetRecorderState()
+        if (wasCancelled || !chunks.length) return
+        const blob = new Blob(chunks, { type: recorderMime })
+        // Имя: voice_YYYYMMDD_HHMMSS.<ext>
+        const ext = recorderMime.includes('mp4')
+          ? 'm4a'
+          : recorderMime.includes('ogg')
+            ? 'ogg'
+            : 'webm'
+        const ts = new Date()
+        const pad = (n) => String(n).padStart(2, '0')
+        const stamp =
+          `${ts.getFullYear()}${pad(ts.getMonth() + 1)}${pad(ts.getDate())}` +
+          `_${pad(ts.getHours())}${pad(ts.getMinutes())}${pad(ts.getSeconds())}`
+        const file = new File([blob], `voice_${stamp}.${ext}`, { type: recorderMime })
+        appendPendingFiles([file])
+      })
+      _mediaRecorder.start()
+      isRecording.value = true
+      recordingDuration.value = 0
+      // Таймер длительности — на UI отображаем «0:03».
+      _durationTimer = setInterval(() => {
+        recordingDuration.value += 1
+      }, 1000)
+    }
+
+    const stopRecording = () => {
+      if (!isRecording.value || !_mediaRecorder) return
+      try {
+        _mediaRecorder.stop()
+      } catch (e) {
+        _resetRecorderState()
+      }
+    }
+
+    const cancelRecording = () => {
+      if (!isRecording.value || !_mediaRecorder) {
+        _resetRecorderState()
+        return
+      }
+      _recordingCancelled = true
+      try {
+        _mediaRecorder.stop()
+      } catch (e) {
+        _resetRecorderState()
+      }
+    }
+
+    const recordingDurationLabel = computed(() => {
+      const total = recordingDuration.value
+      const m = Math.floor(total / 60)
+      const s = total % 60
+      return `${m}:${String(s).padStart(2, '0')}`
+    })
+
+    // Безопасность: если юзер закрыл вкладку или сменил чат во время
+    // записи — гасим recorder, чтобы микрофон не остался активным.
+    onBeforeUnmount(() => {
+      if (isRecording.value) cancelRecording()
+    })
+    watch(activeConversationId, () => {
+      if (isRecording.value) cancelRecording()
+    })
 
     const submitComposer = async () => {
       if (isEditMode.value) {
@@ -2555,6 +2772,11 @@ export default {
       setMobilePane,
       toggleSection,
       triggerFilePicker,
+      isRecording,
+      recordingDurationLabel,
+      startRecording,
+      stopRecording,
+      cancelRecording,
       onFilesPicked,
       removeFile,
       toggleMentions,
@@ -2600,8 +2822,10 @@ export default {
       insertEmoji,
       isInlineImage,
       isInlineVideo,
+      isInlineAudio,
       messageImageAttachments,
       messageVideoAttachments,
+      messageAudioAttachments,
       messageFileAttachments,
       mediaItems,
       documentItems,

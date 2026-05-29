@@ -1683,6 +1683,87 @@
 }
 
 /* ============================================================
+   Phase D.2 — голосовые/аудио сообщения inline в баббле
+   ============================================================ */
+.message-bubble__audio-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.message-audio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: rgba(99, 102, 241, 0.08);
+  border-radius: var(--chat-radius-small);
+}
+.message-audio i {
+  color: var(--chat-accent, var(--color-primary));
+  font-size: 1em;
+}
+.message-audio__player {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+}
+
+/* Composer mic button + recording indicator (Phase D.2). */
+.messenger-composer__icon.is-recording {
+  color: var(--color-danger, #ef4444);
+  background: rgba(239, 68, 68, 0.12);
+}
+.messenger-composer__recording {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px var(--space-3);
+  margin: var(--space-1) 0 0;
+  border-radius: var(--radius-md);
+  background: rgba(239, 68, 68, 0.08);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+}
+.messenger-composer__recording-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-danger, #ef4444);
+  animation: messenger-recording-pulse 1s ease-in-out infinite;
+}
+.messenger-composer__recording-time {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--color-danger, #ef4444);
+}
+.messenger-composer__recording-hint {
+  flex: 1;
+  min-width: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.messenger-composer__recording-cancel {
+  border: none;
+  background: transparent;
+  color: var(--color-text-subtle);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+}
+.messenger-composer__recording-cancel:hover {
+  background: var(--color-surface-2);
+  color: var(--color-text);
+}
+@keyframes messenger-recording-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(1.18); }
+}
+
+/* ============================================================
    Phase A.2 — DnD-файлы в composer
    ============================================================ */
 .messenger-thread { position: relative; }
