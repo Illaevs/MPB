@@ -55,6 +55,70 @@ router = APIRouter()
 
 MAX_CHAT_FILE_BYTES = 50 * 1024 * 1024
 MANAGEABLE_CONVERSATION_TYPES = {"group", "channel"}
+
+# Phase B.5 — rate-limit anti-spam.
+# Окно 60 секунд, лимит 5 «первых сообщений незнакомцам». В памяти
+# процесса (per-worker; для multi-worker нужен Redis — Stage E).
+# «Первое сообщение» = я отправляю в DM, в котором ещё нет моих
+# предыдущих сообщений.
+import time as _time_module  # noqa: E402
+
+_FIRST_MSG_WINDOW_SEC = 60
+_FIRST_MSG_LIMIT = 5
+_first_msg_recents: Dict[str, List[float]] = {}
+
+
+def _trim_old_first_msg_ts(user_id: str, now: float) -> None:
+    """Удаляет старые timestamp'ы (< now - window) из ring buffer'а."""
+    cutoff = now - _FIRST_MSG_WINDOW_SEC
+    arr = _first_msg_recents.get(user_id, [])
+    if not arr:
+        return
+    # отсечь головной хвост старых
+    while arr and arr[0] < cutoff:
+        arr.pop(0)
+    if arr:
+        _first_msg_recents[user_id] = arr
+    else:
+        _first_msg_recents.pop(user_id, None)
+
+
+async def _enforce_first_msg_rate_limit(
+    db: AsyncSession,
+    user_id: str,
+    conversation: ChatConversation,
+) -> None:
+    """Срабатывает на отправке сообщения в DM, в котором у юзера ещё
+    нет своих сообщений. Если за последние 60с уже было ≥5 таких
+    «первых» — 429.
+    """
+    if conversation.type != "direct":
+        return
+    # Есть ли у меня уже сообщения в этом DM?
+    prior = (
+        await db.execute(
+            select(func.count(GlobalChatMessage.id)).where(
+                GlobalChatMessage.conversation_id == str(conversation.id),
+                GlobalChatMessage.user_id == str(user_id),
+            )
+        )
+    ).scalar() or 0
+    if prior > 0:
+        return  # уже не «первое»
+
+    now = _time_module.time()
+    _trim_old_first_msg_ts(str(user_id), now)
+    recent = _first_msg_recents.setdefault(str(user_id), [])
+    if len(recent) >= _FIRST_MSG_LIMIT:
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                f"Слишком много новых чатов за короткое время "
+                f"(лимит {_FIRST_MSG_LIMIT} за {_FIRST_MSG_WINDOW_SEC}с). "
+                f"Подождите минуту."
+            ),
+        )
+    recent.append(now)
 MESSAGE_LOAD_OPTIONS = [
     joinedload(GlobalChatMessage.user),
     joinedload(GlobalChatMessage.pinned_by),
@@ -744,6 +808,10 @@ async def _create_message(
 
     if not content and not files_list and not forwarded_from_message:
         raise HTTPException(status_code=400, detail="Message, forward target or files are required")
+
+    # Phase B.5: anti-spam — rate-limit на «первое сообщение незнакомцу».
+    # Срабатывает ТОЛЬКО на DM (group/channel/global не трогаем).
+    await _enforce_first_msg_rate_limit(db, str(user.id), conversation)
 
     message = GlobalChatMessage(
         user_id=str(user.id),
