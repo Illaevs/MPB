@@ -1435,7 +1435,10 @@ async def mention_search(
                 label=title,
                 sublabel=d.obj_name if d.obj_name and d.obj_name != title else None,
                 avatar_url=None,
-                href=f"/deals/{d.id}",
+                # В этом CRM «сделка» (Deal) рендерится через
+                # ProjectDetail.vue по маршруту /projects/:id.
+                # Старого /deals/:id роутера нет.
+                href=f"/projects/{d.id}",
             )
         )
 
@@ -1464,7 +1467,10 @@ async def mention_search(
                 label=t.title or f"Задача {str(t.id)[:8]}",
                 sublabel=None,
                 avatar_url=None,
-                href=f"/tasks/{t.id}",
+                # У /tasks нет detail-роута; даём query-param,
+                # Tasks.vue может позже подхватить ?focus=<id>.
+                # Пока — открывается список задач (лучше пустого экрана).
+                href=f"/tasks?focus={t.id}",
             )
         )
 

@@ -1631,10 +1631,15 @@ export default {
         if (bestIdx > 0) {
           segments.push({ type: 'text', value: rest.slice(0, bestIdx) })
         }
+        // Defensive: старые сообщения (отправленные до фикса) могут иметь
+        // href = /deals/<id>, а такого роутера в этом CRM нет — сделки
+        // живут как ProjectDetail по /projects/<id>. Переписываем на лету.
+        let href = m.href || ''
+        if (href.startsWith('/deals/')) href = '/projects/' + href.slice('/deals/'.length)
         segments.push({
           type: 'mention',
           label: m.label,
-          href: m.href || '',
+          href,
           kind: m.kind || '',
           id: m.id || '',
         })
