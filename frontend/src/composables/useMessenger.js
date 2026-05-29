@@ -46,6 +46,8 @@ export function useMessenger() {
   const activeConversationId = ref('')
   const messages = ref([])
   const users = ref([])
+  const searchableUsers = ref([])
+  const loadingSearchableUsers = ref(false)
   const draft = ref('')
   const pendingFiles = ref([])
   const mentionPickerOpen = ref(false)
@@ -169,11 +171,37 @@ export function useMessenger() {
   }
 
   const isConversationUnread = (conversation) => {
-    if (!conversation?.last_message?.created_at) return false
+    if (!conversation) return false
+    // Stage 1: backend отдаёт unread_count per user. Если поле есть —
+    // доверяем ему. Старый localStorage-фолбэк оставлен на случай
+    // open-from-cache до первого fetch.
+    if (typeof conversation.unread_count === 'number') {
+      return conversation.unread_count > 0
+    }
+    if (!conversation.last_message?.created_at) return false
     if (String(conversation.last_message.user_id || '') === String(activeUser.value?.id || '')) return false
     const lastSeenAt = getLastSeenAt(conversation.id)
     return new Date(conversation.last_message.created_at).getTime() > lastSeenAt
   }
+
+  const conversationUnreadCount = (conversation) => {
+    if (!conversation) return 0
+    if (typeof conversation.unread_count === 'number') {
+      return Math.max(0, conversation.unread_count)
+    }
+    return isConversationUnread(conversation) ? 1 : 0
+  }
+
+  const isConversationMuted = (conversation) => {
+    if (!conversation?.muted_until) return false
+    try {
+      return new Date(conversation.muted_until).getTime() > Date.now()
+    } catch (error) {
+      return false
+    }
+  }
+
+  const isConversationArchived = (conversation) => !!conversation?.is_archived
 
   const isOwn = (message) => String(message?.user_id || '') === String(activeUser.value?.id || '')
 
@@ -369,6 +397,66 @@ export function useMessenger() {
       savingConversation.value = false
     }
   }
+
+  // ------ Stage 1 implicit DM: searchable users + per-user state -------
+
+  /**
+   * Загружает список всех активных юзеров (кроме меня) с пометкой
+   * has_dm / dm_conversation_id. Используется в новом sidebar-поиске
+   * «написать коллеге».
+   */
+  const loadSearchableUsers = async () => {
+    if (!enabled.value) {
+      searchableUsers.value = []
+      return []
+    }
+    loadingSearchableUsers.value = true
+    try {
+      const result = await messengerApi.listSearchableUsers()
+      searchableUsers.value = Array.isArray(result) ? result : []
+      return searchableUsers.value
+    } catch (error) {
+      searchableUsers.value = []
+      return []
+    } finally {
+      loadingSearchableUsers.value = false
+    }
+  }
+
+  /**
+   * PATCH /chat/conversations/{id}/me — управление моими настройками
+   * этого чата: is_archived / muted_until / muted_forever.
+   *
+   * После успеха перезагружает список (т.к. is_archived влияет на
+   * видимость, а сервер фильтрует).
+   */
+  const updateMyConversationState = async (conversationId, payload) => {
+    if (!conversationId) return null
+    try {
+      const result = await messengerApi.updateMyState(conversationId, payload)
+      const preferred =
+        payload && payload.is_archived === true
+          ? null // архивирован — переключимся на следующий
+          : String(conversationId)
+      await loadConversations({ silent: true, preferredId: preferred })
+      return result || null
+    } catch (error) {
+      toastError(error.response?.data?.detail || 'Не удалось обновить состояние чата')
+      return null
+    }
+  }
+
+  const archiveConversationForMe = (conversationId) =>
+    updateMyConversationState(conversationId, { is_archived: true })
+
+  const unarchiveConversationForMe = (conversationId) =>
+    updateMyConversationState(conversationId, { is_archived: false })
+
+  const muteConversationForever = (conversationId) =>
+    updateMyConversationState(conversationId, { muted_forever: true })
+
+  const unmuteConversation = (conversationId) =>
+    updateMyConversationState(conversationId, { muted_forever: false })
 
   const createConversation = async (payload) => {
     savingConversation.value = true
@@ -652,6 +740,17 @@ export function useMessenger() {
     isEditMode,
     canManageMembers,
     isConversationUnread,
+    conversationUnreadCount,
+    isConversationMuted,
+    isConversationArchived,
+    searchableUsers,
+    loadingSearchableUsers,
+    loadSearchableUsers,
+    updateMyConversationState,
+    archiveConversationForMe,
+    unarchiveConversationForMe,
+    muteConversationForever,
+    unmuteConversation,
     isOwn,
     canEdit,
     formatDateTime,

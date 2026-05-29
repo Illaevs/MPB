@@ -14,8 +14,8 @@ const BASE = '/api/v1/chat'
 
 // ---- conversations: list/getById/create/update/remove ----------------------
 
-export const list = (options) =>
-  get(`${BASE}/conversations`, undefined, options)
+export const list = (params, options) =>
+  get(`${BASE}/conversations`, params, options)
 
 export const getById = (conversationId, options) =>
   get(`${BASE}/conversations/${conversationId}`, undefined, options)
@@ -39,6 +39,25 @@ export const addMembers = (conversationId, userIds, options) =>
 
 export const removeMember = (conversationId, userId, options) =>
   del(`${BASE}/conversations/${conversationId}/members/${userId}`, options)
+
+// ---- per-user conversation state (Stage 1 implicit DM) ---------------------
+
+/**
+ * PATCH /chat/conversations/{id}/me — мои настройки этого чата.
+ * Поля опциональны; передаём только то, что меняем.
+ *
+ *   updateMyState(id, { is_archived: true })       // скрыть у себя
+ *   updateMyState(id, { muted_forever: true })     // тишина навсегда
+ *   updateMyState(id, { muted_until: '2026-...' }) // тишина до момента
+ *   updateMyState(id, { muted_forever: false })    // снять mute
+ */
+export const updateMyState = (conversationId, payload, options) =>
+  patch(`${BASE}/conversations/${conversationId}/me`, payload, options)
+
+// ---- user search (для «написать коллеге») ---------------------------------
+
+export const listSearchableUsers = (options) =>
+  get(`${BASE}/users/searchable`, undefined, options)
 
 // ---- conversation messages (мессенджер) ------------------------------------
 
