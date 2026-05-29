@@ -96,8 +96,10 @@ from .approval import (
     ApprovalTemplate,
     ApprovalTemplateStep,
 )
+from .file_folder_permission import FileFolderPermission
 
 __all__ = [
+    "FileFolderPermission",
     "Company",
     "Role",
     "RolePermission",
