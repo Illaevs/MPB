@@ -180,7 +180,20 @@
         </button>
       </aside>
 
-      <section class="messenger-thread">
+      <section
+        class="messenger-thread"
+        :class="{ 'is-drop-target': composerDragOver }"
+        @dragenter.prevent="onComposerDragEnter"
+        @dragover.prevent="onComposerDragOver"
+        @dragleave.prevent="onComposerDragLeave"
+        @drop.prevent="onComposerDrop"
+      >
+        <div v-if="composerDragOver" class="messenger-thread__drop-overlay">
+          <div class="messenger-thread__drop-card">
+            <i class="fas fa-cloud-upload-alt"></i>
+            <span>Бросьте файлы — добавим к сообщению</span>
+          </div>
+        </div>
         <header v-if="activeConversation" class="messenger-thread__header">
           <div class="thread-title">
             <div class="thread-title__avatar" :class="conversationAvatarClass(activeConversation)" :style="threadAvatarStyle">
@@ -1020,6 +1033,46 @@ export default {
     // Stage 1 implicit DM: state для «написать коллеге» + per-card menu.
     const writeColleagueSearch = ref('')
     const openCardMenuId = ref(null)
+
+    // Phase A.2: drag-and-drop файлов в чат. dragDepth — стандартный
+    // патт для устранения мерцания overlay (dragenter/dragleave
+    // у дочерних элементов триггерит лишние события).
+    const composerDragOver = ref(false)
+    let _composerDragDepth = 0
+
+    const onComposerDragEnter = (event) => {
+      // На простой text-drag не реагируем.
+      if (!event?.dataTransfer?.types || !Array.from(event.dataTransfer.types).includes('Files')) {
+        return
+      }
+      _composerDragDepth += 1
+      composerDragOver.value = true
+    }
+
+    const onComposerDragOver = (event) => {
+      // dropEffect=copy визуально показывает «добавим к сообщению».
+      if (event?.dataTransfer && Array.from(event.dataTransfer.types || []).includes('Files')) {
+        event.dataTransfer.dropEffect = 'copy'
+        composerDragOver.value = true
+      }
+    }
+
+    const onComposerDragLeave = () => {
+      _composerDragDepth = Math.max(0, _composerDragDepth - 1)
+      if (_composerDragDepth === 0) {
+        composerDragOver.value = false
+      }
+    }
+
+    const onComposerDrop = (event) => {
+      _composerDragDepth = 0
+      composerDragOver.value = false
+      const files = Array.from(event?.dataTransfer?.files || [])
+      if (!files.length) return
+      // Используем тот же канал, что и file-picker / paste — это
+      // делает проверки размера/типа единообразными.
+      appendPendingFiles(files)
+    }
 
     const filteredSearchableUsers = computed(() => {
       const q = String(writeColleagueSearch.value || '').trim().toLowerCase()
@@ -1873,6 +1926,11 @@ export default {
       loadingSearchableUsers,
       filteredSearchableUsers,
       openCardMenuId,
+      composerDragOver,
+      onComposerDragEnter,
+      onComposerDragOver,
+      onComposerDragLeave,
+      onComposerDrop,
       groupsOpen,
       directOpen,
       messageSearchOpen,
