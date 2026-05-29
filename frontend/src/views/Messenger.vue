@@ -70,46 +70,99 @@
         </div>
 
         <div class="messenger-sidebar__content">
-          <button
+          <div
             v-for="conversation in filteredFlatConversations"
             :key="conversation.id"
-            type="button"
-            class="conversation-card"
-            :class="{ 'is-active': conversation.type === 'direct' ? isDirectEntryActive(conversation) : String(conversation.id) === String(activeConversationId) }"
-            @click="conversation.type === 'direct' ? openDirectConversation(conversation) : openConversation(conversation.id)"
+            class="conversation-card-wrap"
+            :class="{ 'is-muted': isConversationMuted(conversation) }"
           >
-            <span
-              class="conversation-card__avatar"
-              :class="conversation.type === 'direct' ? '' : conversationAvatarClass(conversation)"
-              :style="conversation.type === 'direct' && !getConversationUserAvatarUrl(conversation) ? getAvatarStyle(conversation.title) : null"
+            <button
+              type="button"
+              class="conversation-card"
+              :class="{ 'is-active': conversation.type === 'direct' ? isDirectEntryActive(conversation) : String(conversation.id) === String(activeConversationId) }"
+              @click="conversation.type === 'direct' ? openDirectConversation(conversation) : openConversation(conversation.id)"
             >
-              <template v-if="conversation.type === 'direct'">
-                <img
-                  v-if="getConversationUserAvatarUrl(conversation) && !isAvatarBroken(getConversationUserAvatarUrl(conversation))"
-                  :src="getConversationUserAvatarUrl(conversation)"
-                  :alt="conversation.title"
-                  class="messenger-avatar-image"
-                  @error="markAvatarBroken(getConversationUserAvatarUrl(conversation))"
-                >
-                <template v-else>{{ getInitial(conversation.title) }}</template>
-              </template>
-              <template v-else>
-                <i v-if="conversation.type === 'global'" class="fas fa-shopping-bag"></i>
-                <i v-else-if="conversation.type === 'channel'" class="fas fa-bullhorn"></i>
-                <i v-else class="fas fa-users"></i>
-              </template>
-            </span>
-
-            <span class="conversation-card__content">
-              <span class="conversation-card__topline">
-                <strong>{{ conversation.title }}</strong>
-                <span class="conversation-card__time">{{ formatSidebarTime(conversation.last_message?.created_at) }}</span>
+              <span
+                class="conversation-card__avatar"
+                :class="conversation.type === 'direct' ? '' : conversationAvatarClass(conversation)"
+                :style="conversation.type === 'direct' && !getConversationUserAvatarUrl(conversation) ? getAvatarStyle(conversation.title) : null"
+              >
+                <template v-if="conversation.type === 'direct'">
+                  <img
+                    v-if="getConversationUserAvatarUrl(conversation) && !isAvatarBroken(getConversationUserAvatarUrl(conversation))"
+                    :src="getConversationUserAvatarUrl(conversation)"
+                    :alt="conversation.title"
+                    class="messenger-avatar-image"
+                    @error="markAvatarBroken(getConversationUserAvatarUrl(conversation))"
+                  >
+                  <template v-else>{{ getInitial(conversation.title) }}</template>
+                </template>
+                <template v-else>
+                  <i v-if="conversation.type === 'global'" class="fas fa-shopping-bag"></i>
+                  <i v-else-if="conversation.type === 'channel'" class="fas fa-bullhorn"></i>
+                  <i v-else class="fas fa-users"></i>
+                </template>
               </span>
-              <span class="conversation-card__preview">{{ conversationPreview(conversation) }}</span>
-            </span>
 
-            <span v-if="isConversationUnread(conversation)" class="conversation-card__badge"></span>
-          </button>
+              <span class="conversation-card__content">
+                <span class="conversation-card__topline">
+                  <strong>{{ conversation.title }}</strong>
+                  <span class="conversation-card__time">
+                    <i v-if="isConversationMuted(conversation)" class="fas fa-bell-slash" title="Беззвучный"></i>
+                    {{ formatSidebarTime(conversation.last_message?.created_at) }}
+                  </span>
+                </span>
+                <span class="conversation-card__preview">{{ conversationPreview(conversation) }}</span>
+              </span>
+
+              <span
+                v-if="conversationUnreadCount(conversation) > 0"
+                class="conversation-card__badge"
+                :title="`${conversationUnreadCount(conversation)} непрочитанных`"
+              >{{ conversationUnreadCount(conversation) > 99 ? '99+' : conversationUnreadCount(conversation) }}</span>
+            </button>
+
+            <button
+              v-if="conversation.type !== 'global'"
+              type="button"
+              class="conversation-card__menu-btn"
+              :class="{ 'is-open': openCardMenuId === String(conversation.id) }"
+              :aria-label="`Действия с чатом ${conversation.title}`"
+              @click.stop="toggleCardMenu(conversation)"
+            >
+              <i class="fas fa-ellipsis-v"></i>
+            </button>
+
+            <div
+              v-if="openCardMenuId === String(conversation.id)"
+              class="conversation-card__menu"
+              @click.stop
+            >
+              <button
+                v-if="!isConversationMuted(conversation)"
+                type="button"
+                class="conversation-card__menu-item"
+                @click="muteCardForever(conversation)"
+              >
+                <i class="fas fa-bell-slash"></i> Беззвучный
+              </button>
+              <button
+                v-else
+                type="button"
+                class="conversation-card__menu-item"
+                @click="unmuteCard(conversation)"
+              >
+                <i class="fas fa-bell"></i> Включить звук
+              </button>
+              <button
+                type="button"
+                class="conversation-card__menu-item"
+                @click="archiveCard(conversation)"
+              >
+                <i class="fas fa-archive"></i> Скрыть из списка
+              </button>
+            </div>
+          </div>
 
           <div v-if="!filteredFlatConversations.length && !loading" class="messenger-sidebar__empty">
             <i class="fas" :class="sidebarSearch ? 'fa-search' : 'fa-inbox'"></i>
@@ -642,7 +695,7 @@
               <label class="messenger-field">
                 <span>Тип</span>
                 <select v-model="conversationForm.type" class="form-control">
-                  <option value="direct">Личный чат</option>
+                  <option value="direct">Написать коллеге</option>
                   <option value="group">Группа</option>
                   <option value="channel">Канал</option>
                 </select>
@@ -660,14 +713,48 @@
               </label>
             </template>
 
+            <!-- Stage 1 implicit DM: searchable users (любой активный
+                 юзер, не только «без чата»). Помечаем «уже есть чат» —
+                 клик переключает на существующий, а не плодит дубль. -->
             <template v-if="!renameMode && conversationForm.type === 'direct'">
               <label class="messenger-field">
-                <span>Пользователь</span>
-                <select v-model="conversationForm.directUserId" class="form-control">
-                  <option value="">Выберите пользователя</option>
-                  <option v-for="user in availableDirectUsers" :key="user.id" :value="user.id">{{ user.full_name || user.email }}</option>
-                </select>
+                <span>Кому написать</span>
+                <input
+                  v-model="writeColleagueSearch"
+                  class="form-control"
+                  type="text"
+                  placeholder="Поиск по имени или email…"
+                  @keydown.esc.stop="writeColleagueSearch = ''"
+                >
               </label>
+              <div class="messenger-write-list">
+                <button
+                  v-for="user in filteredSearchableUsers"
+                  :key="user.id"
+                  type="button"
+                  class="messenger-write-row"
+                  @click="pickColleagueAndOpen(user)"
+                >
+                  <UiAvatar
+                    :name="user.full_name || user.email || ''"
+                    :src="user.avatar_url || null"
+                    size="sm"
+                  />
+                  <span class="messenger-write-row__copy">
+                    <strong>{{ user.full_name || user.email || user.id }}</strong>
+                    <small>
+                      <template v-if="user.has_dm"><i class="fas fa-comment-dots"></i> Уже есть чат</template>
+                      <template v-else-if="user.email">{{ user.email }}</template>
+                    </small>
+                  </span>
+                </button>
+                <div v-if="loadingSearchableUsers && !filteredSearchableUsers.length" class="messenger-write-empty">
+                  Загрузка…
+                </div>
+                <div v-else-if="!filteredSearchableUsers.length" class="messenger-write-empty">
+                  {{ writeColleagueSearch ? 'Никого не нашли' : 'Нет доступных коллег' }}
+                </div>
+              </div>
             </template>
 
             <template v-if="!renameMode && conversationForm.type !== 'direct'">
@@ -684,7 +771,13 @@
           </div>
           <div class="messenger-dialog__actions">
             <button type="button" class="btn btn-outline-secondary btn-sm" @click="closeConversationModal">Отмена</button>
-            <button type="button" class="btn btn-primary btn-sm" :disabled="savingConversation" @click="submitConversationModal">Сохранить</button>
+            <button
+              v-if="renameMode || conversationForm.type !== 'direct'"
+              type="button"
+              class="btn btn-primary btn-sm"
+              :disabled="savingConversation"
+              @click="submitConversationModal"
+            >Сохранить</button>
           </div>
         </div>
       </div>
@@ -772,6 +865,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useMessenger } from '../composables/useMessenger'
 import { useToast } from '../composables/useToast'
 import { normalizeAvatarUrl } from '../utils/avatar'
+import UiAvatar from '../components/ui/UiAvatar.vue'
 
 const URL_RE = /https?:\/\/[^\s<>"']+/gi
 const INLINE_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
@@ -779,6 +873,7 @@ const INLINE_IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp', '.gif']
 
 export default {
   name: 'Messenger',
+  components: { UiAvatar },
   setup() {
     const route = useRoute()
     const router = useRouter()
@@ -846,6 +941,15 @@ export default {
       isEditMode,
       canManageMembers,
       isConversationUnread,
+      conversationUnreadCount,
+      isConversationMuted,
+      isConversationArchived,
+      searchableUsers,
+      loadingSearchableUsers,
+      loadSearchableUsers,
+      archiveConversationForMe,
+      muteConversationForever,
+      unmuteConversation,
       isOwn,
       canEdit,
       formatDateTime,
@@ -879,6 +983,22 @@ export default {
       unpinMessage,
       downloadAttachment
     } = useMessenger()
+
+    // Stage 1 implicit DM: state для «написать коллеге» + per-card menu.
+    const writeColleagueSearch = ref('')
+    const openCardMenuId = ref(null)
+
+    const filteredSearchableUsers = computed(() => {
+      const q = String(writeColleagueSearch.value || '').trim().toLowerCase()
+      const list = searchableUsers.value || []
+      if (!q) return list.slice(0, 60)
+      return list
+        .filter((u) => {
+          const hay = `${u.full_name || ''} ${u.email || ''}`.toLowerCase()
+          return hay.includes(q)
+        })
+        .slice(0, 60)
+    })
 
     const isCompactMessenger = computed(() => viewportWidth.value <= 1180)
     const activeMobilePane = computed(() => {
@@ -1346,7 +1466,72 @@ export default {
     const openConversationModal = () => {
       renameMode.value = false
       conversationForm.value = { type: 'direct', title: '', description: '', directUserId: '', memberIds: [] }
+      writeColleagueSearch.value = ''
       showConversationModal.value = true
+      // Stage 1: подтягиваем список юзеров для inline-поиска. Ленивая
+      // загрузка — не пытаемся обновить, если список уже есть.
+      if (!searchableUsers.value?.length) {
+        loadSearchableUsers()
+      }
+    }
+
+    // Stage 1: клик по карточке юзера в «написать коллеге» — открываем
+    // существующий DM (если has_dm=true) или создаём новый. Закрываем
+    // модал сразу.
+    const pickColleagueAndOpen = async (user) => {
+      if (!user || !user.id) return
+      try {
+        if (user.has_dm && user.dm_conversation_id) {
+          await selectConversation(user.dm_conversation_id, { silent: true })
+        } else {
+          await createDirectConversation(user.id)
+        }
+      } finally {
+        showConversationModal.value = false
+      }
+    }
+
+    // Per-card actions ----------------------------------------------------
+
+    const toggleCardMenu = (conversation) => {
+      const id = String(conversation?.id || '')
+      if (openCardMenuId.value === id) {
+        openCardMenuId.value = null
+      } else {
+        openCardMenuId.value = id
+      }
+    }
+
+    const closeCardMenuOnDocumentClick = (event) => {
+      if (!openCardMenuId.value) return
+      // если клик НЕ внутри открытого меню/триггера — закрываем.
+      const t = event.target
+      if (t && t.closest && (t.closest('.conversation-card__menu') || t.closest('.conversation-card__menu-btn'))) {
+        return
+      }
+      openCardMenuId.value = null
+    }
+
+    const archiveCard = async (conversation) => {
+      const id = String(conversation?.id || '')
+      if (!id) return
+      openCardMenuId.value = null
+      await archiveConversationForMe(id)
+      toastSuccess('Чат скрыт из списка')
+    }
+
+    const muteCardForever = async (conversation) => {
+      const id = String(conversation?.id || '')
+      if (!id) return
+      openCardMenuId.value = null
+      await muteConversationForever(id)
+    }
+
+    const unmuteCard = async (conversation) => {
+      const id = String(conversation?.id || '')
+      if (!id) return
+      openCardMenuId.value = null
+      await unmuteConversation(id)
     }
 
     const openRenameModal = () => {
@@ -1542,11 +1727,13 @@ export default {
       handleViewportResize()
       window.addEventListener('resize', handleViewportResize, { passive: true })
       window.addEventListener('keydown', handleViewerKeydown)
+      document.addEventListener('click', closeCardMenuOnDocumentClick)
     })
 
     onBeforeUnmount(() => {
       window.removeEventListener('resize', handleViewportResize)
       window.removeEventListener('keydown', handleViewerKeydown)
+      document.removeEventListener('click', closeCardMenuOnDocumentClick)
     })
 
     return {
@@ -1572,6 +1759,13 @@ export default {
       isEditMode,
       canManageMembers,
       isConversationUnread,
+      conversationUnreadCount,
+      isConversationMuted,
+      isConversationArchived,
+      writeColleagueSearch,
+      loadingSearchableUsers,
+      filteredSearchableUsers,
+      openCardMenuId,
       groupsOpen,
       directOpen,
       messageSearchOpen,
@@ -1646,6 +1840,11 @@ export default {
       openRenameModal,
       closeConversationModal,
       submitConversationModal,
+      pickColleagueAndOpen,
+      toggleCardMenu,
+      archiveCard,
+      muteCardForever,
+      unmuteCard,
       submitAddMembers,
       insertLinkToken,
       insertEmoji,
