@@ -588,6 +588,83 @@ export function useMessenger() {
     }
   })
 
+  // Phase D.1 — глобальный поиск по сообщениям.
+  // Полный stateful searcher: query + результаты + флаги «идёт ли поиск»
+  // и «панель открыта». View подписывается на messageSearchQuery
+  // и подёргивает runMessageSearch(); сам debounce — на стороне Vue.
+  const messageSearchQuery = ref('')
+  const messageSearchResults = ref([])
+  const messageSearchLoading = ref(false)
+  const messageSearchPanelOpen = ref(false)
+
+  let _msgSearchSeq = 0
+
+  const runMessageSearch = async (query = messageSearchQuery.value) => {
+    const q = String(query || '').trim()
+    messageSearchQuery.value = q
+    // <2 символов — синхронно очищаем, никаких сетевых запросов.
+    if (q.length < 2) {
+      messageSearchResults.value = []
+      messageSearchLoading.value = false
+      return []
+    }
+    const seq = ++_msgSearchSeq
+    messageSearchLoading.value = true
+    try {
+      const data = await messengerApi.searchMessages(q)
+      // Если за время запроса юзер ввёл новое значение — игнорим
+      // устаревший ответ.
+      if (seq !== _msgSearchSeq) return []
+      messageSearchResults.value = Array.isArray(data) ? data : []
+      return messageSearchResults.value
+    } catch (e) {
+      if (seq === _msgSearchSeq) {
+        messageSearchResults.value = []
+      }
+      return []
+    } finally {
+      if (seq === _msgSearchSeq) {
+        messageSearchLoading.value = false
+      }
+    }
+  }
+
+  const openMessageSearchPanel = () => {
+    messageSearchPanelOpen.value = true
+  }
+
+  const closeMessageSearchPanel = () => {
+    messageSearchPanelOpen.value = false
+    messageSearchQuery.value = ''
+    messageSearchResults.value = []
+    messageSearchLoading.value = false
+  }
+
+  // Результаты сгруппированные по chat — для UI «по чату → список
+  // сообщений». Сохраняем порядок появления (т.е. самые свежие чаты
+  // сверху, т.к. backend сортирует по created_at desc).
+  const messageSearchResultsByChat = computed(() => {
+    const groups = []
+    const byId = new Map()
+    for (const item of messageSearchResults.value || []) {
+      const cid = String(item.conversation_id || '')
+      if (!cid) continue
+      let group = byId.get(cid)
+      if (!group) {
+        group = {
+          conversation_id: cid,
+          conversation_title: item.conversation_title,
+          conversation_type: item.conversation_type,
+          items: [],
+        }
+        byId.set(cid, group)
+        groups.push(group)
+      }
+      group.items.push(item)
+    }
+    return groups
+  })
+
   // Phase B.3 — emoji reactions.
   // Idempotent toggle: backend сам решит создать/удалить. Frontend
   // оптимистично патчит messages.value для мгновенного отклика, потом
@@ -912,6 +989,14 @@ export function useMessenger() {
     pinConversation,
     unpinConversation,
     toggleMessageReaction,
+    messageSearchQuery,
+    messageSearchResults,
+    messageSearchResultsByChat,
+    messageSearchLoading,
+    messageSearchPanelOpen,
+    runMessageSearch,
+    openMessageSearchPanel,
+    closeMessageSearchPanel,
     typingUsers,
     noteUserTyping,
     isOwn,

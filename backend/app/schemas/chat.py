@@ -204,3 +204,31 @@ class MentionItem(BaseModel):
     sublabel: Optional[str] = None
     avatar_url: Optional[str] = None
     href: Optional[str] = None  # маршрут для перехода во фронте
+
+
+class MessageSearchResult(BaseModel):
+    """GET /chat/search — один результат глобального поиска по сообщениям.
+
+    Phase D.1: substring-поиск (ILIKE) по body всех сообщений из чатов,
+    в которых я участвую (DM/group/channel) + global chat. ACL —
+    membership-based: бэкенд фильтрует на этапе SQL, ничего постороннего
+    не утечёт. Snippet — небольшой кусок тела сообщения с подсветкой,
+    позиционируется вокруг первого вхождения q (UI рендерит как HTML).
+    """
+
+    message_id: str
+    conversation_id: str
+    conversation_title: str
+    conversation_type: Literal["direct", "group", "channel", "global"]
+    user_id: Optional[str] = None
+    user_name: Optional[str] = None
+    snippet: str  # HTML-safe: уже c <mark>…</mark> вокруг найденного
+    body_preview: str  # plain text, без markup; для accessibility/copy
+    created_at: datetime
+
+    @field_serializer("created_at")
+    def serialize_created_at(self, value: datetime) -> str:
+        return serialize_utc_datetime(value)
+
+    class Config:
+        from_attributes = True

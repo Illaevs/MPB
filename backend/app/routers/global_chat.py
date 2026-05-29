@@ -37,6 +37,7 @@ from app.schemas.chat import (
     ChatMessageReferenceResponse,
     MentionItem,
     MessageReactionAggregate,
+    MessageSearchResult,
     ReactionToggleRequest,
     SearchableUserResponse,
     TypingPresence,
@@ -1447,6 +1448,170 @@ async def mention_search(
         )
 
     return items
+
+
+# Phase D.1 — глобальный поиск по сообщениям мессенджера.
+# Substring (ILIKE) по body всех видимых мне чатов: DM/group/channel,
+# где я участвую, плюс глобальный чат. Удалённые сообщения исключены.
+# MVP без FTS5/embeddings — простой и предсказуемый: 50–100k сообщений
+# на хост, ILIKE по индексу created_at + LIMIT 50 укладывается в ~100мс.
+# Если корпус вырастет — апгрейд на FTS5 messages-index, схема готова.
+_MSG_SEARCH_LIMIT_MAX = 100
+_MSG_SEARCH_SNIPPET_RADIUS = 80  # символов слева/справа от первого матча
+
+
+def _build_snippet(body: str, query: str) -> tuple[str, str]:
+    """Готовит (html_snippet_with_mark, plain_preview).
+
+    Возвращает:
+      - html_snippet: текст с `<mark>` вокруг найденного фрагмента;
+                      HTML-экранирован, безопасен к v-html
+      - plain_preview: тот же фрагмент без markup
+    Если query пустой или не найден — возвращает «голову» сообщения.
+    """
+    body = body or ""
+    if not body:
+        return "", ""
+    haystack_lc = body.lower()
+    needle_lc = (query or "").lower()
+    idx = haystack_lc.find(needle_lc) if needle_lc else -1
+    if idx < 0:
+        # fallback — первые 160 символов
+        preview = body[:160]
+        suffix = "…" if len(body) > 160 else ""
+        from html import escape as _html_escape
+        return _html_escape(preview) + suffix, preview + suffix
+    start = max(0, idx - _MSG_SEARCH_SNIPPET_RADIUS)
+    end = min(len(body), idx + len(needle_lc) + _MSG_SEARCH_SNIPPET_RADIUS)
+    chunk_before = body[start:idx]
+    chunk_match = body[idx:idx + len(needle_lc)]
+    chunk_after = body[idx + len(needle_lc):end]
+    prefix = "…" if start > 0 else ""
+    suffix = "…" if end < len(body) else ""
+    plain = f"{prefix}{chunk_before}{chunk_match}{chunk_after}{suffix}"
+    from html import escape as _html_escape
+    html = (
+        prefix
+        + _html_escape(chunk_before)
+        + "<mark>"
+        + _html_escape(chunk_match)
+        + "</mark>"
+        + _html_escape(chunk_after)
+        + suffix
+    )
+    return html, plain
+
+
+@router.get("/search", response_model=List[MessageSearchResult])
+async def search_messages(
+    request: Request,
+    q: str = "",
+    skip: int = 0,
+    limit: int = 50,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(CurrentUser),
+):
+    """Глобальный поиск по сообщениям мессенджера.
+
+    Phase D.1: подстрочный (ILIKE) поиск по body. ACL — мембершип:
+      - чаты, где я ChatConversationMember
+      - + глобальный чат (общий для всех)
+    Удалённые сообщения исключены. Сортировка — по убыванию created_at
+    (последние сверху). Возвращает уже сериализованные результаты с
+    title чата + snippet для UI.
+
+    Минимальная длина q — 2 символа (избегаем дурацких O(N) сканов).
+    Пустой q → [].
+    """
+    await _require_chat_access(request, db, user)
+    query = (q or "").strip()
+    if len(query) < 2:
+        return []
+    limit_clamped = max(1, min(int(limit or 50), _MSG_SEARCH_LIMIT_MAX))
+    skip_clamped = max(0, int(skip or 0))
+
+    # Какие conversation_id видны юзеру:
+    #   1) where ChatConversationMember.user_id == me
+    #   2) + global conversation id
+    my_member_subq = (
+        select(ChatConversationMember.conversation_id)
+        .where(ChatConversationMember.user_id == str(user.id))
+    )
+    global_conv = await _ensure_global_conversation(db, user)
+    global_conv_id = str(global_conv.id)
+
+    like = f"%{query}%"
+    msg_stmt = (
+        select(GlobalChatMessage)
+        .where(
+            GlobalChatMessage.is_deleted == False,  # noqa: E712
+            GlobalChatMessage.body.isnot(None),
+            GlobalChatMessage.body.ilike(like),
+            (
+                GlobalChatMessage.conversation_id.in_(my_member_subq)
+                | (GlobalChatMessage.conversation_id == global_conv_id)
+            ),
+        )
+        .options(joinedload(GlobalChatMessage.user))
+        .order_by(GlobalChatMessage.created_at.desc())
+        .offset(skip_clamped)
+        .limit(limit_clamped)
+    )
+    rows = (await db.execute(msg_stmt)).scalars().all()
+    if not rows:
+        return []
+
+    # Подтянем все conversation'ы одним запросом (для title и type).
+    conv_ids = sorted({str(r.conversation_id) for r in rows if r.conversation_id})
+    conv_map: Dict[str, ChatConversation] = {}
+    if conv_ids:
+        conv_result = await db.execute(
+            select(ChatConversation)
+            .where(ChatConversation.id.in_(conv_ids))
+            .options(*CONVERSATION_LOAD_OPTIONS)
+        )
+        for conv in conv_result.scalars().unique().all():
+            conv_map[str(conv.id)] = conv
+
+    results: List[MessageSearchResult] = []
+    for msg in rows:
+        cid = str(msg.conversation_id) if msg.conversation_id else ""
+        conv = conv_map.get(cid)
+        if not conv:
+            continue
+        # Для DM показываем имя собеседника, а не «Direct».
+        if conv.type == "direct":
+            peer_name = None
+            for member in conv.members or []:
+                if str(member.user_id) != str(user.id):
+                    peer_user = member.__dict__.get("user")
+                    if peer_user:
+                        peer_name = (
+                            getattr(peer_user, "full_name", None)
+                            or getattr(peer_user, "email", None)
+                        )
+                    break
+            title = peer_name or "Личный чат"
+        elif conv.type == "global":
+            title = conv.title or "Общий чат"
+        else:
+            title = conv.title or ("Канал" if conv.type == "channel" else "Чат")
+        snippet_html, snippet_plain = _build_snippet(msg.body or "", query)
+        author = msg.__dict__.get("user")
+        results.append(
+            MessageSearchResult(
+                message_id=str(msg.id),
+                conversation_id=cid,
+                conversation_title=title,
+                conversation_type=conv.type,  # type: ignore[arg-type]
+                user_id=str(msg.user_id) if msg.user_id else None,
+                user_name=getattr(author, "full_name", None),
+                snippet=snippet_html,
+                body_preview=snippet_plain,
+                created_at=msg.created_at,
+            )
+        )
+    return results
 
 
 @router.get("/conversations/{conversation_id}/messages", response_model=List[GlobalChatMessageResponse])

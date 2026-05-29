@@ -103,6 +103,14 @@ export const signalTyping = (conversationId, options) =>
 export const listTyping = (conversationId, options) =>
   get(`${BASE}/conversations/${conversationId}/typing`, undefined, options)
 
+// Phase D.1: глобальный поиск по сообщениям всех моих чатов + глобалки.
+// Возвращает [{message_id, conversation_id, conversation_title,
+// conversation_type, user_id, user_name, snippet, body_preview, created_at}].
+// MVP без FTS5: backend делает ILIKE %q% c ACL-фильтром по membership.
+// Минимум 2 символа в q — иначе пустой массив.
+export const searchMessages = (q, params = {}, options) =>
+  get(`${BASE}/search`, { q, ...params }, options)
+
 // ---- global chat (плоский /messages, без conversation_id) ------------------
 
 export const listGlobalMessages = (options) =>

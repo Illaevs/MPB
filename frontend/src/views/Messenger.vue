@@ -67,9 +67,90 @@
               <i class="fas fa-times"></i>
             </button>
           </label>
+          <!-- Phase D.1 — глобальный поиск по сообщениям всех моих чатов. -->
+          <button
+            type="button"
+            class="messenger-icon-btn"
+            :class="{ 'is-active': messageSearchPanelOpen }"
+            :title="messageSearchPanelOpen ? 'Закрыть поиск по сообщениям' : 'Поиск по сообщениям'"
+            @click="toggleGlobalMessageSearch"
+          >
+            <i class="fas" :class="messageSearchPanelOpen ? 'fa-times' : 'fa-comment-dots'"></i>
+          </button>
         </div>
 
-        <div class="messenger-sidebar__content">
+        <!-- Phase D.1 — панель глобального поиска по сообщениям.
+             Перекрывает список чатов когда открыта; результаты сгруппированы
+             по чатам. Клик по результату — открывает чат и прыгает на
+             сообщение с highlight (механика A.4). -->
+        <div v-if="messageSearchPanelOpen" class="messenger-sidebar__search-panel">
+          <label class="messenger-sidebar__search messenger-sidebar__search--global">
+            <i class="fas fa-search"></i>
+            <input
+              :value="messageSearchQuery"
+              type="text"
+              placeholder="Поиск по сообщениям (мин. 2 символа)"
+              autofocus
+              @input="onGlobalSearchInput($event.target.value)"
+            >
+            <button
+              v-if="messageSearchQuery"
+              type="button"
+              class="messenger-sidebar__search-clear"
+              @click="onGlobalSearchInput('')"
+              title="Очистить"
+            >
+              <i class="fas fa-times"></i>
+            </button>
+          </label>
+
+          <div class="messenger-sidebar__search-meta">
+            <span v-if="messageSearchLoading">
+              <i class="fas fa-spinner fa-spin"></i> Ищем…
+            </span>
+            <span v-else-if="messageSearchQuery.trim().length < 2">
+              Введите минимум 2 символа
+            </span>
+            <span v-else-if="!messageSearchResults.length">
+              Ничего не найдено
+            </span>
+            <span v-else>
+              Найдено: {{ messageSearchResults.length }}
+            </span>
+          </div>
+
+          <div class="messenger-sidebar__search-results">
+            <div
+              v-for="group in messageSearchResultsByChat"
+              :key="group.conversation_id"
+              class="search-result-group"
+            >
+              <div class="search-result-group__header">
+                <i class="fas" :class="searchResultGroupIcon(group)"></i>
+                <strong>{{ group.conversation_title }}</strong>
+                <span class="search-result-group__count">{{ group.items.length }}</span>
+              </div>
+              <button
+                v-for="item in group.items"
+                :key="item.message_id"
+                type="button"
+                class="search-result-item"
+                @click="openSearchResult(item)"
+              >
+                <span class="search-result-item__topline">
+                  <strong>{{ item.user_name || 'Пользователь' }}</strong>
+                  <span class="search-result-item__time">{{ formatSidebarTime(item.created_at) }}</span>
+                </span>
+                <!-- v-html: backend возвращает уже HTML-экранированный snippet
+                     с <mark> вокруг найденного. XSS-безопасно — escape сделан
+                     на сервере перед вставкой <mark>. -->
+                <span class="search-result-item__snippet" v-html="item.snippet"></span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div v-else class="messenger-sidebar__content">
           <div
             v-for="conversation in filteredFlatConversations"
             :key="conversation.id"
@@ -1167,6 +1248,14 @@ export default {
       pinConversation,
       unpinConversation,
       toggleMessageReaction,
+      messageSearchQuery,
+      messageSearchResults,
+      messageSearchResultsByChat,
+      messageSearchLoading,
+      messageSearchPanelOpen,
+      runMessageSearch,
+      openMessageSearchPanel,
+      closeMessageSearchPanel,
       typingUsers,
       noteUserTyping,
       isOwn,
@@ -1699,6 +1788,75 @@ export default {
       if (!messageSearchOpen.value) messageSearch.value = ''
       await nextTick()
       if (userNearBottom.value) await scrollThreadToBottom(true)
+    }
+
+    // Phase D.1 — глобальный поиск по сообщениям (sidebar panel).
+    // Debounce 300мс: пока юзер печатает — таймер сбрасывается, запрос
+    // уходит только после паузы. Меньше нагрузки на бэк и меньше
+    // мерцания в UI.
+    let _globalSearchDebounce = null
+    const toggleGlobalMessageSearch = () => {
+      if (messageSearchPanelOpen.value) {
+        closeMessageSearchPanel()
+      } else {
+        openMessageSearchPanel()
+      }
+    }
+
+    const onGlobalSearchInput = (value) => {
+      const next = String(value || '')
+      messageSearchQuery.value = next
+      if (_globalSearchDebounce) clearTimeout(_globalSearchDebounce)
+      // Если пусто — не зовём backend; синхронно очищаем.
+      if (!next.trim()) {
+        runMessageSearch('')
+        return
+      }
+      _globalSearchDebounce = setTimeout(() => {
+        runMessageSearch(next)
+        _globalSearchDebounce = null
+      }, 300)
+    }
+
+    // Иконка для группы результатов по chat-типу.
+    const searchResultGroupIcon = (group) => {
+      const t = String(group?.conversation_type || '')
+      if (t === 'direct') return 'fa-user'
+      if (t === 'channel') return 'fa-bullhorn'
+      if (t === 'global') return 'fa-shopping-bag'
+      return 'fa-users'
+    }
+
+    // Клик по результату: открываем chat, ждём загрузки сообщений,
+    // прыгаем на сообщение с highlight. Если найдено в другом чате —
+    // подгружаем; если в текущем — просто скроллим.
+    const openSearchResult = async (item) => {
+      if (!item?.conversation_id || !item?.message_id) return
+      const targetCid = String(item.conversation_id)
+      const targetMid = String(item.message_id)
+      // Закрываем панель — UX: result выбран, юзер хочет читать чат.
+      closeMessageSearchPanel()
+      if (String(activeConversationId.value) !== targetCid) {
+        await openConversation(targetCid)
+      }
+      // Сообщение могло уйти за пределы первой страницы listMessages
+      // (load 500). Сейчас — best-effort scroll. Если позже на больших
+      // чатах появятся «пропуски» — добавим явный fetch around messageId.
+      await nextTick()
+      // Дать DOM время отрисоваться: scrollToMessage сам делает
+      // getElementById, если узла нет — тихо вернётся; в этом случае
+      // пробуем ещё раз через 300мс.
+      let attempts = 0
+      const tryScroll = () => {
+        const el = document.getElementById(`message-${targetMid}`)
+        if (el) {
+          scrollToMessage(targetMid)
+          return
+        }
+        attempts += 1
+        if (attempts < 4) setTimeout(tryScroll, 250)
+      }
+      tryScroll()
     }
 
     const toggleDetails = async () => {
@@ -2338,6 +2496,15 @@ export default {
       directOpen,
       messageSearchOpen,
       messageSearch,
+      messageSearchPanelOpen,
+      messageSearchQuery,
+      messageSearchResults,
+      messageSearchResultsByChat,
+      messageSearchLoading,
+      toggleGlobalMessageSearch,
+      onGlobalSearchInput,
+      openSearchResult,
+      searchResultGroupIcon,
       detailsOpen,
       mobilePane,
       activeMobilePane,
