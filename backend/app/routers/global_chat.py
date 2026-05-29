@@ -7,7 +7,7 @@ from typing import Dict, List, Optional, Tuple, Union
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
-from sqlalchemy import select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 from starlette.datastructures import UploadFile as StarletteUploadFile
@@ -28,8 +28,10 @@ from app.schemas.chat import (
     ChatConversationMemberAdd,
     ChatConversationMemberResponse,
     ChatConversationResponse,
+    ChatConversationStateUpdate,
     ChatConversationUpdate,
     ChatMessageReferenceResponse,
+    SearchableUserResponse,
 )
 from app.schemas.global_chat_message import GlobalChatMessageResponse, GlobalChatMessageUpdate
 from app.services.notifications import create_notification
@@ -179,6 +181,65 @@ def _serialize_member(user: User, role: str = "member", joined_at=None) -> ChatC
 
 def _conversation_member_lookup(conversation: ChatConversation) -> Dict[str, ChatConversationMember]:
     return {str(member.user_id): member for member in conversation.members or []}
+
+
+# Дата-«никогда»: используется для muted_forever. SQLite спокойно ест
+# datetime до 9999, JSON-сериализация тоже.
+_FOREVER = datetime(9999, 12, 31, 23, 59, 59)
+
+
+def _is_muted_now(member: Optional[ChatConversationMember]) -> bool:
+    """Активен ли mute прямо сейчас (для UI badge / push gate)."""
+    if not member or member.muted_until is None:
+        return False
+    try:
+        return member.muted_until > _utcnow()
+    except TypeError:
+        # tz mismatch (naive vs aware) — на всякий случай считаем
+        # mute активным, лучше тише чем громче.
+        return True
+
+
+async def _unread_count_for_member(
+    db: AsyncSession,
+    conversation_id: str,
+    user_id: str,
+    last_read_at: Optional[datetime],
+) -> int:
+    """Сколько сообщений ОТ ДРУГИХ юзеров приехало после last_read_at.
+
+    Свои собственные не считаем — они для UI всегда «прочитаны».
+    Удалённые (is_deleted=True) тоже не показываем — это soft-delete,
+    в badge их учитывать смысла нет.
+    """
+    stmt = (
+        select(func.count(GlobalChatMessage.id))
+        .where(
+            GlobalChatMessage.conversation_id == str(conversation_id),
+            GlobalChatMessage.is_deleted == False,  # noqa: E712
+            GlobalChatMessage.user_id != str(user_id),
+        )
+    )
+    if last_read_at is not None:
+        stmt = stmt.where(GlobalChatMessage.created_at > last_read_at)
+    result = await db.execute(stmt)
+    return int(result.scalar() or 0)
+
+
+async def _conversation_has_messages(
+    db: AsyncSession,
+    conversation_id: str,
+) -> bool:
+    """Используется для фильтрации «пустых» DM — чтобы открытый-и-не-
+    написанный чат не светился у второго участника в списке.
+    """
+    stmt = (
+        select(func.count(GlobalChatMessage.id))
+        .where(GlobalChatMessage.conversation_id == str(conversation_id))
+        .limit(1)
+    )
+    result = await db.execute(stmt)
+    return int(result.scalar() or 0) > 0
 
 
 def _conversation_manage_allowed(request: Request, user: User, conversation: ChatConversation) -> bool:
@@ -353,6 +414,24 @@ async def _serialize_conversation(
     last_message, pinned_message = await _conversation_last_and_pinned(db, conversation.id)
     title = _conversation_display_title(conversation, str(user.id), members)
     description = _conversation_description(conversation, str(user.id), members)
+
+    # Per-user state. global чат не имеет member-строк (виртуальный
+    # список), поэтому для него отдаём нули — unread по global пока
+    # не считаем (отдельная задача, требует «last_read глобалки» per user).
+    my_member = _conversation_member_lookup(conversation).get(str(user.id))
+    if conversation.type == "global" or my_member is None:
+        unread = 0
+        is_archived = False
+        muted_until = None
+        last_read_at = None
+    else:
+        last_read_at = my_member.last_read_at
+        unread = await _unread_count_for_member(
+            db, str(conversation.id), str(user.id), last_read_at
+        )
+        is_archived = bool(my_member.is_archived)
+        muted_until = my_member.muted_until
+
     return ChatConversationResponse(
         id=str(conversation.id),
         type=conversation.type,
@@ -365,6 +444,10 @@ async def _serialize_conversation(
         pinned_message=_serialize_message_reference(pinned_message),
         created_at=conversation.created_at,
         updated_at=conversation.updated_at,
+        unread_count=unread,
+        is_archived=is_archived,
+        muted_until=muted_until,
+        last_read_at=last_read_at,
     )
 
 
@@ -372,13 +455,28 @@ async def _list_visible_conversations(
     request: Request,
     db: AsyncSession,
     user: User,
+    include_archived: bool = False,
 ) -> List[ChatConversation]:
+    """Список conversations, видимых текущему юзеру.
+
+    Stage 1 правила фильтрации:
+      - Глобальный чат — всегда.
+      - DM:
+          * только если я участник;
+          * только если в чате есть хотя бы 1 сообщение (пустые DM
+            не светятся; см. UX в плане messenger-implicit-dm);
+          * если у меня is_archived=True — скрываем (если только
+            include_archived не запрошен явно).
+      - Group/channel:
+          * только если я участник или админ;
+          * скрытие по моему is_archived аналогично.
+    """
     await _require_chat_access(request, db, user)
     global_conversation = await _ensure_global_conversation(db, user)
 
     result = await db.execute(
         select(ChatConversation)
-        .where(ChatConversation.is_archived == False)
+        .where(ChatConversation.is_archived == False)  # noqa: E712 — глобальный архив чата
         .options(*CONVERSATION_LOAD_OPTIONS)
         .order_by(ChatConversation.created_at.asc())
     )
@@ -397,9 +495,19 @@ async def _list_visible_conversations(
             lookup[str(conversation.id)] = conversation
             continue
         member_lookup = _conversation_member_lookup(conversation)
-        is_member = str(user.id) in member_lookup
+        my_member = member_lookup.get(str(user.id))
+        is_member = my_member is not None
+        # Per-user archive filter.
+        if my_member and my_member.is_archived and not include_archived:
+            continue
         if conversation.type == "direct":
             if not is_member:
+                continue
+            # Пустой DM (без сообщений) не показываем НИКОМУ — фронт
+            # держит свой «virtual chat» по peer_user_id до первого
+            # отправленного сообщения.
+            has_msg = await _conversation_has_messages(db, str(conversation.id))
+            if not has_msg:
                 continue
             member_ids = sorted(str(member.user_id) for member in conversation.members or [])
             peer_ids = [member_id for member_id in member_ids if member_id != str(user.id)]
@@ -631,10 +739,13 @@ async def _find_direct_conversation(
 @router.get("/conversations", response_model=List[ChatConversationResponse])
 async def list_conversations(
     request: Request,
+    include_archived: bool = False,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(CurrentUser),
 ):
-    conversations = await _list_visible_conversations(request, db, user)
+    conversations = await _list_visible_conversations(
+        request, db, user, include_archived=include_archived
+    )
     serialized = []
     for conversation in conversations:
         payload = await _serialize_conversation(request, db, user, conversation)
@@ -664,6 +775,13 @@ async def create_or_open_direct_conversation(
     existing = await _find_direct_conversation(db, str(user.id), str(target_user.id))
     if existing:
         await _require_conversation_access(request, db, user, existing)
+        # Open-from-archive: если я раньше архивировал этот чат, при
+        # повторном открытии его снова покажем в списке. Архив второго
+        # участника НЕ трогаем.
+        my_member = _conversation_member_lookup(existing).get(str(user.id))
+        if my_member is not None and my_member.is_archived:
+            my_member.is_archived = False
+            await db.commit()
         return await _serialize_conversation(request, db, user, existing)
 
     conversation = ChatConversation(
@@ -835,6 +953,115 @@ async def remove_conversation_member(
     return await _serialize_conversation(request, db, user, loaded)
 
 
+@router.patch("/conversations/{conversation_id}/me", response_model=ChatConversationResponse)
+async def update_my_conversation_state(
+    conversation_id: str,
+    payload: ChatConversationStateUpdate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(CurrentUser),
+):
+    """Per-user state: is_archived / muted_until.
+
+    Глобальный чат не имеет member-строк (виртуальный список из всех
+    активных), поэтому состояние для него настраивать нельзя — здесь
+    отдаём 400. Если понадобится — нужно отдельное хранилище
+    «global_chat_member_state».
+    """
+    conversation = await _get_conversation(db, conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation.type == "global":
+        raise HTTPException(
+            status_code=400,
+            detail="Global chat doesn't support per-user state in Stage 1",
+        )
+
+    await _require_conversation_access(request, db, user, conversation)
+    my_member = _conversation_member_lookup(conversation).get(str(user.id))
+    if my_member is None:
+        raise HTTPException(status_code=403, detail="Not a conversation member")
+
+    changed = False
+
+    if payload.is_archived is not None:
+        my_member.is_archived = bool(payload.is_archived)
+        changed = True
+
+    # mute_logic:
+    #   muted_forever=True  → ставим _FOREVER в muted_until.
+    #   muted_forever=False → снимаем mute (None).
+    #   muted_until=<dt>    → ставим конкретный дедлайн.
+    #   muted_until=None И muted_forever=None → не меняем (sentinel).
+    if payload.muted_forever is True:
+        my_member.muted_until = _FOREVER
+        changed = True
+    elif payload.muted_forever is False:
+        my_member.muted_until = None
+        changed = True
+    elif payload.muted_until is not None:
+        my_member.muted_until = payload.muted_until
+        changed = True
+
+    if changed:
+        await db.commit()
+
+    loaded = await _get_conversation(db, conversation_id)
+    if not loaded:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return await _serialize_conversation(request, db, user, loaded)
+
+
+@router.get("/users/searchable", response_model=List[SearchableUserResponse])
+async def list_searchable_users(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(CurrentUser),
+):
+    """Все активные юзеры (кроме самого вызывающего) для поиска
+    «написать коллеге». Помечает `has_dm=True`, если у нас уже есть
+    direct chat — фронт показывает «уже есть чат» / «новый».
+    """
+    await _require_chat_access(request, db, user)
+
+    # Все активные юзеры кроме меня.
+    users_result = await db.execute(
+        select(User)
+        .where(User.is_active == True, User.id != str(user.id))  # noqa: E712
+        .order_by(User.full_name.asc())
+    )
+    users_list = users_result.scalars().all()
+
+    # Карта peer_user_id → conversation_id для моих DM.
+    dm_lookup: Dict[str, str] = {}
+    conv_result = await db.execute(
+        select(ChatConversation)
+        .where(
+            ChatConversation.type == "direct",
+            ChatConversation.is_archived == False,  # noqa: E712
+        )
+        .options(selectinload(ChatConversation.members))
+    )
+    for conv in conv_result.scalars().unique().all():
+        member_ids = {str(m.user_id) for m in conv.members or []}
+        if str(user.id) not in member_ids:
+            continue
+        for peer_id in member_ids - {str(user.id)}:
+            dm_lookup[peer_id] = str(conv.id)
+
+    return [
+        SearchableUserResponse(
+            id=str(u.id),
+            full_name=u.full_name,
+            email=u.email,
+            avatar_url=getattr(u, "avatar_url", None),
+            has_dm=str(u.id) in dm_lookup,
+            dm_conversation_id=dm_lookup.get(str(u.id)),
+        )
+        for u in users_list
+    ]
+
+
 @router.get("/conversations/{conversation_id}/messages", response_model=List[GlobalChatMessageResponse])
 async def list_conversation_messages(
     conversation_id: str,
@@ -849,6 +1076,15 @@ async def list_conversation_messages(
         raise HTTPException(status_code=404, detail="Conversation not found")
     await _require_conversation_access(request, db, user, conversation)
     messages = await _load_conversation_messages(db, conversation_id, skip, limit)
+
+    # Auto mark-read: открыли чат → обновляем last_read_at у моей
+    # member-строки. Глобальный чат не имеет member-строк, скип.
+    if conversation.type != "global":
+        my_member = _conversation_member_lookup(conversation).get(str(user.id))
+        if my_member is not None:
+            my_member.last_read_at = _utcnow()
+            await db.commit()
+
     return [_serialize_message(message) for message in messages]
 
 
