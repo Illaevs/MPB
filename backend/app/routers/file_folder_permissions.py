@@ -27,6 +27,7 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth_middleware import CurrentUser
+from app.core.config import settings
 from app.database.session import get_db
 from app.models import Role, User
 from app.models.file_folder_permission import (
@@ -54,6 +55,38 @@ from app.services.folder_acl import (
 
 
 router = APIRouter()
+
+
+# ────────────────────────────────────────────────────────────────────
+# helpers: storage-path → logical-path
+# ────────────────────────────────────────────────────────────────────
+#
+# Файлы в каталоге хранятся под STORAGE_LOCAL_ROOT (e.g.
+# /mnt/storage20/mpb-erp-test/storage), а правила в БД заведены на
+# логических путях («/Архив/2026»). Фронт приходит с полным
+# storage-путём — без конверсии effective_perms ищет правила на
+# `/mnt/...` и не находит, что приводит к ложному 403.
+#
+# Дублирует логику из files_catalog._to_logical_path (Stage 2). Оба
+# места ОБЯЗАНЫ нормализовать одинаково, иначе grant_creator-правила
+# на mkdir и проверки в /permissions смотрят в разные ключи.
+
+
+def _strip_disk_prefix(path: str) -> str:
+    if not path:
+        return ""
+    return path[5:] if path.startswith("disk:") else path
+
+
+def _to_logical_path(storage_path: str) -> str:
+    root = settings.STORAGE_LOCAL_ROOT or ""
+    root_clean = _strip_disk_prefix(root).rstrip("/")
+    path_clean = _strip_disk_prefix(storage_path)
+    if root_clean and path_clean.startswith(root_clean):
+        rel = path_clean[len(root_clean):]
+    else:
+        rel = path_clean
+    return normalize_path(rel or "/")
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -184,7 +217,10 @@ async def list_folder_permissions(
 
     Для entity-paths возвращает пустой ответ с `is_entity_path=True`.
     """
-    norm = normalize_path(path)
+    # Фронт шлёт storage-путь («/mnt/.../storage/Архив»); правила лежат
+    # на логических. Конвертация ОБЯЗАТЕЛЬНА — иначе effective_perms
+    # смотрит в /mnt/... и не находит правил.
+    norm = _to_logical_path(path)
 
     # Effective для текущего юзера — отдаём вместе со списком, чтобы UI
     # сразу мог нарисовать «у вас есть Read/Write/...» без отдельного
@@ -280,7 +316,10 @@ async def upsert_folder_permission(
       - principal_id существует в соответствующей таблице (User/Role);
       - вызывающий имеет MANAGE на folder_path.
     """
-    norm = normalize_path(payload.folder_path)
+    # См. комментарий в list_folder_permissions — конвертация
+    # storage-пути в логический ОБЯЗАТЕЛЬНА, иначе правило ляжет в
+    # БД с /mnt/...-префиксом, и Stage 2 gating этого не увидит.
+    norm = _to_logical_path(payload.folder_path)
 
     if is_entity_path(norm):
         raise HTTPException(
