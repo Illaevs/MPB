@@ -3139,11 +3139,15 @@ function getAvatarStyle(seed, kind = 'user') {
 .message-mention[data-kind="task"]:hover { background: rgba(217, 119, 6, 0.20); }
 /* В own-баббле (свои сообщения, тёмный/цветной фон) — белый текст
    на полупрозрачной белой подложке, читается лучше. */
+/* В своём баббле цвет чипа НАСЛЕДУЕТ цвет текста баббла
+   (--chat-bubble-out-fg): тёмный на мятном фоне в светлой теме,
+   белый на синем — в тёмной. Раньше был жёстко белый → нечитаемо
+   на светло-мятном своём баббле. Фон — лёгкий тинт того же цвета. */
 .message-row.is-own .message-mention {
-  background: rgba(255, 255, 255, 0.22) !important;
-  color: #ffffff !important;
+  background: color-mix(in srgb, var(--chat-bubble-out-fg, #0f172a) 12%, transparent) !important;
+  color: var(--chat-bubble-out-fg, #0f172a) !important;
 }
 .message-row.is-own .message-mention:hover {
-  background: rgba(255, 255, 255, 0.32) !important;
+  background: color-mix(in srgb, var(--chat-bubble-out-fg, #0f172a) 20%, transparent) !important;
 }
 </style>
