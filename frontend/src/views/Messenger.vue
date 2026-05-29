@@ -672,18 +672,49 @@
           </section>
 
           <section class="detail-section">
+            <button type="button" class="detail-section__toggle" @click="toggleSection('media')">
+              <span><i class="fas fa-photo-film"></i> Медиа<small v-if="mediaItems.length"> · {{ mediaItems.length }}</small></span>
+              <i class="fas" :class="detailSections.media ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+            </button>
+            <div v-if="detailSections.media" class="detail-section__body">
+              <div v-if="mediaItems.length" class="detail-media-grid">
+                <button
+                  v-for="item in mediaItems"
+                  :key="item.key"
+                  type="button"
+                  class="detail-media"
+                  :title="item.name || 'Медиа'"
+                  @click="isInlineVideo(item) ? downloadAttachment(item) : openImageViewer(item, mediaItems)"
+                >
+                  <img
+                    v-if="isInlineImage(item) && item.download_url"
+                    :src="item.download_url"
+                    :alt="item.name || 'Изображение'"
+                    loading="lazy"
+                    class="detail-media__img"
+                  >
+                  <span v-else-if="isInlineVideo(item)" class="detail-media__video">
+                    <i class="fas fa-play"></i>
+                  </span>
+                </button>
+              </div>
+              <div v-else class="detail-section__empty">Медиа пока нет</div>
+            </div>
+          </section>
+
+          <section class="detail-section">
             <button type="button" class="detail-section__toggle" @click="toggleSection('files')">
-              <span><i class="fas fa-paperclip"></i> Файлы</span>
+              <span><i class="fas fa-paperclip"></i> Файлы<small v-if="documentItems.length"> · {{ documentItems.length }}</small></span>
               <i class="fas" :class="detailSections.files ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
             </button>
             <div v-if="detailSections.files" class="detail-section__body">
-              <div v-if="files.length" class="detail-file-list">
+              <div v-if="documentItems.length" class="detail-file-list">
                 <button
-                  v-for="file in files"
+                  v-for="file in documentItems"
                   :key="file.key"
                   type="button"
                   class="detail-file"
-                  @click="isInlineImage(file) ? openImageViewer(file, files) : downloadAttachment(file)"
+                  @click="downloadAttachment(file)"
                 >
                   <span class="detail-file__icon"><i class="fas fa-paperclip"></i></span>
                   <span class="detail-file__body">
@@ -938,7 +969,7 @@ export default {
     const viewportWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 0)
     const autoScrollPending = ref(true)
     const userNearBottom = ref(true)
-    const detailSections = ref({ info: true, members: true, files: true, links: false })
+    const detailSections = ref({ info: true, members: true, media: true, files: true, links: false })
     const confirmModalOpen = ref(false)
     const confirmTitle = ref('')
     const confirmText = ref('')
@@ -1073,6 +1104,16 @@ export default {
       // делает проверки размера/типа единообразными.
       appendPendingFiles(files)
     }
+
+    // Phase A.3: разделяем files на «Медиа» (картинки + видео,
+    // отображаются grid'ом превью) и «Файлы» (остальное, list-карточки).
+    // files уже flattened из useMessenger — здесь только split.
+    const mediaItems = computed(() =>
+      (files.value || []).filter((file) => isInlineImage(file) || isInlineVideo(file))
+    )
+    const documentItems = computed(() =>
+      (files.value || []).filter((file) => !isInlineImage(file) && !isInlineVideo(file))
+    )
 
     const filteredSearchableUsers = computed(() => {
       const q = String(writeColleagueSearch.value || '').trim().toLowerCase()
@@ -2018,6 +2059,8 @@ export default {
       messageImageAttachments,
       messageVideoAttachments,
       messageFileAttachments,
+      mediaItems,
+      documentItems,
       openImageViewer,
       closeImageViewer,
       showPreviousImage,
