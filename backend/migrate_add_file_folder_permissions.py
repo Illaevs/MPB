@@ -25,10 +25,18 @@ def main() -> int:
     if not uri.startswith("sqlite"):
         print(f"unsupported DB URI for this migration: {uri}")
         return 2
-    path = uri.split("sqlite:///", 1)[1]
-    path = path.lstrip("/")
-    if not path.startswith(("/", "\\")) and len(path) >= 2 and path[1] != ":":
-        path = str((Path(__file__).resolve().parent.parent / path))
+    # SQLAlchemy sqlite URIs:
+    #   sqlite:///./foo.db         → relative "./foo.db"  (3 slashes)
+    #   sqlite:////opt/foo.db      → absolute "/opt/foo.db" (4 slashes)
+    #   sqlite:///C:/foo.db        → Windows absolute "C:/foo.db" (3 slashes)
+    raw = uri.split("sqlite:///", 1)[1]
+    is_windows_abs = len(raw) >= 2 and raw[1] == ":"
+    is_unix_abs = raw.startswith("/")
+    if is_unix_abs or is_windows_abs:
+        path = raw  # уже абсолютный — не трогаем.
+    else:
+        # Относительный путь — резолвим от корня проекта (backend/..).
+        path = str((Path(__file__).resolve().parent.parent / raw))
     if not Path(path).exists():
         print(f"db file not found: {path}")
         return 3
