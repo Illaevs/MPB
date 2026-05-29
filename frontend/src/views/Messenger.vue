@@ -1539,9 +1539,15 @@ export default {
     // Phase A.1 — inline-видео. mp4/webm играем прямо в бабблe, не
     // выкидываем как download-карточку. preload="metadata" грузит
     // только заголовки до play — никакого автотрафика.
+    //
+    // MIME имеет приоритет над расширением. Phase D.2 voice messages
+    // используют контейнер `.webm`/`.ogg` — но с MIME audio/webm, и
+    // НЕ должны попадать сюда. Поэтому если content_type явно audio/* —
+    // возвращаем false до проверки расширения.
     const isInlineVideo = (file = {}) => {
       const contentType = String(file.content_type || file.type || '').toLowerCase()
       if (contentType.startsWith('video/')) return true
+      if (contentType.startsWith('audio/')) return false
       const name = String(file.name || '').toLowerCase()
       return ['.mp4', '.webm', '.ogg', '.mov', '.m4v'].some((ext) => name.endsWith(ext))
     }
@@ -1549,12 +1555,15 @@ export default {
     // Phase D.2 — inline-аудио. Голосовые сообщения от MediaRecorder
     // приходят как audio/webm или audio/mp4. Рендерим встроенный
     // <audio controls preload="metadata"> вместо download-карточки.
-    // Распознавание по MIME (надёжно) + расширению (страховка).
+    // Распознавание по MIME (надёжно) + расширению (страховка для
+    // случаев когда MIME отсутствует; .webm/.ogg ambiguous, но если
+    // браузер не выставил MIME — не угадаешь).
     const isInlineAudio = (file = {}) => {
       const contentType = String(file.content_type || file.type || '').toLowerCase()
       if (contentType.startsWith('audio/')) return true
+      if (contentType.startsWith('video/')) return false
       const name = String(file.name || '').toLowerCase()
-      return ['.mp3', '.wav', '.ogg', '.oga', '.m4a', '.weba', '.opus', '.aac'].some((ext) => name.endsWith(ext))
+      return ['.mp3', '.wav', '.oga', '.m4a', '.weba', '.opus', '.aac'].some((ext) => name.endsWith(ext))
     }
 
     const messageImageAttachments = (message) => (message?.attachments || []).filter((file) => isInlineImage(file) && file.download_url)
