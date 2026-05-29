@@ -199,7 +199,7 @@
                 class="project-gip-chip"
               >
                 <UiAvatar
-                  :src="user.avatar_url"
+                  :src="gipAvatarSrc(user)"
                   :name="user.full_name || user.email || '?'"
                   size="xs"
                 />
@@ -282,6 +282,7 @@ import DealTimeline from '../../../components/projects/DealTimeline.vue'
 import CompanySmartSelect from '../../../components/ui/CompanySmartSelect.vue'
 import UiAvatar from '../../../components/ui/UiAvatar.vue'
 import { hasSectionAccess, getActiveUser } from '../../../utils/permissions'
+import { normalizeAvatarUrl } from '../../../utils/avatar'
 import { computed } from 'vue'
 export default {
   name: 'Overview',
@@ -311,6 +312,11 @@ export default {
       state.editDraft.value = null
       if (userId) await state.addGipInline(userId)
     }
+    // ГИП-аватар: avatar_url от usersStore/сервера бывает в форме
+    // /api/v1/users/avatar/... или /static/avatars/..., которую сырой
+    // <img> не тянет. Приводим к каноничному /avatar-user/<id> как в
+    // мессенджере/таймлайне. Иначе UiAvatar валится в инициалы.
+    const gipAvatarSrc = (user) => normalizeAvatarUrl(user?.avatar_url, user?.id)
     return {
       ...state,
       hasSectionAccess,
@@ -318,6 +324,7 @@ export default {
       onDealTimelineUpdated,
       beginGipInlineEdit,
       onGipSelected,
+      gipAvatarSrc,
     }
   }
 }
