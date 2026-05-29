@@ -2698,6 +2698,7 @@ export default {
       conversationUnreadCount,
       isConversationMuted,
       isConversationArchived,
+      isConversationPinned,
       writeColleagueSearch,
       loadingSearchableUsers,
       filteredSearchableUsers,
