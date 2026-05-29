@@ -457,9 +457,47 @@
                       ></i>
                     </template>
                   </span>
+
+                  <!-- Phase B.3: уже поставленные реакции, click → toggle. -->
+                  <div
+                    v-if="(item.message.reactions || []).length && !item.message.is_deleted"
+                    class="message-bubble__reactions"
+                  >
+                    <button
+                      v-for="r in item.message.reactions"
+                      :key="r.emoji"
+                      type="button"
+                      class="message-bubble__reaction"
+                      :class="{ 'is-mine': r.reacted_by_me }"
+                      :title="`${r.count} ${r.reacted_by_me ? '(включая вас)' : ''}`"
+                      @click="toggleMessageReaction(item.message.id, r.emoji)"
+                    >
+                      <span class="message-bubble__reaction-emoji">{{ r.emoji }}</span>
+                      <span class="message-bubble__reaction-count">{{ r.count }}</span>
+                    </button>
+                  </div>
+
+                  <!-- Phase B.3: мини-пикер эмодзи поверх баббла. -->
+                  <div
+                    v-if="reactionPickerOpenFor === String(item.message.id)"
+                    class="message-bubble__reaction-picker"
+                    @click.stop
+                  >
+                    <button
+                      v-for="emoji in REACTION_PRESETS"
+                      :key="emoji"
+                      type="button"
+                      class="message-bubble__reaction-picker-item"
+                      :title="`Реагировать ${emoji}`"
+                      @click="applyReaction(item.message.id, emoji)"
+                    >{{ emoji }}</button>
+                  </div>
                 </div>
 
                 <div v-if="messageActionsVisible(item.message)" class="message-row__actions">
+                  <button type="button" title="Реакция" @click="openReactionPicker(item.message)">
+                    <i class="far fa-smile"></i>
+                  </button>
                   <button type="button" title="Ответить" @click="replyToMessage(item.message)">
                     <i class="fas fa-reply"></i>
                   </button>
@@ -1076,6 +1114,7 @@ export default {
       unmuteConversation,
       pinConversation,
       unpinConversation,
+      toggleMessageReaction,
       isOwn,
       canEdit,
       formatDateTime,
@@ -1753,13 +1792,18 @@ export default {
     }
 
     const closeCardMenuOnDocumentClick = (event) => {
-      if (!openCardMenuId.value) return
-      // если клик НЕ внутри открытого меню/триггера — закрываем.
       const t = event.target
-      if (t && t.closest && (t.closest('.conversation-card__menu') || t.closest('.conversation-card__menu-btn'))) {
-        return
+      if (openCardMenuId.value) {
+        if (!t || !t.closest || (!t.closest('.conversation-card__menu') && !t.closest('.conversation-card__menu-btn'))) {
+          openCardMenuId.value = null
+        }
       }
-      openCardMenuId.value = null
+      // Phase B.3: то же самое для reaction-picker.
+      if (reactionPickerOpenFor.value) {
+        if (!t || !t.closest || (!t.closest('.message-bubble__reaction-picker') && !t.closest('.message-row__actions'))) {
+          reactionPickerOpenFor.value = null
+        }
+      }
     }
 
     const archiveCard = async (conversation) => {
@@ -1782,6 +1826,21 @@ export default {
       if (!id) return
       openCardMenuId.value = null
       await unmuteConversation(id)
+    }
+
+    // Phase B.3: emoji reactions presets + picker state.
+    const REACTION_PRESETS = ['👍', '❤️', '😂', '🎉', '🔥', '👏', '😮', '😢']
+    const reactionPickerOpenFor = ref(null)
+
+    const openReactionPicker = (message) => {
+      reactionPickerOpenFor.value = String(message?.id || '')
+    }
+    const closeReactionPicker = () => {
+      reactionPickerOpenFor.value = null
+    }
+    const applyReaction = async (messageId, emoji) => {
+      closeReactionPicker()
+      await toggleMessageReaction(messageId, emoji)
     }
 
     // Phase B.1: pin / unpin
@@ -2148,6 +2207,11 @@ export default {
       unmuteCard,
       pinCard,
       unpinCard,
+      REACTION_PRESETS,
+      reactionPickerOpenFor,
+      openReactionPicker,
+      closeReactionPicker,
+      applyReaction,
       submitAddMembers,
       insertLinkToken,
       insertEmoji,

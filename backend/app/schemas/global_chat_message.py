@@ -6,7 +6,11 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, field_serializer
 
-from app.schemas.chat import ChatMessageReferenceResponse, serialize_utc_datetime
+from app.schemas.chat import (
+    ChatMessageReferenceResponse,
+    MessageReactionAggregate,
+    serialize_utc_datetime,
+)
 
 
 class GlobalChatMessageCreate(BaseModel):
@@ -32,6 +36,8 @@ class GlobalChatMessageResponse(BaseModel):
     pinned_by_user_id: Optional[str] = None
     reply_to_message: Optional[ChatMessageReferenceResponse] = None
     forwarded_from_message: Optional[ChatMessageReferenceResponse] = None
+    # Phase B.3: агрегированные реакции по emoji.
+    reactions: List[MessageReactionAggregate] = Field(default_factory=list)
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     edited_at: Optional[datetime] = None

@@ -1726,3 +1726,81 @@
   color: #38bdf8; /* sky-400 — telegram-style blue check */
   opacity: 1;
 }
+
+/* ============================================================
+   Phase B.3 — emoji reactions
+   ============================================================ */
+.message-bubble__reactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.message-bubble__reaction {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--md-sys-color-outline-variant, rgba(0,0,0,0.08));
+  border-radius: 999px;
+  background: var(--md-sys-color-surface, #fff);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.05s;
+}
+.message-bubble__reaction:hover {
+  background: var(--md-sys-color-primary-container, rgba(99, 102, 241, 0.08));
+  transform: scale(1.05);
+}
+.message-bubble__reaction.is-mine {
+  background: var(--md-sys-color-primary-container, rgba(99, 102, 241, 0.15));
+  border-color: var(--md-sys-color-primary, #6366f1);
+  color: var(--md-sys-color-primary, #6366f1);
+}
+.message-bubble__reaction-emoji {
+  font-size: 14px;
+  line-height: 1;
+}
+.message-bubble__reaction-count {
+  font-weight: 600;
+  font-size: 11px;
+}
+
+/* Мини-пикер эмодзи: маленький pill с 8 пресетами, открывается над
+   баббллом по клику на «смайл» в hover-actions. */
+.message-bubble__reaction-picker {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  display: flex;
+  gap: 2px;
+  padding: 4px 6px;
+  background: var(--md-sys-color-surface-thick, #fff);
+  border: 1px solid var(--md-sys-color-outline-variant, rgba(0,0,0,0.08));
+  border-radius: 999px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+  z-index: 20;
+  animation: messenger-picker-fade 0.12s ease;
+}
+@keyframes messenger-picker-fade {
+  from { opacity: 0; transform: translateY(4px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.message-bubble__reaction-picker-item {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  border-radius: 50%;
+  font-size: 18px;
+  cursor: pointer;
+  transition: background 0.1s, transform 0.06s;
+}
+.message-bubble__reaction-picker-item:hover {
+  background: var(--md-sys-color-primary-container, rgba(99, 102, 241, 0.12));
+  transform: scale(1.2);
+}

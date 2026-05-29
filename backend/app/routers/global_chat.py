@@ -18,6 +18,7 @@ from app.database.session import get_db
 from app.models import (
     ChatConversation,
     ChatConversationMember,
+    ChatMessageReaction,
     GlobalChatMessage,
     RolePermission,
     User,
@@ -31,6 +32,8 @@ from app.schemas.chat import (
     ChatConversationStateUpdate,
     ChatConversationUpdate,
     ChatMessageReferenceResponse,
+    MessageReactionAggregate,
+    ReactionToggleRequest,
     SearchableUserResponse,
 )
 from app.schemas.global_chat_message import GlobalChatMessageResponse, GlobalChatMessageUpdate
@@ -139,7 +142,10 @@ def _serialize_message_reference(message: Optional[GlobalChatMessage]) -> Option
     )
 
 
-def _serialize_message(message: GlobalChatMessage) -> GlobalChatMessageResponse:
+def _serialize_message(
+    message: GlobalChatMessage,
+    reactions: Optional[List[MessageReactionAggregate]] = None,
+) -> GlobalChatMessageResponse:
     attachments = []
     if not message.is_deleted:
         for item in message.attachments or []:
@@ -161,11 +167,50 @@ def _serialize_message(message: GlobalChatMessage) -> GlobalChatMessageResponse:
         pinned_by_user_id=str(message.pinned_by_user_id) if message.pinned_by_user_id else None,
         reply_to_message=_serialize_message_reference(message.__dict__.get("reply_to_message")),
         forwarded_from_message=_serialize_message_reference(message.__dict__.get("forwarded_from_message")),
+        reactions=reactions or [],
         created_at=message.created_at,
         updated_at=message.updated_at,
         edited_at=message.edited_at,
         deleted_at=message.deleted_at,
     )
+
+
+# Phase B.3: batch-загрузка реакций для списка сообщений.
+async def _load_reactions_map(
+    db: AsyncSession,
+    message_ids: List[str],
+    current_user_id: str,
+) -> Dict[str, List[MessageReactionAggregate]]:
+    """Один SQL на весь список сообщений → группировка в Python.
+
+    Возврат: {message_id: [MessageReactionAggregate, ...]}
+    Каждый агрегат — по уникальной emoji-метке внутри одного сообщения,
+    с count, user_ids и флагом reacted_by_me.
+    """
+    if not message_ids:
+        return {}
+    result = await db.execute(
+        select(ChatMessageReaction).where(
+            ChatMessageReaction.message_id.in_([str(m) for m in message_ids])
+        )
+    )
+    rows = result.scalars().all()
+    # group by (message_id, emoji)
+    grouped: Dict[str, Dict[str, MessageReactionAggregate]] = {}
+    me = str(current_user_id)
+    for r in rows:
+        mid = str(r.message_id)
+        emoji = r.emoji
+        bucket = grouped.setdefault(mid, {})
+        agg = bucket.get(emoji)
+        if agg is None:
+            agg = MessageReactionAggregate(emoji=emoji, count=0, user_ids=[])
+            bucket[emoji] = agg
+        agg.count += 1
+        agg.user_ids.append(str(r.user_id))
+        if str(r.user_id) == me:
+            agg.reacted_by_me = True
+    return {mid: list(bucket.values()) for mid, bucket in grouped.items()}
 
 
 def _serialize_member(user: User, role: str = "member", joined_at=None) -> ChatConversationMemberResponse:
@@ -1115,7 +1160,14 @@ async def list_conversation_messages(
             my_member.last_read_at = _utcnow()
             await db.commit()
 
-    return [_serialize_message(message) for message in messages]
+    # Phase B.3: batch-загрузка реакций ОДНИМ запросом на весь список.
+    reactions_map = await _load_reactions_map(
+        db, [str(m.id) for m in messages], str(user.id)
+    )
+    return [
+        _serialize_message(message, reactions_map.get(str(message.id), []))
+        for message in messages
+    ]
 
 
 @router.post("/conversations/{conversation_id}/messages", response_model=GlobalChatMessageResponse)
@@ -1211,6 +1263,73 @@ async def unpin_message(
     return _serialize_message(loaded)
 
 
+# ────────────────────────────────────────────────────────────────────
+# Phase B.3 — emoji reactions
+# ────────────────────────────────────────────────────────────────────
+
+
+@router.post("/messages/{message_id}/reactions", response_model=GlobalChatMessageResponse)
+async def toggle_message_reaction(
+    message_id: str,
+    payload: ReactionToggleRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(CurrentUser),
+):
+    """Idempotent toggle: если такой эмодзи от меня уже есть — снимаем,
+    нет — ставим. Возвращает обновлённое сообщение целиком.
+
+    Доступ: я должен иметь доступ к conversation сообщения
+    (require_conversation_access). На удалённые сообщения не реагируем
+    (400).
+    """
+    emoji = (payload.emoji or "").strip()
+    if not emoji:
+        raise HTTPException(status_code=400, detail="emoji is required")
+
+    message = await _get_message(db, message_id)
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+    if message.is_deleted:
+        raise HTTPException(status_code=400, detail="Message is deleted")
+
+    conversation = await _get_conversation(db, str(message.conversation_id))
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    await _require_conversation_access(request, db, user, conversation)
+
+    # Ищем существующую реакцию (me, emoji) на этом сообщении.
+    existing = (
+        await db.execute(
+            select(ChatMessageReaction).where(
+                ChatMessageReaction.message_id == str(message.id),
+                ChatMessageReaction.user_id == str(user.id),
+                ChatMessageReaction.emoji == emoji,
+            )
+        )
+    ).scalar_one_or_none()
+
+    if existing:
+        await db.delete(existing)
+    else:
+        db.add(
+            ChatMessageReaction(
+                message_id=str(message.id),
+                user_id=str(user.id),
+                emoji=emoji,
+            )
+        )
+
+    await db.commit()
+
+    # Загружаем актуальные реакции для отдачи свежего сообщения.
+    reactions_map = await _load_reactions_map(db, [str(message.id)], str(user.id))
+    loaded = await _get_message(db, str(message.id))
+    if not loaded:
+        raise HTTPException(status_code=404, detail="Message not found")
+    return _serialize_message(loaded, reactions_map.get(str(message.id), []))
+
+
 @router.get("/messages", response_model=List[GlobalChatMessageResponse])
 async def list_global_messages(
     request: Request,
@@ -1222,7 +1341,13 @@ async def list_global_messages(
     global_conversation = await _ensure_global_conversation(db, user)
     await _require_conversation_access(request, db, user, global_conversation)
     messages = await _load_conversation_messages(db, str(global_conversation.id), skip, limit)
-    return [_serialize_message(message) for message in messages]
+    reactions_map = await _load_reactions_map(
+        db, [str(m.id) for m in messages], str(user.id)
+    )
+    return [
+        _serialize_message(message, reactions_map.get(str(message.id), []))
+        for message in messages
+    ]
 
 
 @router.post("/messages", response_model=GlobalChatMessageResponse)

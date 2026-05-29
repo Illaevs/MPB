@@ -122,6 +122,31 @@ class ChatConversationStateUpdate(BaseModel):
     is_pinned: Optional[bool] = None
 
 
+class MessageReactionAggregate(BaseModel):
+    """Агрегат реакций по одной emoji-метке для одного сообщения.
+
+    На фронт уходит уже сгруппированный набор: на сообщение → список
+    MessageReactionAggregate (по одной на уникальный emoji), внутри —
+    счётчик и список user_id (для определения «реагировал ли я»).
+    """
+
+    emoji: str
+    count: int
+    user_ids: List[str] = Field(default_factory=list)
+    reacted_by_me: bool = False
+
+
+class ReactionToggleRequest(BaseModel):
+    """POST /chat/messages/{id}/reactions — body {emoji: '👍'}.
+
+    Эндпоинт идемпотентно toggle'ит мою реакцию: если такой пары
+    (message, me, emoji) ещё нет — создаёт; если есть — удаляет.
+    Возвращает обновлённое сообщение целиком.
+    """
+
+    emoji: str = Field(..., min_length=1, max_length=32)
+
+
 class SearchableUserResponse(BaseModel):
     """GET /chat/users/searchable — список юзеров для «написать коллеге».
 

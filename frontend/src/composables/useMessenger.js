@@ -511,6 +511,33 @@ export function useMessenger() {
 
   const isConversationPinned = (conversation) => !!conversation?.is_pinned
 
+  // Phase B.3 — emoji reactions.
+  // Idempotent toggle: backend сам решит создать/удалить. Frontend
+  // оптимистично патчит messages.value для мгновенного отклика, потом
+  // подменяет на серверный ответ.
+  const toggleMessageReaction = async (messageId, emoji) => {
+    if (!messageId || !emoji) return null
+    try {
+      const updated = await messengerApi.toggleReaction(messageId, emoji)
+      if (updated && updated.id) {
+        // Подменяем сообщение в локальном списке (атомарно — Vue
+        // среагирует автоматически).
+        const idx = messages.value.findIndex((m) => String(m.id) === String(updated.id))
+        if (idx >= 0) {
+          messages.value = [
+            ...messages.value.slice(0, idx),
+            updated,
+            ...messages.value.slice(idx + 1),
+          ]
+        }
+      }
+      return updated || null
+    } catch (error) {
+      toastError(error.response?.data?.detail || 'Не удалось поставить реакцию')
+      return null
+    }
+  }
+
   const createConversation = async (payload) => {
     savingConversation.value = true
     try {
@@ -807,6 +834,7 @@ export function useMessenger() {
     unmuteConversation,
     pinConversation,
     unpinConversation,
+    toggleMessageReaction,
     isOwn,
     canEdit,
     formatDateTime,

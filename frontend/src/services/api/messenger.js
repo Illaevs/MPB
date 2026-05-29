@@ -85,6 +85,11 @@ export const pinMessage = (messageId, options) =>
 export const unpinMessage = (messageId, options) =>
   del(`${BASE}/messages/${messageId}/pin`, options)
 
+// Phase B.3: эмодзи-реакции на сообщения.
+// POST идемпотентно toggle'ит реакцию (me, emoji) — если уже стоит, снимет.
+export const toggleReaction = (messageId, emoji, options) =>
+  post(`${BASE}/messages/${messageId}/reactions`, { emoji }, options)
+
 // ---- global chat (плоский /messages, без conversation_id) ------------------
 
 export const listGlobalMessages = (options) =>
