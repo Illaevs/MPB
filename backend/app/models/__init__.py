@@ -89,7 +89,7 @@ from .document_template import DocumentTemplate, DocumentTemplateVersion
 from .work_session import WorkSession
 from .user_profile import UserProfile
 from .user_absence import UserAbsence
-from .feed import FeedPost, FeedComment, FeedReaction, FeedView, FeedPollVote
+from .feed import FeedPost, FeedComment, FeedReaction, FeedView, FeedPollVote, FeedMention
 from .approval import (
     ApprovalActionLog,
     ApprovalInstance,
@@ -203,4 +203,5 @@ __all__ = [
     "FeedReaction",
     "FeedView",
     "FeedPollVote",
+    "FeedMention",
 ]

@@ -144,3 +144,33 @@ class FeedView(Base):
         UniqueConstraint("post_id", "user_id", name="uq_feed_view"),
         Index("ix_feed_views_post", "post_id"),
     )
+
+
+class FeedMention(Base):
+    """Обратный индекс упоминаний: кого упомянули в посте/комментарии.
+
+    Заполняется при создании/правке поста и при создании комментария
+    (источник истины — маркеры `@[Имя](user_id)` в тексте). Нужен для
+    быстрой вкладки «Где меня упомянули» без `LIKE %...%` по `body`.
+
+    `comment_id` = NULL → упоминание в теле самого поста; иначе — в
+    комментарии. Для вкладки берём `DISTINCT post_id` по `user_id`, так
+    что покрываются и упоминания в комментариях.
+    """
+    __tablename__ = "feed_mentions"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    post_id = Column(
+        String(36),
+        ForeignKey("feed_posts.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # NULL — упоминание в теле поста; иначе id комментария.
+    comment_id = Column(String(36), nullable=True)
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_feed_mentions_user_created", "user_id", "created_at"),
+        Index("ix_feed_mentions_post", "post_id"),
+    )

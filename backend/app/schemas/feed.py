@@ -35,10 +35,13 @@ class FeedAuthor(BaseModel):
 
 class FeedPollInput(BaseModel):
     """Конфиг опроса при создании поста. `options` — тексты вариантов,
-    id бэкенд генерирует сам."""
+    id бэкенд генерирует сам. `closes_at` — дедлайн (опционально); фронт
+    шлёт его как ISO UTC (с `Z`/смещением), чтобы не зависеть от зоны
+    сервера."""
     multi: bool = False
     anonymous: bool = False
     options: List[str] = []
+    closes_at: Optional[datetime] = None
 
     @field_validator("options")
     @classmethod
@@ -59,12 +62,31 @@ class FeedPollOption(BaseModel):
     voters: List[FeedAuthor] = []       # кто проголосовал (пусто, если anonymous)
 
 
+class FeedPollResultOption(BaseModel):
+    """Строка итога опроса (снапшот на момент закрытия / чтения закрытого)."""
+    id: str
+    votes: int = 0
+    pct: int = 0                        # доля от числа проголосовавших, %
+
+
+class FeedPollResult(BaseModel):
+    """Подведение итогов закрытого опроса."""
+    total_votes: int = 0
+    options: List[FeedPollResultOption] = []
+    winner_ids: List[str] = []          # лидеры (несколько — при ничьей)
+    closed_at: Optional[datetime] = None
+
+
 class FeedPoll(BaseModel):
     multi: bool = False
     anonymous: bool = False
     options: List[FeedPollOption] = []
     total_votes: int = 0                # уникальных проголосовавших
     my_voted: bool = False              # текущий пользователь уже голосовал
+    closes_at: Optional[datetime] = None    # дедлайн (или null — бессрочный)
+    closed: bool = False                # закрыт вручную или по дедлайну
+    closed_at: Optional[datetime] = None    # когда зафиксировано закрытие
+    result: Optional[FeedPollResult] = None  # итоги (только для закрытого)
 
 
 # ---- Reactions ------------------------------------------------------------
@@ -151,3 +173,9 @@ class FeedVoteRequest(BaseModel):
     """Проголосовать в опросе. Для single-choice опроса учитывается
     первый из `option_ids`; для multi — весь набор."""
     option_ids: List[str] = []
+
+
+class FeedSinceResponse(BaseModel):
+    """Лёгкий ответ для polling-плашки «N новых записей»."""
+    count: int = 0                      # новых незакреплённых постов после `after`
+    latest: Optional[datetime] = None   # самый свежий created_at в ленте

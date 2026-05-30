@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import re
 import uuid as _uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Optional
 
@@ -26,11 +26,13 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Upl
 from fastapi.responses import FileResponse
 from sqlalchemy import delete as sa_delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.auth_middleware import CurrentUser
 from app.database.session import get_db
 from app.models import (
     FeedComment,
+    FeedMention,
     FeedPollVote,
     FeedPost,
     FeedReaction,
@@ -46,11 +48,14 @@ from app.schemas.feed import (
     FeedCommentResponse,
     FeedPoll,
     FeedPollOption,
+    FeedPollResult,
+    FeedPollResultOption,
     FeedPostCreate,
     FeedPostPatch,
     FeedPostResponse,
     FeedReactionGroup,
     FeedReactRequest,
+    FeedSinceResponse,
     FeedVoteRequest,
 )
 from app.services.event_outbox import emit_event_safe
@@ -127,6 +132,81 @@ def _extract_mention_ids(text: str) -> set[str]:
     if not text:
         return set()
     return {m.group(1) for m in _MENTION_RE.finditer(text)}
+
+
+# ---- time / poll helpers --------------------------------------------------
+
+def _now_utc() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _parse_utc(value) -> Optional[datetime]:
+    """ISO-строку/`datetime` → aware UTC. Naive трактуем как UTC.
+
+    Дедлайн опроса хранится как UTC-ISO (фронт шлёт со смещением/`Z`),
+    поэтому сравнение `now >= closes_at` не зависит от зоны сервера."""
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        dt = value
+    else:
+        s = str(value).strip().replace("Z", "+00:00")
+        try:
+            dt = datetime.fromisoformat(s)
+        except ValueError:
+            return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _poll_is_closed(cfg: Optional[dict]) -> bool:
+    """Опрос закрыт, если выставлен флаг `closed` ИЛИ прошёл дедлайн."""
+    if not cfg or not isinstance(cfg, dict):
+        return False
+    if cfg.get("closed"):
+        return True
+    closes_at = _parse_utc(cfg.get("closes_at"))
+    return bool(closes_at and _now_utc() >= closes_at)
+
+
+def _compute_poll_result(cfg: dict, votes: list) -> FeedPollResult:
+    """Итоги опроса из конфига + голосов. Победитель — вариант(ы) с max
+    голосов (несколько при ничьей; пустой список, если голосов нет)."""
+    counts: dict[str, int] = {}
+    voters_all: set[str] = set()
+    for v in votes:
+        counts[str(v.option_id)] = counts.get(str(v.option_id), 0) + 1
+        voters_all.add(str(v.user_id))
+    total = len(voters_all)
+    opts: list[FeedPollResultOption] = []
+    max_votes = 0
+    for o in (cfg.get("options") or []):
+        oid = str(o.get("id"))
+        n = counts.get(oid, 0)
+        max_votes = max(max_votes, n)
+        opts.append(FeedPollResultOption(
+            id=oid, votes=n, pct=round(n / total * 100) if total else 0,
+        ))
+    winners = [o.id for o in opts if o.votes == max_votes and max_votes > 0]
+    return FeedPollResult(
+        total_votes=total, options=opts, winner_ids=winners,
+        closed_at=_parse_utc(cfg.get("closed_at")),
+    )
+
+
+async def _sync_post_mentions(db: AsyncSession, post_id: str, body: str) -> set[str]:
+    """Пересобрать упоминания в ТЕЛЕ поста (comment_id IS NULL): удалить
+    прежние и вставить актуальные по тексту. Возвращает множество
+    упомянутых user_id (для уведомлений). Коммит — на стороне вызывающего."""
+    mentioned = _extract_mention_ids(body)
+    await db.execute(sa_delete(FeedMention).where(
+        FeedMention.post_id == str(post_id),
+        FeedMention.comment_id.is_(None),
+    ))
+    for uid in mentioned:
+        db.add(FeedMention(post_id=str(post_id), comment_id=None, user_id=str(uid)))
+    return mentioned
 
 
 async def _notify(
@@ -264,12 +344,21 @@ def _build_poll(
                 authors[uid] for uid in voter_ids if uid in authors
             ],
         ))
+    closed = _poll_is_closed(cfg)
+    # Итоги считаем для закрытого опроса. Снапшот, зафиксированный при
+    # явном закрытии, лежит в cfg["result"]; для закрытого по дедлайну
+    # считаем на лету (голосовать уже нельзя — набор голосов стабилен).
+    result = _compute_poll_result(cfg, votes) if closed else None
     return FeedPoll(
         multi=bool(cfg.get("multi")),
         anonymous=anonymous,
         options=options,
         total_votes=len(voters_all),
         my_voted=str(me_id) in voters_all,
+        closes_at=_parse_utc(cfg.get("closes_at")),
+        closed=closed,
+        closed_at=_parse_utc(cfg.get("closed_at")),
+        result=result,
     )
 
 
@@ -345,11 +434,19 @@ def _normalize_poll(poll_input) -> Optional[dict]:
     opts = [o for o in (poll_input.options or []) if o]
     if len(opts) < 2:
         raise HTTPException(status_code=400, detail="В опросе нужно минимум 2 варианта")
-    return {
+    cfg = {
         "multi": bool(poll_input.multi),
         "anonymous": bool(poll_input.anonymous),
         "options": [{"id": _uuid.uuid4().hex[:8], "text": t} for t in opts],
+        "closed": False,
     }
+    closes_at = _parse_utc(poll_input.closes_at)
+    if closes_at is not None:
+        if closes_at <= _now_utc():
+            raise HTTPException(status_code=400, detail="Дедлайн опроса должен быть в будущем")
+        # Храним как UTC-ISO — однозначно при сравнении на любом сервере.
+        cfg["closes_at"] = closes_at.isoformat()
+    return cfg
 
 
 # ---- list / create --------------------------------------------------------
@@ -361,15 +458,51 @@ async def list_feed(
     user: User = Depends(CurrentUser),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    tab: str = Query("all"),
 ):
-    """Лента: закреплённые сверху, далее по убыванию даты."""
+    """Лента: закреплённые сверху, далее по убыванию даты.
+
+    `tab`: all (всё) | news (официальные новости) | polls (посты с
+    опросом) | mentions (где упомянут текущий пользователь, по
+    feed_mentions — включая упоминания в комментариях). Неизвестное
+    значение → all."""
+    stmt = select(FeedPost)
+    if tab == "news":
+        stmt = stmt.where(FeedPost.post_type == "news")
+    elif tab == "polls":
+        stmt = stmt.where(FeedPost.poll.isnot(None))
+    elif tab == "mentions":
+        stmt = stmt.where(FeedPost.id.in_(
+            select(FeedMention.post_id).where(FeedMention.user_id == str(user.id))
+        ))
     rows = (await db.execute(
-        select(FeedPost)
+        stmt
         .order_by(FeedPost.is_pinned.desc(), FeedPost.created_at.desc())
         .limit(limit).offset(offset)
     )).scalars().all()
     can_post = await _can_post(db, request, user)
     return await _serialize_posts(db, rows, str(user.id), can_post)
+
+
+@router.get("/since", response_model=FeedSinceResponse)
+async def feed_since(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(CurrentUser),
+    after: Optional[datetime] = Query(None),
+):
+    """Сколько НЕзакреплённых постов появилось после `after` (created_at
+    самого свежего поста у клиента). Лёгкий polling для плашки «N новых».
+    Без `after` — только `latest` (инициализация курсора, count=0)."""
+    latest = (await db.execute(select(func.max(FeedPost.created_at)))).scalar_one_or_none()
+    count = 0
+    if after is not None:
+        count = (await db.execute(
+            select(func.count(FeedPost.id)).where(
+                FeedPost.is_pinned.is_(False),
+                FeedPost.created_at > after,
+            )
+        )).scalar_one()
+    return FeedSinceResponse(count=int(count or 0), latest=latest)
 
 
 @router.get("/popular", response_model=List[FeedPostResponse])
@@ -443,8 +576,9 @@ async def create_post(
     )
     await db.commit()
 
-    # Уведомить упомянутых в тексте.
-    mentioned = _extract_mention_ids(body)
+    # Индекс упоминаний (для вкладки «упомянули меня») + уведомления.
+    mentioned = await _sync_post_mentions(db, str(p.id), body)
+    await db.commit()
     if mentioned:
         await _notify(
             db, mentioned,
@@ -483,8 +617,10 @@ async def patch_post(
         raise HTTPException(status_code=403, detail="Нет прав на правку поста")
 
     data = payload.model_dump(exclude_unset=True)
+    body_changed = False
     if "body" in data and data["body"] is not None:
         p.body = data["body"].strip()
+        body_changed = True
     if "post_type" in data and data["post_type"] is not None:
         p.post_type = data["post_type"]
     if "is_pinned" in data and data["is_pinned"] is not None:
@@ -494,6 +630,10 @@ async def patch_post(
             a if isinstance(a, dict) else a.model_dump()
             for a in data["attachments"]
         ]
+    # Правка тела могла добавить/убрать упоминания — пересобираем индекс,
+    # чтобы вкладка «упомянули меня» отражала актуальный текст.
+    if body_changed:
+        await _sync_post_mentions(db, str(p.id), p.body)
     await db.commit()
     await db.refresh(p)
 
@@ -519,7 +659,7 @@ async def delete_post(
     if not can_post and str(p.author_id) != str(user.id):
         raise HTTPException(status_code=403, detail="Нет прав на удаление")
 
-    for model in (FeedComment, FeedReaction, FeedView, FeedPollVote):
+    for model in (FeedComment, FeedReaction, FeedView, FeedPollVote, FeedMention):
         await db.execute(sa_delete(model).where(model.post_id == str(post_id)))
     await db.delete(p)
     await db.commit()
@@ -562,10 +702,11 @@ async def toggle_reaction(
     """Поставить/снять эмодзи-реакцию (toggle). Пользователь может
     держать несколько разных эмодзи на одном посте."""
     post = (await db.execute(
-        select(FeedPost.id).where(FeedPost.id == str(post_id))
-    )).scalar_one_or_none()
+        select(FeedPost.id, FeedPost.author_id).where(FeedPost.id == str(post_id))
+    )).first()
     if not post:
         raise HTTPException(status_code=404, detail="Пост не найден")
+    post_author_id = str(post[1])
     emoji = payload.emoji.strip()
     existing = (await db.execute(
         select(FeedReaction.id).where(
@@ -574,6 +715,7 @@ async def toggle_reaction(
             FeedReaction.emoji == emoji,
         )
     )).scalar_one_or_none()
+    is_set = not existing  # True — поставили реакцию, False — сняли
     if existing:
         await db.execute(sa_delete(FeedReaction).where(FeedReaction.id == existing))
     else:
@@ -582,6 +724,27 @@ async def toggle_reaction(
         await db.commit()
     except Exception:
         await db.rollback()
+
+    # Уведомить автора — только при ПОСТАНОВКЕ (не снятии) и не о своей
+    # же реакции. Антиспам: пока автор не прочитал предыдущее уведомление
+    # о реакции на этот пост, новых не плодим (реакции — шумное событие).
+    if is_set and post_author_id != str(user.id):
+        already = (await db.execute(
+            select(Notification.id).where(
+                Notification.user_id == post_author_id,
+                Notification.type == "feed_reaction",
+                Notification.entity_id == str(post_id),
+                Notification.is_read.is_(False),
+            ).limit(1)
+        )).scalar_one_or_none()
+        if not already:
+            await _notify(
+                db, [post_author_id],
+                ntype="feed_reaction",
+                title="Реакция на вашу запись",
+                message=f"{user.full_name or 'Коллега'} отреагировал(а): {emoji}",
+                post_id=str(post_id), actor_id=str(user.id),
+            )
 
     rows = (await db.execute(
         select(FeedReaction.emoji, func.count(FeedReaction.id))
@@ -621,6 +784,10 @@ async def vote_poll(
         raise HTTPException(status_code=404, detail="Опрос не найден")
 
     cfg = p.poll
+    # Серверная проверка закрытости (не только UI): после дедлайна или
+    # ручного закрытия голос не принимаем.
+    if _poll_is_closed(cfg):
+        raise HTTPException(status_code=403, detail="Опрос закрыт")
     valid_ids = {str(o.get("id")) for o in (cfg.get("options") or [])}
     chosen = [str(o) for o in (payload.option_ids or []) if str(o) in valid_ids]
     if not cfg.get("multi"):
@@ -640,6 +807,45 @@ async def vote_poll(
     )).scalars().all()
     authors = {}
     if not cfg.get("anonymous"):
+        authors = await _authors_map(db, {str(v.user_id) for v in votes})
+    return _build_poll(p, list(votes), str(user.id), authors)
+
+
+@router.post("/{post_id}/poll/close", response_model=FeedPoll)
+async def close_poll(
+    post_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(CurrentUser),
+):
+    """Досрочно закрыть опрос вручную. Право: автор поста или
+    `feed.edit_all`. Идемпотентно: повторный вызов вернёт уже закрытый
+    опрос. При закрытии фиксируем снапшот итогов в poll['result']."""
+    p = (await db.execute(
+        select(FeedPost).where(FeedPost.id == str(post_id))
+    )).scalar_one_or_none()
+    if not p or not p.poll:
+        raise HTTPException(status_code=404, detail="Опрос не найден")
+    can_post = await _can_post(db, request, user)
+    if not can_post and str(p.author_id) != str(user.id):
+        raise HTTPException(status_code=403, detail="Нет прав на закрытие опроса")
+
+    votes = (await db.execute(
+        select(FeedPollVote).where(FeedPollVote.post_id == str(post_id))
+    )).scalars().all()
+
+    if not p.poll.get("closed"):
+        cfg = dict(p.poll)
+        cfg["closed"] = True
+        cfg["closed_at"] = _now_utc().isoformat()
+        cfg["result"] = _compute_poll_result(cfg, list(votes)).model_dump(mode="json")
+        p.poll = cfg
+        flag_modified(p, "poll")  # JSON-мутацию SQLAlchemy иначе не заметит
+        await db.commit()
+        await db.refresh(p)
+
+    authors = {}
+    if not p.poll.get("anonymous"):
         authors = await _authors_map(db, {str(v.user_id) for v in votes})
     return _build_poll(p, list(votes), str(user.id), authors)
 
@@ -693,7 +899,14 @@ async def create_comment(
     await db.refresh(c)
 
     # Уведомления: автору поста + упомянутым.
-    recipients = set(_extract_mention_ids(body))
+    comment_mentions = _extract_mention_ids(body)
+    # Индекс упоминаний из комментария (для вкладки «упомянули меня» —
+    # пост всплывёт, даже если в теле поста юзера не упоминали).
+    for uid in comment_mentions:
+        db.add(FeedMention(post_id=str(post_id), comment_id=str(c.id), user_id=str(uid)))
+    if comment_mentions:
+        await db.commit()
+    recipients = set(comment_mentions)
     recipients.add(str(post.author_id))
     snippet = f"{user.full_name or 'Коллега'}: {body}"
     await _notify(
@@ -840,6 +1053,8 @@ async def delete_comment(
     can_post = await _can_post(db, request, user)
     if not can_post and str(c.author_id) != str(user.id):
         raise HTTPException(status_code=403, detail="Нет прав на удаление комментария")
+    # Подчистить упоминания этого комментария из индекса.
+    await db.execute(sa_delete(FeedMention).where(FeedMention.comment_id == str(c.id)))
     await db.delete(c)
     await db.commit()
     return {"ok": True}
