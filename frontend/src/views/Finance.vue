@@ -151,8 +151,8 @@
             <div class="d-flex justify-between align-center mb-2">
               <h4 class="m-0">Расшифровка по месяцам</h4>
             </div>
-            <div class="table-container" style="max-height: 360px;">
-              <table class="table table-sm">
+            <div class="table-container cashflow-scroll" style="max-height: 360px;">
+              <table class="table table-sm cashflow-table">
                 <thead>
                   <tr>
                     <th>Период</th>
@@ -676,6 +676,21 @@ export default {
   .period-toggle .btn {
     flex: 1 1 45%;
     min-width: 120px;
+  }
+}
+
+/* Таблица «Расшифровка по месяцам» (8 числовых колонок) на мобиле:
+   горизонтальный скролл + залипшая первая колонка (Период), чтобы при
+   прокрутке чисел не терять, к какому месяцу они относятся. */
+@media (max-width: 768px) {
+  .cashflow-scroll { overflow-x: auto; }
+  .cashflow-table { min-width: 620px; }
+  .cashflow-table thead th:first-child,
+  .cashflow-table tbody td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: var(--color-surface);
   }
 }
 </style>

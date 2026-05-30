@@ -3009,37 +3009,17 @@ body[data-theme="dark"],
     -webkit-overflow-scrolling: touch;
   }
 
+  /* Хедер на мобиле — стабильная строка фиксированной высоты. Раньше
+     здесь были flex-direction:column + flex-wrap:wrap + height:auto, из-за
+     чего хедер вставал «столбиком» и его высота скакала от страницы к
+     странице. Точную раскладку строки задаёт AppHeader (scoped). */
   .content-header {
-    height: auto;
     min-height: 56px;
-    flex-wrap: wrap;
     gap: 8px;
-    flex-direction: column;
-    align-items: stretch;
   }
 
   .content-header h2 {
     font-size: 1rem;
-  }
-
-  .content-header>.d-flex {
-    width: 100%;
-  }
-
-  .content-header>.d-flex:last-child {
-    flex-wrap: wrap;
-    row-gap: 6px;
-  }
-
-  .content-header .user-profile {
-    width: 100%;
-    margin-left: 0;
-    justify-content: flex-start;
-    flex-wrap: wrap;
-  }
-
-  .content-header .user-profile>div {
-    min-width: 0;
   }
 
   /* Cards - Smaller radius and padding */

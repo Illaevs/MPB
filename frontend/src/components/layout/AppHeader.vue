@@ -17,7 +17,7 @@
     <div class="content-header__actions">
       <WorkdayTopbarChip />
       <div class="content-header__tools">
-        <button class="header-utility-btn" title="Калькулятор НДС" @click="$emit('open-vat')">
+        <button class="header-utility-btn header-utility-btn--phone-hide" title="Калькулятор НДС" @click="$emit('open-vat')">
           <i class="fas fa-calculator"></i>
         </button>
         <button
@@ -46,7 +46,7 @@
           @change="onWallpaperPicked"
         >
         <button
-          class="header-utility-btn"
+          class="header-utility-btn header-utility-btn--phone-hide"
           :class="{ 'is-active': !!activeUser?.wallpaper_url }"
           :disabled="!activeUser || uploadingWallpaper"
           :title="activeUser ? 'Загрузить обои интерфейса' : 'Пользователь не выбран'"
@@ -1077,6 +1077,34 @@ export default {
   .content-header__actions {
     gap: 8px;
   }
+}
+
+/* На телефоне — стабильная ОДНА строка фиксированной высоты (вместо
+   2-3 рядов с переносом, дававших «пляшущую» высоту). Поиск сжимается до
+   иконки и занимает свободное место; редкие действия скрыты (доступны
+   на десктопе / в «Стилизации»). */
+@media (max-width: 768px) {
+  .content-header {
+    flex-wrap: nowrap;
+    height: 56px;
+    gap: 6px;
+  }
+  .content-header__search {
+    width: auto;
+    order: 0;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .content-header__search-label { display: none; }
+  .content-header__actions {
+    width: auto;
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+  }
+  /* Имя пользователя прячем — остаётся аватар (он и есть кнопка профиля). */
+  .user-profile__name { display: none; }
+  /* Редкие утилиты (НДС, обои) — вне телефона. */
+  .header-utility-btn--phone-hide { display: none; }
 }
 
 /* ---- UI personalization popover ---- */
