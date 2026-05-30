@@ -1566,15 +1566,61 @@ export default {
 }
 .d-none { display: none; }
 
-/* Мобильные приоритетные колонки реестра лидов: оставляем
-   Название/Статус/Сумма (+чекбокс и действия), прячем второстепенные
-   (Объект/Заказчик/Ответственный/Создан). Полный набор — на десктопе. */
-@media (max-width: 768px) {
+/* Планшет/узкий экран (601–768): приоритетные колонки реестра лидов —
+   Название/Статус/Сумма, второстепенные скрыты. На ≤600 — карточки. */
+@media (min-width: 601px) and (max-width: 768px) {
   .leads-table th:nth-child(3), .leads-table td:nth-child(3),
   .leads-table th:nth-child(5), .leads-table td:nth-child(5),
   .leads-table th:nth-child(6), .leads-table td:nth-child(6),
   .leads-table th:nth-child(8), .leads-table td:nth-child(8) {
     display: none;
   }
+}
+
+/* Телефон (≤600): строки лидов → карточки (подписи из CSS по nth-child). */
+@media (max-width: 600px) {
+  .leads-table,
+  .leads-table tbody { display: block; }
+  .leads-table thead { display: none; }
+  .leads-table tr.leads-row {
+    display: block;
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    margin-bottom: 10px;
+    padding: 6px 12px;
+    background: var(--color-surface);
+  }
+  .leads-table td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 5px 0;
+    border: none;
+    text-align: right;
+    min-width: 0;
+  }
+  .leads-table td::before {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    text-align: left;
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+  .leads-table td:nth-child(2)::before { content: 'Название'; }
+  .leads-table td:nth-child(3)::before { content: 'Объект'; }
+  .leads-table td:nth-child(4)::before { content: 'Статус'; }
+  .leads-table td:nth-child(5)::before { content: 'Заказчик'; }
+  .leads-table td:nth-child(6)::before { content: 'Ответственный'; }
+  .leads-table td:nth-child(7)::before { content: 'Сумма'; }
+  .leads-table td:nth-child(8)::before { content: 'Создан'; }
+  .leads-table td.check-col { display: none; }
+  .leads-table td.actions-cell,
+  .leads-table td:last-child { justify-content: flex-end; }
+  .leads-table td:last-child::before { content: ''; }
+  /* Название может быть длинным — пусть значение занимает место и не ломает строку. */
+  .leads-table td:nth-child(2) { text-align: left; }
+  .leads-table td:nth-child(2) .leads-title-cell { min-width: 0; }
 }
 </style>
