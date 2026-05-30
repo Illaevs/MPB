@@ -3489,3 +3489,10 @@ body[data-theme="dark"],
   .content-header__burger { min-width: 44px; min-height: 44px; }
 }
 
+/* Нижний таб-бар (≤768) перекрывал бы низ контента — добавляем отступ
+   под высоту бара + safe-area, чтобы последние элементы списков и
+   плавающие кнопки не прятались за ним. */
+@media (max-width: 768px) {
+  .content-body { padding-bottom: calc(56px + env(safe-area-inset-bottom)); }
+}
+

@@ -57,6 +57,9 @@
       @unread-count-changed="onUnreadCountChanged"
     />
     <WorkdayStartModal v-if="!isAuthPage && activeUser" />
+
+    <!-- Нижняя таб-навигация (только мобайл) -->
+    <BottomTabBar v-if="!isAuthPage && activeUser" />
     </div>
   </div>
 </template>
@@ -81,6 +84,7 @@ import GlobalAiAssistant from './components/ui/GlobalAiAssistant.vue'
 import VatCalculatorModal from './components/ui/VatCalculatorModal.vue'
 import AppSidebar from './components/layout/AppSidebar.vue'
 import AppHeader from './components/layout/AppHeader.vue'
+import BottomTabBar from './components/layout/BottomTabBar.vue'
 import { hasSectionAccess } from './utils/permissions'
 import { useAuthStore } from './stores/auth'
 import { useToast } from './composables/useToast'
@@ -106,6 +110,7 @@ export default {
     NotificationCenter,
     AppSidebar,
     AppHeader,
+    BottomTabBar,
     VatCalculatorModal,
     GlobalAiAssistant,
     WorkdayStartModal
