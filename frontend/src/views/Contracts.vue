@@ -1876,7 +1876,9 @@ export default {
   .form-row { grid-template-columns: 1fr; }
 }
 @media (max-width: 600px) {
-  .contracts-search { flex-basis: 100%; margin-left: 0; }
+  /* Поиск — на всю ширину, контролы тулбара с нормальными отступами. */
+  .toolbar-row { gap: 8px; row-gap: 10px; }
+  .contracts-search { flex: 1 1 100%; margin-left: 0; order: 10; }
 }
 /* Планшет/узкий экран (601–768): приоритетные колонки — Номер/Статус/
    Сумма, второстепенные скрыты. На ≤600 ниже включается карточный режим
@@ -1891,38 +1893,38 @@ export default {
   }
 }
 
-/* Телефон (≤600): строки реестра → карточки. Подписи полей подставляем
-   из CSS по позиции (nth-child) — разметку td не трогаем. Чекбокс прячем
-   (массовый выбор — на десктопе). */
+/* Телефон (≤600): строки реестра → карточки. Подпись поля — НАД значением
+   (через CSS по nth-child); значения слева, текут естественно — составные
+   ячейки «аватар+имя»/бейджи не разъезжаются. Кнопка «⋮» — в правом
+   верхнем углу карточки. Разметку td не трогаем. */
 @media (max-width: 600px) {
   .contracts-table,
   .contracts-table tbody { display: block; }
   .contracts-table thead { display: none; }
   .contracts-table tr.contracts-row {
     display: block;
+    position: relative;
     border: 1px solid var(--color-border);
     border-radius: 12px;
     margin-bottom: 10px;
-    padding: 6px 12px;
+    padding: 10px 44px 10px 12px;   /* справа — место под «⋮» */
     background: var(--color-surface);
   }
   .contracts-table td {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 5px 0;
+    display: block;
+    padding: 3px 0;
     border: none;
-    text-align: right;
+    text-align: left;
     min-width: 0;
   }
   .contracts-table td::before {
-    font-size: 0.78rem;
-    font-weight: 600;
+    display: block;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
     color: var(--color-text-muted);
-    text-align: left;
-    flex: 0 0 auto;
-    white-space: nowrap;
+    margin-bottom: 1px;
   }
   .contracts-table td:nth-child(2)::before { content: 'Номер'; }
   .contracts-table td:nth-child(3)::before { content: 'Дата'; }
@@ -1933,10 +1935,15 @@ export default {
   .contracts-table td:nth-child(8)::before { content: 'Исполнитель'; }
   .contracts-table td:nth-child(9)::before { content: 'Сделка'; }
   .contracts-table td.check-col { display: none; }
-  .contracts-table td.actions-cell { justify-content: flex-end; padding-top: 4px; }
-  .contracts-table td.actions-cell::before { content: ''; }
-  .contracts-table td .contracts-company-cell,
-  .contracts-table td .contracts-deal__link { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .contracts-table td.actions-cell {
+    position: absolute;
+    top: 6px;
+    right: 4px;
+    padding: 0;
+  }
+  .contracts-table td.actions-cell::before { display: none; }
+  .contracts-table td .contracts-company-cell { display: inline-flex; max-width: 100%; min-width: 0; }
+  .contracts-table td .contracts-company-cell__name { overflow: hidden; text-overflow: ellipsis; }
 }
 </style>
 

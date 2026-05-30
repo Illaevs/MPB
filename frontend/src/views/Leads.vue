@@ -936,7 +936,12 @@ export default {
   width: 100%;
 }
 @media (max-width: 900px) {
-  .toolbar-row { flex-wrap: wrap; }
+  .toolbar-row { flex-wrap: wrap; row-gap: 8px; }
+}
+/* Телефон: поиск — на всю ширину отдельной строкой, контролы не «в кучу». */
+@media (max-width: 600px) {
+  .toolbar-row { gap: 8px; row-gap: 10px; }
+  .leads-search-wrap { flex: 1 1 100%; order: 10; }
 }
 .toolbar-title {
   font-size: var(--text-xl);
@@ -1578,35 +1583,36 @@ export default {
 }
 
 /* Телефон (≤600): строки лидов → карточки (подписи из CSS по nth-child). */
+/* Телефон (≤600): строки лидов → карточки. Подпись поля — НАД значением;
+   значения слева, текут естественно. «⋮» — в правом верхнем углу. */
 @media (max-width: 600px) {
   .leads-table,
   .leads-table tbody { display: block; }
   .leads-table thead { display: none; }
   .leads-table tr.leads-row {
     display: block;
+    position: relative;
     border: 1px solid var(--color-border);
     border-radius: 12px;
     margin-bottom: 10px;
-    padding: 6px 12px;
+    padding: 10px 44px 10px 12px;   /* справа — место под «⋮» */
     background: var(--color-surface);
   }
   .leads-table td {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 5px 0;
+    display: block;
+    padding: 3px 0;
     border: none;
-    text-align: right;
+    text-align: left;
     min-width: 0;
   }
   .leads-table td::before {
-    font-size: 0.78rem;
-    font-weight: 600;
+    display: block;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
     color: var(--color-text-muted);
-    text-align: left;
-    flex: 0 0 auto;
-    white-space: nowrap;
+    margin-bottom: 1px;
   }
   .leads-table td:nth-child(2)::before { content: 'Название'; }
   .leads-table td:nth-child(3)::before { content: 'Объект'; }
@@ -1616,11 +1622,23 @@ export default {
   .leads-table td:nth-child(7)::before { content: 'Сумма'; }
   .leads-table td:nth-child(8)::before { content: 'Создан'; }
   .leads-table td.check-col { display: none; }
-  .leads-table td.actions-cell,
-  .leads-table td:last-child { justify-content: flex-end; }
-  .leads-table td:last-child::before { content: ''; }
-  /* Название может быть длинным — пусть значение занимает место и не ломает строку. */
-  .leads-table td:nth-child(2) { text-align: left; }
-  .leads-table td:nth-child(2) .leads-title-cell { min-width: 0; }
+  .leads-table td.actions-cell {
+    position: absolute;
+    top: 6px;
+    right: 4px;
+    padding: 0;
+  }
+  .leads-table td.actions-cell::before { display: none; }
+  /* Ответственный: подпись сверху, затем аватар+имя ПЛОТНО в одну строку
+     (без разъезда, который давал space-between). */
+  .leads-table td.leads-assignee-cell {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 6px;
+  }
+  .leads-table td.leads-assignee-cell::before { flex: 0 0 100%; }
+  /* Название + адрес — естественной стопкой, адрес переносится. */
+  .leads-table td.leads-title-cell .leads-title-cell__address { white-space: normal; }
 }
 </style>
