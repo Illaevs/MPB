@@ -1878,6 +1878,20 @@ export default {
 @media (max-width: 600px) {
   .contracts-search { flex-basis: 100%; margin-left: 0; }
 }
+/* Мобильные приоритетные колонки: оставляем Номер/Статус/Сумма (+чекбокс
+   и действия), прячем второстепенные (Дата/Тип/Заказчик/Исполнитель/
+   Сделка) — таблица перестаёт быть «простыней» с горизонтальным скроллом.
+   Колонки скрыты позиционно; v-show держит ячейки в DOM, поэтому позиции
+   nth-child стабильны. Полный набор доступен на десктопе. */
+@media (max-width: 768px) {
+  .contracts-table th:nth-child(3), .contracts-table td:nth-child(3),
+  .contracts-table th:nth-child(6), .contracts-table td:nth-child(6),
+  .contracts-table th:nth-child(7), .contracts-table td:nth-child(7),
+  .contracts-table th:nth-child(8), .contracts-table td:nth-child(8),
+  .contracts-table th:nth-child(9), .contracts-table td:nth-child(9) {
+    display: none;
+  }
+}
 </style>
 
 

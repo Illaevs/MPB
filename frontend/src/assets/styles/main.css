@@ -13,6 +13,12 @@
    not hardcoded colors / radii / sizes.
    ============================================================ */
 :root {
+  /* ---- LAYOUT ---- */
+  /* Ширина сайдбара на планшете (≤1024, не collapsed). Раньше токен
+     использовался в AppSidebar.vue, но нигде не объявлялся → декларация
+     отбрасывалась и ширина зависела от случайного победителя каскада. */
+  --app-shell-sidebar-width: 250px;
+
   /* ---- PRIMARY (Blue) ---- */
   --color-primary: #2563eb;          /* blue-600 */
   --color-primary-hover: #1d4ed8;    /* blue-700 */
@@ -3435,5 +3441,26 @@ body[data-theme="dark"],
 .content-header {
   -webkit-backdrop-filter: blur(var(--ui-bar-blur, 1px)) saturate(120%) !important;
   backdrop-filter: blur(var(--ui-bar-blur, 1px)) saturate(120%) !important;
+}
+
+/* ===== Тач-устройства: увеличенные тап-таргеты =====
+   На coarse-pointer (телефон/планшет) интерактивные элементы навигации
+   не должны быть меньше 44px — иначе пальцем сложно попасть. Только
+   min-* — раскладку не ломает, на десктопе (fine pointer) не действует. */
+@media (pointer: coarse) {
+  .nav-link { min-height: 44px; }
+  .hamburger-btn { min-width: 44px; min-height: 44px; }
+  .sidebar-toggle { min-width: 44px; min-height: 44px; }
+}
+
+/* ===== Safe-area под нотч/жест-бар (iOS и т.п.) =====
+   Плавающий бургер и нижняя кромка контента уезжали под чёлку/полоску.
+   env() с фолбэком, чтобы на устройствах без выреза ничего не менялось. */
+.hamburger-btn {
+  top: max(12px, env(safe-area-inset-top));
+  left: max(12px, env(safe-area-inset-left));
+}
+@media (max-width: 1024px) {
+  .content-body { padding-bottom: env(safe-area-inset-bottom); }
 }
 

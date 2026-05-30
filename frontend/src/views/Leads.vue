@@ -1565,4 +1565,16 @@ export default {
   color: var(--color-text-muted);
 }
 .d-none { display: none; }
+
+/* Мобильные приоритетные колонки реестра лидов: оставляем
+   Название/Статус/Сумма (+чекбокс и действия), прячем второстепенные
+   (Объект/Заказчик/Ответственный/Создан). Полный набор — на десктопе. */
+@media (max-width: 768px) {
+  .leads-table th:nth-child(3), .leads-table td:nth-child(3),
+  .leads-table th:nth-child(5), .leads-table td:nth-child(5),
+  .leads-table th:nth-child(6), .leads-table td:nth-child(6),
+  .leads-table th:nth-child(8), .leads-table td:nth-child(8) {
+    display: none;
+  }
+}
 </style>

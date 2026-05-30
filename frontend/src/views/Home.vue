@@ -1200,7 +1200,10 @@ export default {
 }
 @media (max-width: 1024px) {
   .feed-page { grid-template-columns: 1fr; gap: 16px; padding: 16px; }
-  .feed-side { order: -1; }
+  /* На мобиле лента (главный контент) — выше виджетов сайдбара, чтобы
+     новости/композер не уезжали под «Мои задачи»/«Сводку».
+     Сайдбар не должен «прилипать» в одноколоночной раскладке. */
+  .feed-side { order: 2; position: static; }
 }
 
 /* ===== Лента ===== */

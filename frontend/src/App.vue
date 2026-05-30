@@ -402,7 +402,8 @@ export default {
 
 <style scoped>
 .app-root {
-  min-height: 100vh;
+  min-height: 100vh;        /* фолбэк для старых браузеров */
+  min-height: 100dvh;       /* учитывает адресную строку моб. браузеров */
 }
 
 /* Фиксированный слой обоев: размытие/затемнение независимы от
@@ -431,7 +432,9 @@ export default {
 .auth-shell {
   position: relative;
   min-height: 100vh;
+  min-height: 100dvh;
   max-height: 100vh;
+  max-height: 100dvh;
   display: flex;
   align-items: safe center;
   justify-content: center;

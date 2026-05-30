@@ -179,4 +179,27 @@ export default {
 .ui-modal-leave-to { opacity: 0; }
 .ui-modal-enter-from .ui-modal,
 .ui-modal-leave-to .ui-modal { transform: translateY(8px) scale(0.98); }
+
+/* На мобиле любая модалка — на весь экран: больше места под формы,
+   нет «узкого окна по центру». Все размеры (sm..xl) разворачиваются
+   одинаково. Футер уже липкий (flex-shrink:0), тело скроллится.
+   Учитываем safe-area под нотч/жест-бар. */
+@media (max-width: 600px) {
+  .ui-modal__overlay { padding: 0; }
+  .ui-modal,
+  .ui-modal--sm,
+  .ui-modal--md,
+  .ui-modal--lg,
+  .ui-modal--xl,
+  .ui-modal--full {
+    max-width: none;
+    width: 100%;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+    border: none;
+  }
+  .ui-modal__header { padding-top: max(var(--space-4), env(safe-area-inset-top)); }
+  .ui-modal__footer { padding-bottom: max(var(--space-3), env(safe-area-inset-bottom)); }
+}
 </style>
