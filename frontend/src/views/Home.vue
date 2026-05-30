@@ -76,6 +76,23 @@
               <span>Анонимно</span>
             </label>
           </div>
+          <div class="composer__poll-deadline">
+            <span class="composer__poll-deadline-label">
+              <i class="far fa-clock"></i> Дедлайн
+            </span>
+            <input
+              type="datetime-local"
+              v-model="draft.pollDeadline"
+              class="composer__poll-date"
+            />
+            <button
+              v-if="draft.pollDeadline"
+              type="button"
+              class="composer__poll-x"
+              title="Без дедлайна"
+              @click="draft.pollDeadline = ''"
+            ><i class="fas fa-times"></i></button>
+          </div>
         </div>
 
         <div v-if="draft.images.length" class="composer__images">
@@ -167,11 +184,34 @@
         @change="onEditFilesPicked"
       />
 
+      <!-- Вкладки-фильтры ленты. Видны всем (не внутри v-if="canPost"). -->
+      <div class="feed-tabs">
+        <button
+          v-for="t in FEED_TABS"
+          :key="t.key"
+          type="button"
+          class="feed-tab"
+          :class="{ 'is-active': feedTab === t.key }"
+          @click="setTab(t.key)"
+        >{{ t.label }}</button>
+      </div>
+
+      <!-- Плашка «новые записи» (polling). Вливаем в ленту только по
+           клику, чтобы не сбивать позицию чтения у того, кто читает. -->
+      <button
+        v-if="newCount > 0"
+        type="button"
+        class="feed-new-pill"
+        @click="showNewPosts"
+      >
+        <i class="fas fa-arrow-up"></i> {{ newCount }} {{ pluralPosts(newCount) }}
+      </button>
+
       <!-- Лента постов -->
       <div v-if="loadingFeed" class="feed-state">Загрузка ленты…</div>
       <div v-else-if="!posts.length" class="feed-state feed-state--empty">
         <i class="fas fa-newspaper"></i>
-        <span>Пока новостей нет.</span>
+        <span>{{ emptyText }}</span>
       </div>
 
       <article
@@ -304,12 +344,35 @@
         </div>
 
         <!-- Опрос -->
-        <div v-if="post.poll" class="poll">
+        <div v-if="post.poll" class="poll" :class="{ 'is-closed': isPollClosed(post.poll) }">
+          <!-- Статус: таймер до закрытия / «закрыт» + кнопка «Завершить». -->
+          <div
+            v-if="isPollClosed(post.poll) || post.poll.closes_at || post.can_edit"
+            class="poll__status"
+          >
+            <span v-if="isPollClosed(post.poll)" class="poll__badge is-closed">
+              <i class="fas fa-lock"></i> Опрос завершён
+            </span>
+            <span v-else-if="post.poll.closes_at" class="poll__badge is-timer">
+              <i class="far fa-clock"></i> {{ pollCloseLabel(post.poll) }}
+            </span>
+            <button
+              v-if="post.can_edit && !isPollClosed(post.poll)"
+              type="button"
+              class="poll__close-btn"
+              @click="onClosePoll(post)"
+            >Завершить</button>
+          </div>
+
           <div
             v-for="opt in post.poll.options"
             :key="opt.id"
             class="poll__opt"
-            :class="{ 'is-voted': opt.voted }"
+            :class="{
+              'is-voted': opt.voted,
+              'is-winner': isWinner(post.poll, opt),
+              'is-locked': isPollClosed(post.poll),
+            }"
             @click="onVote(post, opt)"
           >
             <div class="poll__bar" :style="{ width: pollPct(opt, post.poll) + '%' }"></div>
@@ -320,6 +383,7 @@
                   : (post.poll.multi ? 'far fa-square' : 'far fa-circle')"></i>
               </span>
               <span class="poll__text">{{ opt.text }}</span>
+              <i v-if="isWinner(post.poll, opt)" class="fas fa-trophy poll__trophy" title="Победитель"></i>
               <span v-if="!post.poll.anonymous && opt.voters.length" class="poll__voters">
                 <UiAvatar
                   v-for="v in opt.voters.slice(0, 3)"
@@ -339,6 +403,7 @@
             {{ post.poll.total_votes }} {{ pluralVotes(post.poll.total_votes) }}
             <span v-if="post.poll.multi">· неск. ответов</span>
             <span v-if="post.poll.anonymous">· анонимно</span>
+            <span v-if="isPollClosed(post.poll)">· завершён</span>
           </div>
         </div>
 
@@ -585,6 +650,15 @@ const ABSENCE_LABEL = {
 const EMOJI_SET = ['👍', '❤️', '🔥', '👏', '😄', '🎉', '😮']
 // Маркер упоминания в тексте: @[Имя](user_id).
 const MENTION_RE = /@\[([^\]]+)\]\(([0-9a-fA-F][0-9a-fA-F-]{7,})\)/g
+// Вкладки ленты (фильтр на бэке через ?tab=).
+const FEED_TABS = [
+  { key: 'all', label: 'Все' },
+  { key: 'news', label: 'Новости' },
+  { key: 'polls', label: 'Опросы' },
+  { key: 'mentions', label: 'Упоминания' },
+]
+// Polling-интервал плашки «новые записи» (в тон notifications, 30 c).
+const FEED_POLL_MS = 30000
 
 export default {
   name: 'Home',
@@ -625,6 +699,7 @@ export default {
       pollOptions: ['', ''],
       pollMulti: false,
       pollAnon: false,
+      pollDeadline: '',      // datetime-local (локальное время браузера)
     })
 
     const canSubmit = computed(() => {
@@ -646,6 +721,7 @@ export default {
       draft.pollOptions = ['', '']
       draft.pollMulti = false
       draft.pollAnon = false
+      draft.pollDeadline = ''
       composerMentions.value = []
       composerExpanded.value = false
     }
@@ -764,6 +840,26 @@ export default {
     const reactionPickerId = ref(null)
     const commentState = reactive({})
 
+    // Вкладка-фильтр ленты.
+    const feedTab = ref('all')
+    const emptyText = computed(() => ({
+      news: 'Официальных новостей пока нет.',
+      polls: 'Опросов пока нет.',
+      mentions: 'Вас пока нигде не упомянули.',
+    }[feedTab.value] || 'Пока новостей нет.'))
+
+    // Polling «новых записей»: курсор = created_at самого свежего поста,
+    // буфер новых постов вливаем в ленту только по клику на плашку.
+    const newCount = ref(0)
+    const newPosts = ref([])
+    const feedCursor = ref(null)   // ISO created_at верхнего поста
+    let feedPollTimer = null
+
+    // Реактивные «сейчас» — для обратного отсчёта дедлайна опросов.
+    // Один общий тик на все опросы (не таймер на каждый).
+    const now = ref(Date.now())
+    let nowTimer = null
+
     const resortPosts = () => {
       posts.value.sort((a, b) => {
         if (!!b.is_pinned !== !!a.is_pinned) return (b.is_pinned ? 1 : 0) - (a.is_pinned ? 1 : 0)
@@ -791,6 +887,12 @@ export default {
             anonymous: draft.pollAnon,
             options: draft.pollOptions.map((o) => o.trim()).filter(Boolean),
           }
+          // datetime-local — локальное время браузера; шлём в UTC ISO,
+          // чтобы дедлайн не зависел от зоны (бэк сравнивает в UTC).
+          if (draft.pollDeadline) {
+            const d = new Date(draft.pollDeadline)
+            if (Number.isFinite(d.getTime())) payload.poll.closes_at = d.toISOString()
+          }
         }
         const created = await api.feed.create(payload)
         posts.value.unshift(created)
@@ -807,8 +909,12 @@ export default {
     const loadFeed = async () => {
       loadingFeed.value = true
       try {
-        const data = await api.feed.list({ limit: 30 })
+        const data = await api.feed.list({ limit: 30, tab: feedTab.value })
         posts.value = Array.isArray(data) ? data : []
+        // Сбрасываем буфер «новых» — лента только что перечитана.
+        newPosts.value = []
+        newCount.value = 0
+        feedCursor.value = posts.value[0]?.created_at || feedCursor.value
         for (const p of posts.value) api.feed.markView(p.id).catch(() => {})
       } catch (e) {
         posts.value = []
@@ -816,6 +922,48 @@ export default {
       } finally {
         loadingFeed.value = false
       }
+    }
+
+    const setTab = (key) => {
+      if (feedTab.value === key) return
+      feedTab.value = key
+      loadFeed()
+    }
+
+    // ---- Polling «новых записей» ----
+    // Плашку показываем только на вкладке «Все» — на отфильтрованных
+    // вкладках «свежесть» неоднозначна (новый опрос не «новость» и т.п.).
+    const pollFeedSince = async () => {
+      if (document.hidden) return
+      if (feedTab.value !== 'all' || !feedCursor.value) return
+      try {
+        const res = await api.feed.since({ after: feedCursor.value })
+        const fresh = Number(res?.count || 0)
+        if (fresh > 0) {
+          // Подтягиваем сами новые посты в буфер (limit покрывает их).
+          const data = await api.feed.list({ limit: 30, tab: 'all' })
+          const list = Array.isArray(data) ? data : []
+          const seen = new Set(posts.value.map((p) => p.id))
+          newPosts.value = list.filter((p) => !p.is_pinned && !seen.has(p.id))
+          newCount.value = newPosts.value.length
+        }
+      } catch (e) { /* тихо — плашка не критична */ }
+    }
+
+    const showNewPosts = () => {
+      if (!newPosts.value.length) {
+        newCount.value = 0
+        return
+      }
+      const seen = new Set(posts.value.map((p) => p.id))
+      const incoming = newPosts.value.filter((p) => !seen.has(p.id))
+      posts.value = [...incoming, ...posts.value]
+      resortPosts()
+      feedCursor.value = posts.value[0]?.created_at || feedCursor.value
+      newPosts.value = []
+      newCount.value = 0
+      for (const p of incoming) api.feed.markView(p.id).catch(() => {})
+      window.scrollTo({ top: 0, behavior: 'smooth' })
     }
 
     const toggleMenu = (id) => {
@@ -847,6 +995,10 @@ export default {
     }
     const onVote = async (post, opt) => {
       if (!post.poll) return
+      if (isPollClosed(post.poll)) {
+        toastError('Опрос завершён')
+        return
+      }
       let selected
       if (post.poll.multi) {
         const cur = post.poll.options.filter((o) => o.voted).map((o) => o.id)
@@ -860,7 +1012,46 @@ export default {
         const res = await api.feed.vote(post.id, selected)
         if (res) post.poll = res
       } catch (e) {
-        toastError('Не удалось проголосовать')
+        toastError(e?.response?.data?.detail || 'Не удалось проголосовать')
+      }
+    }
+
+    // Дедлайн опроса приходит как ISO с таймзоной (UTC) — парсим нативно,
+    // НЕ через parseServerDate (та трактует naive как МСК; тут TZ задана).
+    const isPollClosed = (poll) => {
+      if (!poll) return false
+      if (poll.closed) return true
+      if (!poll.closes_at) return false
+      const d = new Date(poll.closes_at)
+      return Number.isFinite(d.getTime()) && d.getTime() <= now.value
+    }
+    // Подпись обратного отсчёта: «закрытие через 3 ч / 15 мин / 2 дн».
+    const pollCloseLabel = (poll) => {
+      if (!poll?.closes_at) return ''
+      const d = new Date(poll.closes_at)
+      if (!Number.isFinite(d.getTime())) return ''
+      let diff = Math.floor((d.getTime() - now.value) / 1000)
+      if (diff <= 0) return 'закрывается…'
+      const days = Math.floor(diff / 86400); diff %= 86400
+      const hours = Math.floor(diff / 3600); diff %= 3600
+      const mins = Math.floor(diff / 60)
+      if (days > 0) return `закрытие через ${days} ${pluralDays(days)}`
+      if (hours > 0) return `закрытие через ${hours} ч`
+      return `закрытие через ${mins} мин`
+    }
+    // Победители — из снапшота итогов (result.winner_ids у закрытого опроса).
+    const isWinner = (poll, opt) =>
+      Boolean(poll?.result?.winner_ids?.includes(opt.id))
+
+    const onClosePoll = async (post) => {
+      if (!post.poll || isPollClosed(post.poll)) return
+      if (!confirm('Завершить опрос? Голосование будет закрыто.')) return
+      try {
+        const res = await api.feed.closePoll(post.id)
+        if (res) post.poll = res
+        success('Опрос завершён')
+      } catch (e) {
+        toastError(e?.response?.data?.detail || 'Не удалось завершить опрос')
       }
     }
 
@@ -1120,6 +1311,13 @@ export default {
       if (last >= 2 && last <= 4) return 'голоса'
       return 'голосов'
     }
+    const pluralPosts = (n) => {
+      const lastTwo = n % 100, last = n % 10
+      if (lastTwo >= 11 && lastTwo <= 14) return 'новых записей'
+      if (last === 1) return 'новая запись'
+      if (last >= 2 && last <= 4) return 'новые записи'
+      return 'новых записей'
+    }
     const absenceLabel = (t) => ABSENCE_LABEL[t] || ABSENCE_LABEL.other
 
     // Иконка по расширению файла — для рендера чипов-вложений в посте.
@@ -1157,19 +1355,26 @@ export default {
       loadFeed()
       loadWidgets()
       document.addEventListener('click', onDocClick)
+      // Polling «новых записей» + тик обратного отсчёта дедлайнов.
+      feedPollTimer = setInterval(pollFeedSince, FEED_POLL_MS)
+      nowTimer = setInterval(() => { now.value = Date.now() }, 30000)
     })
     onBeforeUnmount(() => {
       document.removeEventListener('click', onDocClick)
+      if (feedPollTimer) clearInterval(feedPollTimer)
+      if (nowTimer) clearInterval(nowTimer)
     })
 
     return {
-      me, firstName, currentYear, canPost, EMOJI_SET,
+      me, firstName, currentYear, canPost, EMOJI_SET, FEED_TABS,
       composerExpanded, publishing, uploading, uploadingFile, imageInput, fileInput,
       draft, canSubmit,
       resetComposer, onImagesPicked, onFilesPicked, onPaste,
       removeDraftImage, removeDraftFile, publish,
       onComposerMention, parseSegments,
       posts, loadingFeed, menuOpenId, reactionPickerId, commentState,
+      feedTab, setTab, emptyText, newCount, showNewPosts, pluralPosts,
+      isPollClosed, pollCloseLabel, isWinner, onClosePoll,
       toggleMenu, toggleReactionPicker, toggleReaction, reactionsTotal,
       pollPct, onVote,
       toggleComments, onCommentMention, submitComment, onDeleteComment,
@@ -1205,6 +1410,36 @@ export default {
 
 /* ===== Лента ===== */
 .feed-main { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+/* Вкладки-фильтры ленты */
+.feed-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.feed-tab {
+  padding: 6px 14px; border-radius: 999px;
+  border: 1px solid var(--color-border, #e2e8f0);
+  background: var(--color-surface, #fff);
+  font-size: 0.84rem; font-weight: 600; font-family: inherit;
+  color: var(--color-text-muted, #64748b); cursor: pointer;
+  transition: background var(--dur-fast, 0.15s) ease, color var(--dur-fast, 0.15s) ease;
+}
+.feed-tab:hover { color: var(--color-primary, #4338ca); }
+.feed-tab.is-active {
+  background: var(--color-primary-soft, rgba(99,102,241,0.12));
+  color: var(--color-primary, #4338ca);
+  border-color: var(--color-primary, #6366f1);
+}
+
+/* Плашка «новые записи» (sticky, чтобы не прыгала при скролле) */
+.feed-new-pill {
+  position: sticky; top: 12px; z-index: 5;
+  align-self: center;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 16px; border: none; border-radius: 999px;
+  background: var(--color-primary, #6366f1); color: #fff;
+  font-size: 0.84rem; font-weight: 600; font-family: inherit;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(99,102,241,0.35);
+}
+.feed-new-pill:hover { filter: brightness(1.05); }
 
 .feed-state {
   padding: 40px;
@@ -1292,6 +1527,18 @@ export default {
   padding: 2px 0;
 }
 .composer__poll-opts { display: flex; gap: 16px; margin-top: 2px; }
+.composer__poll-deadline {
+  display: flex; align-items: center; gap: 10px; margin-top: 4px;
+  font-size: 0.82rem; color: var(--color-text-muted, #64748b);
+}
+.composer__poll-deadline-label { display: inline-flex; align-items: center; gap: 5px; }
+.composer__poll-date {
+  padding: 5px 8px; border-radius: 8px;
+  border: 1px solid var(--color-border-strong, rgba(0,0,0,0.12));
+  background: var(--color-surface-2, #f8fafc);
+  color: var(--color-text, #0f172a);
+  font-size: 0.84rem; font-family: inherit;
+}
 
 /* Список «скрепок»-файлов в композере (и в edit-форме). */
 .composer__files { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
@@ -1506,6 +1753,32 @@ export default {
   min-width: 38px; text-align: right;
 }
 .poll__foot { font-size: 0.76rem; color: var(--color-text-muted, #64748b); margin-top: 2px; }
+
+/* Статус опроса (таймер / закрыт / кнопка «Завершить») */
+.poll__status { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+.poll__badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 0.72rem; font-weight: 600;
+  padding: 3px 9px; border-radius: 999px;
+}
+.poll__badge.is-timer { background: rgba(234,179,8,0.16); color: #b45309; }
+.poll__badge.is-closed { background: var(--color-surface-3, #f1f5f9); color: var(--color-text-muted, #64748b); }
+.poll__close-btn {
+  margin-left: auto;
+  background: transparent; border: none; cursor: pointer;
+  color: var(--color-text-muted, #64748b);
+  font-size: 0.78rem; font-weight: 600; font-family: inherit;
+  padding: 2px 6px; border-radius: 6px;
+}
+.poll__close-btn:hover { color: var(--color-danger, #dc2626); }
+
+/* Закрытый опрос — голосовать нельзя (курсор/hover нейтральны). */
+.poll.is-closed .poll__opt,
+.poll__opt.is-locked { cursor: default; }
+.poll__opt.is-locked:hover { border-color: var(--color-border, #e2e8f0); }
+.poll__opt.is-winner { border-color: #eab308; }
+.poll__opt.is-winner .poll__bar { background: rgba(234,179,8,0.22); }
+.poll__trophy { color: #eab308; font-size: 0.85rem; }
 
 .post__images {
   display: grid; gap: 6px; margin-bottom: 12px;

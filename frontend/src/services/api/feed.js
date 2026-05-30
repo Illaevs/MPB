@@ -11,8 +11,14 @@ import { get, post, patch, del } from './_client'
 const BASE = '/api/v1/feed'
 
 // Лента: закреплённые сверху, далее по дате.
+// params: { limit, offset, tab: 'all'|'news'|'polls'|'mentions' }.
 export const list = (params = {}, options) =>
   get(`${BASE}`, params, options)
+
+// Сколько новых незакреплённых постов после `after` (ISO created_at).
+// Для polling-плашки «N новых записей». Возвращает { count, latest }.
+export const since = (params = {}, options) =>
+  get(`${BASE}/since`, params, options)
 
 // Топ постов за период (для виджета «Популярное»).
 export const popular = (params = {}, options) =>
@@ -38,6 +44,11 @@ export const react = (id, emoji, options) =>
 // Проголосовать в опросе. optionIds — массив id вариантов.
 export const vote = (id, optionIds = [], options) =>
   post(`${BASE}/${id}/vote`, { option_ids: optionIds }, options)
+
+// Досрочно закрыть опрос (автор поста или feed.edit_all). Возвращает
+// обновлённый опрос с итогами (result).
+export const closePoll = (id, options) =>
+  post(`${BASE}/${id}/poll/close`, undefined, options)
 
 // Комментарии.
 export const comments = (id, options) =>

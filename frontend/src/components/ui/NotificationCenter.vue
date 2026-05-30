@@ -278,7 +278,11 @@ export default {
         warning: 'fas fa-exclamation-circle',
         info: 'fas fa-info-circle',
         message: 'fas fa-comment-dots',
-        system: 'fas fa-cog'
+        system: 'fas fa-cog',
+        // Лента: реакция / комментарий / упоминание.
+        feed_reaction: 'fas fa-face-smile',
+        feed_comment: 'fas fa-comment',
+        feed_mention: 'fas fa-at'
       }
       return map[type] || 'fas fa-info-circle'
     }
@@ -290,7 +294,10 @@ export default {
         warning: 'nc-icon--warning',
         info: 'nc-icon--info',
         message: 'nc-icon--message',
-        system: 'nc-icon--system'
+        system: 'nc-icon--system',
+        feed_reaction: 'nc-icon--message',
+        feed_comment: 'nc-icon--message',
+        feed_mention: 'nc-icon--message'
       }
       return map[type] || 'nc-icon--info'
     }
