@@ -2998,8 +2998,8 @@ body[data-theme="dark"],
 
   .content-header {
     padding: 0 12px;
-    padding-left: 60px;
-    /* Space for hamburger */
+    /* Бургер теперь in-flow внутри хедера (первый элемент) — отдельное
+       место под плавающую кнопку больше не нужно. */
     height: 56px;
   }
 
@@ -3414,7 +3414,7 @@ body[data-theme="dark"],
   }
 
   .content-header {
-    padding-left: 60px;
+    padding-left: 12px;
   }
 
   .table-container {
@@ -3462,5 +3462,30 @@ body[data-theme="dark"],
 }
 @media (max-width: 1024px) {
   .content-body { padding-bottom: env(safe-area-inset-bottom); }
+}
+
+/* ===== Бургер мобильного меню в хедере (in-flow, не fixed) =====
+   На десктопе скрыт (навигация — в сайдбаре). На ≤1024 показывается
+   первым элементом хедера и открывает off-canvas сайдбар. */
+.content-header__burger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  border-radius: var(--radius-sm, 8px);
+  cursor: pointer;
+  font-size: 1.15rem;
+}
+.content-header__burger:hover { background: var(--color-surface-3); color: var(--color-text); }
+@media (max-width: 1024px) {
+  .content-header__burger { display: inline-flex; }
+}
+@media (pointer: coarse) {
+  .content-header__burger { min-width: 44px; min-height: 44px; }
 }
 

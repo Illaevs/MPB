@@ -1,5 +1,14 @@
 <template>
   <header class="content-header">
+    <button
+      class="content-header__burger"
+      type="button"
+      :aria-label="isMobileMenuOpen ? 'Закрыть меню' : 'Открыть меню'"
+      :aria-expanded="isMobileMenuOpen ? 'true' : 'false'"
+      @click="toggleMobileMenu"
+    >
+      <i class="fas" :class="isMobileMenuOpen ? 'fa-times' : 'fa-bars'"></i>
+    </button>
     <button class="content-header__search" type="button" @click="$emit('open-search')">
       <i class="fas fa-search"></i>
       <span class="content-header__search-label">Поиск по системе...</span>
@@ -354,6 +363,7 @@ import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 import { api } from '../../services/api'
 import { useToast } from '../../composables/useToast'
 import { useUiPreferences } from '../../composables/useUiPreferences'
+import { useSidebar } from '../../composables/useSidebar'
 import { WALLPAPER_PRESETS } from '../../config/wallpaperPresets'
 import { navAllLinks } from '../../config/nav'
 import { useAuthStore } from '../../stores/auth'
@@ -371,6 +381,8 @@ export default {
   },
   emits: ['open-search', 'open-vat', 'open-two-factor', 'open-notifications', 'user-updated'],
   setup(props, { emit }) {
+    // Бургер мобильного меню — теперь живёт в хедере (in-flow).
+    const { toggleMobileMenu, isMobileMenuOpen } = useSidebar()
     const authStore = useAuthStore()
     const { success: toastSuccess, error: toastError } = useToast()
 
@@ -637,6 +649,8 @@ export default {
     })
 
     return {
+      toggleMobileMenu,
+      isMobileMenuOpen,
       avatarInput,
       wallpaperInput,
       uploadingAvatar,

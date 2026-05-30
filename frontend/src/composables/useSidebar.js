@@ -1,4 +1,4 @@
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useUiPreferences } from './useUiPreferences'
 
 const DEFAULT_SECTIONS = {
@@ -39,16 +39,37 @@ function onResize() {
   }
 }
 
+// Esc закрывает открытое off-canvas меню (доступность/удобство).
+function onKeydown(e) {
+  if (e.key === 'Escape' && isMobileMenuOpen.value) {
+    isMobileMenuOpen.value = false
+  }
+}
+
+// Пока мобильное меню открыто — блокируем скролл фона, чтобы контент
+// под оверлеем не «уезжал» при свайпе. Реальный скролл-контейнер —
+// `.content-body` (body глобально overflow:hidden), его и запираем;
+// body трогаем заодно, на всякий случай. Глобальный синглтон-watcher.
+if (typeof document !== 'undefined') {
+  watch(isMobileMenuOpen, (open) => {
+    const scroller = document.querySelector('.content-body')
+    if (scroller) scroller.style.overflow = open ? 'hidden' : ''
+    document.body.style.overflow = open ? 'hidden' : ''
+  })
+}
+
 function bindResize() {
   if (resizeBound || typeof window === 'undefined') return
   resizeBound = true
   resizeListener = onResize
   window.addEventListener('resize', resizeListener, { passive: true })
+  window.addEventListener('keydown', onKeydown)
 }
 
 function unbindResize() {
   if (!resizeBound || typeof window === 'undefined') return
   window.removeEventListener('resize', resizeListener)
+  window.removeEventListener('keydown', onKeydown)
   resizeListener = null
   resizeBound = false
 }

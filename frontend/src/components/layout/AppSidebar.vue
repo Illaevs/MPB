@@ -1,7 +1,6 @@
 <template>
-  <button class="hamburger-btn" @click="toggleMobileMenu">
-    <i class="fas" :class="isMobileMenuOpen ? 'fa-times' : 'fa-bars'"></i>
-  </button>
+  <!-- Бургер перенесён в хедер (AppHeader, in-flow). Здесь — только
+       затемняющий оверлей для закрытия off-canvas меню по клику. -->
   <div class="mobile-overlay" :class="{ active: isMobileMenuOpen }" v-modal-close="closeMobileMenu"></div>
 
   <aside class="sidebar" :class="sidebarClasses">
