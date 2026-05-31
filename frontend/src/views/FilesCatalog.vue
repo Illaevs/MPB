@@ -514,7 +514,7 @@
 </template>
 
 <script>
-import { ref, computed, onMounted, onBeforeUnmount, reactive } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, reactive, watch } from 'vue'
 import * as filesApi from '../services/api/files'
 import { rawRequest } from '../services/api/_client'
 import { useToast } from '../composables/useToast'
@@ -542,7 +542,20 @@ export default {
     const isSearchMode = ref(false)
     const filterType = ref('all')
     const sortBy = ref('name')
-    const viewMode = ref('list')
+    // Вид (grid/list/tree) запоминаем между перезагрузками в localStorage.
+    const VIEW_STORAGE_KEY = 'crm-files-view'
+    const readStoredView = () => {
+      try {
+        const v = localStorage.getItem(VIEW_STORAGE_KEY)
+        return ['grid', 'list', 'tree'].includes(v) ? v : 'list'
+      } catch (e) {
+        return 'list'
+      }
+    }
+    const viewMode = ref(readStoredView())
+    watch(viewMode, (v) => {
+      try { localStorage.setItem(VIEW_STORAGE_KEY, v) } catch (e) { /* приватный режим */ }
+    })
     const isDragOver = ref(false)
     const dragDepth = ref(0)
     const activeMenu = ref(null)
@@ -1194,6 +1207,13 @@ export default {
         const xhr = new XMLHttpRequest()
         xhr.open('POST', url, true)
         xhr.withCredentials = true
+        // CSRF: сырой XHR минует axios-интерсептор (services/http.js),
+        // поэтому ставим заголовок вручную из куки crm_csrf_token — иначе
+        // auth-middleware видит куку доступа без CSRF-заголовка и валит 403.
+        const csrfMatch = document.cookie.match(/(?:^|; )crm_csrf_token=([^;]*)/)
+        if (csrfMatch) {
+          xhr.setRequestHeader('X-CSRF-Token', decodeURIComponent(csrfMatch[1]))
+        }
         xhr.onload = () => {
           if (xhr.status >= 200 && xhr.status < 300) {
             resolve()
@@ -1506,6 +1526,8 @@ export default {
 
     onMounted(() => {
       loadItems()
+      // Если сохранённый вид — дерево, инициализируем его сразу.
+      if (viewMode.value === 'tree') initTree()
       loadStorageUsage()
       usageTimer = setInterval(loadStorageUsage, 5 * 60 * 1000)
       document.addEventListener('click', closeMenuOnClick)
