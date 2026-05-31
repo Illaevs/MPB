@@ -340,11 +340,12 @@ const OWNABLE_SECTIONS = new Set([
 ])
 const ASSIGNED_COLUMNS = new Set(['read_assigned', 'edit_assigned'])
 
-// Разделы, где «Чтение своих» = SCOPED-доступ (видеть только выданное
+// Разделы, где «свои» = SCOPED-доступ (видеть/менять только выданное
 // точечно), а не record-ownership. Для Файлов «свои» = папки с явной
-// per-folder выдачей (backend: folder_acl scoped + files_catalog filter).
-// «Редакт. своих» тут по-прежнему неприменимо — только чтение-скоуп.
-const SCOPED_READ_SECTIONS = new Set(['files_catalog'])
+// per-folder выдачей: «Чтение своих» = читать выданные папки,
+// «Редакт. своих» = писать в выданные папки (секционный гейт пропускает,
+// а конкретные папки разрешает per-folder ACL — backend folder_acl).
+const SCOPED_FOLDER_SECTIONS = new Set(['files_catalog'])
 
 const EMPTY_PERM = () => ({
   read_all: false, read_assigned: false,
@@ -447,12 +448,14 @@ export default {
 
     // «Свои» для не-ownable разделов обычно не имеют смысла (per-record
     // владельца нет) → колонки read_assigned/edit_assigned неактивны.
-    // Исключение: SCOPED_READ_SECTIONS (Файлы) — там «Чтение своих»
-    // включаемо и означает доступ только к выданным папкам.
+    // Исключение: SCOPED_FOLDER_SECTIONS (Файлы) — там «свои» = выданные
+    // папки, и чтение, и запись включаемы.
     const isColumnDisabled = (section, column) => {
       if (!ASSIGNED_COLUMNS.has(column)) return false
       if (OWNABLE_SECTIONS.has(section)) return false
-      if (column === 'read_assigned' && SCOPED_READ_SECTIONS.has(section)) return false
+      // Для scoped-секций (Файлы) и «Чтение своих», и «Редакт. своих»
+      // имеют смысл — доступ/запись только к выданным папкам.
+      if (SCOPED_FOLDER_SECTIONS.has(section)) return false
       return true
     }
 
@@ -521,7 +524,8 @@ export default {
         const payload = sections.value.map((section) => {
           const p = permissions.value[section] || {}
           const editAll = Boolean(p.edit_all)
-          const editAssigned = Boolean(p.edit_assigned) && OWNABLE_SECTIONS.has(section)
+          const editAssigned = Boolean(p.edit_assigned)
+            && (OWNABLE_SECTIONS.has(section) || SCOPED_FOLDER_SECTIONS.has(section))
           return {
             section,
             // Импликация (бэк нормализует так же): edit ⇒ read.
@@ -555,10 +559,10 @@ export default {
       else if (column === 'read_all' && !value) next.edit_all = false
       else if (column === 'read_assigned' && !value) next.edit_assigned = false
       // Не-ownable раздел: «свои» ≡ «все» — не держим лишние флаги.
-      // Исключение — SCOPED_READ_SECTIONS (Файлы): там read_assigned
-      // (scoped-доступ к выданным папкам) сохраняем; edit_assigned — нет.
-      if (!OWNABLE_SECTIONS.has(section)) {
-        if (!SCOPED_READ_SECTIONS.has(section)) next.read_assigned = false
+      // Исключение — SCOPED_FOLDER_SECTIONS (Файлы): там и read_assigned,
+      // и edit_assigned осмысленны (доступ/запись в выданные папки).
+      if (!OWNABLE_SECTIONS.has(section) && !SCOPED_FOLDER_SECTIONS.has(section)) {
+        next.read_assigned = false
         next.edit_assigned = false
       }
       permissions.value = {
