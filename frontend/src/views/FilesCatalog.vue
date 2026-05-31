@@ -214,11 +214,15 @@
 
         <section class="ftree-content">
           <div class="ftree-content-head">
-            <div class="ftree-content-path" :title="displayCurrentPath">
+            <div v-if="isSearchMode" class="ftree-content-path">
+              <i class="fas fa-filter text-primary"></i>
+              <span>Результаты поиска: «{{ searchQuery }}»</span>
+            </div>
+            <div v-else class="ftree-content-path" :title="displayCurrentPath">
               <i class="fas fa-folder-open text-warning"></i>
               <span>{{ treeSelectedLabel }}</span>
             </div>
-            <div class="ftree-content-actions">
+            <div class="ftree-content-actions" v-show="!isSearchMode">
               <label class="btn btn-icon" title="Загрузить в эту папку">
                 <input type="file" multiple @change="handleUpload" style="display: none;" />
                 <i class="fas fa-upload"></i>
@@ -229,8 +233,8 @@
             </div>
           </div>
           <div class="ftree-content-body">
-            <div v-if="treeContentLoading" class="ftree-hint"><i class="fas fa-spinner fa-spin"></i></div>
-            <div v-else-if="!treeContentSorted.length" class="ftree-hint">Папка пуста</div>
+            <div v-if="treeRightLoading" class="ftree-hint"><i class="fas fa-spinner fa-spin"></i></div>
+            <div v-else-if="!treeRightItems.length" class="ftree-hint">{{ isSearchMode ? 'Ничего не найдено' : 'Папка пуста' }}</div>
             <table v-else class="ftree-table">
               <thead>
                 <tr>
@@ -242,7 +246,7 @@
               </thead>
               <tbody>
                 <tr
-                  v-for="item in treeContentSorted"
+                  v-for="item in treeRightItems"
                   :key="item.path"
                   :class="{ 'is-folder': item.type === 'folder' }"
                   @click="item.type === 'folder' ? selectTreeNode(item) : null"
@@ -810,6 +814,24 @@ export default {
       loadItems(currentPath.value)
     }
 
+    // Живой поиск: реагируем на ввод (debounce 350мс), не требуя Enter.
+    // Поиск рекурсивный с backend от текущей папки (currentPath); в дереве
+    // это выбранный узел, в корне — весь каталог.
+    let searchDebounceTimer = null
+    watch(searchQuery, (val) => {
+      if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
+      searchDebounceTimer = setTimeout(() => {
+        const q = (val || '').trim()
+        if (q) {
+          isSearchMode.value = true
+          loadItems(currentPath.value, q)
+        } else if (isSearchMode.value) {
+          isSearchMode.value = false
+          loadItems(currentPath.value)
+        }
+      }, 350)
+    })
+
     const openPath = (path) => {
       isSearchMode.value = false
       searchQuery.value = ''
@@ -849,6 +871,16 @@ export default {
       })
       return arr
     })
+
+    // Правая панель дерева: при активном поиске показываем результаты
+    // backend-поиска (sortedItems — рекурсивно из выбранной папки),
+    // иначе — содержимое выбранной папки.
+    const treeRightItems = computed(() =>
+      isSearchMode.value ? sortedItems.value : treeContentSorted.value
+    )
+    const treeRightLoading = computed(() =>
+      isSearchMode.value ? loading.value : treeContentLoading.value
+    )
 
     // Плоский список строк из вложенного дерева — depth + collapse-состояние.
     const treeRows = computed(() => {
@@ -903,6 +935,12 @@ export default {
 
     const selectTreeNode = async (node) => {
       if (node?.path === undefined || node?.path === null) return
+      // Навигация по дереву (в т.ч. клик по папке в результатах поиска)
+      // сбрасывает активный поиск — показываем содержимое папки.
+      if (isSearchMode.value) {
+        isSearchMode.value = false
+        searchQuery.value = ''
+      }
       treeSelectedPath.value = node.path
       treeSelectedName.value = node.name || 'Каталог'
       // Действия тулбара (создать папку / загрузить) нацеливаем на выбранную.
@@ -1560,6 +1598,7 @@ export default {
       // tree view
       setViewMode, treeRows, treeRootPath, treeRootLoading,
       treeSelectedPath, treeSelectedLabel, treeContentLoading, treeContentSorted,
+      treeRightItems, treeRightLoading,
       toggleTreeNode, selectTreeNode
     }
   }
