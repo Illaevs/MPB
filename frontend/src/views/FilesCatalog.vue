@@ -94,13 +94,21 @@
         >
           <i class="fas fa-th-large"></i>
         </button>
-        <button 
-          class="view-toggle" 
+        <button
+          class="view-toggle"
           :class="{ active: viewMode === 'list' }"
           @click="viewMode = 'list'"
           title="Список"
         >
           <i class="fas fa-list"></i>
+        </button>
+        <button
+          class="view-toggle"
+          :class="{ active: viewMode === 'tree' }"
+          @click="setViewMode('tree')"
+          title="Дерево"
+        >
+          <i class="fas fa-folder-tree"></i>
         </button>
       </div>
       <button class="btn btn-icon" @click="refresh" title="Обновить">
@@ -160,6 +168,114 @@
       <div v-if="loading" class="files-loading">
         <div class="spinner-large"></div>
         <span>Загрузка файлов...</span>
+      </div>
+
+      <!-- Tree View (как в документации сделки) -->
+      <div v-else-if="viewMode === 'tree'" class="files-tree-explorer">
+        <aside class="ftree-panel">
+          <div class="ftree-panel-head">
+            <i class="fas fa-folder-tree"></i>
+            <span>Структура папок</span>
+          </div>
+          <div class="ftree-scroll">
+            <button
+              class="ftree-node ftree-node--root"
+              :class="{ active: treeSelectedPath === treeRootPath }"
+              @click="selectTreeNode({ path: treeRootPath, name: 'Каталог' })"
+            >
+              <i class="fas fa-hdd text-primary"></i>
+              <span>Каталог</span>
+            </button>
+            <div v-if="treeRootLoading" class="ftree-hint"><i class="fas fa-spinner fa-spin"></i></div>
+            <template v-else>
+              <div
+                v-for="node in treeRows"
+                :key="node.path"
+                class="ftree-row"
+                :style="{ paddingLeft: (8 + node.depth * 16) + 'px' }"
+              >
+                <button class="ftree-toggle" @click="toggleTreeNode(node)">
+                  <i v-if="node.loading" class="fas fa-spinner fa-spin"></i>
+                  <i v-else class="fas" :class="node.expanded ? 'fa-chevron-down' : 'fa-chevron-right'"></i>
+                </button>
+                <button
+                  class="ftree-node"
+                  :class="{ active: treeSelectedPath === node.path }"
+                  @click="selectTreeNode(node)"
+                >
+                  <i class="fas" :class="node.expanded ? 'fa-folder-open text-warning' : 'fa-folder text-warning'"></i>
+                  <span :title="node.name">{{ node.name }}</span>
+                </button>
+              </div>
+              <div v-if="!treeRows.length" class="ftree-hint">Нет папок</div>
+            </template>
+          </div>
+        </aside>
+
+        <section class="ftree-content">
+          <div class="ftree-content-head">
+            <div class="ftree-content-path" :title="displayCurrentPath">
+              <i class="fas fa-folder-open text-warning"></i>
+              <span>{{ treeSelectedLabel }}</span>
+            </div>
+            <div class="ftree-content-actions">
+              <label class="btn btn-icon" title="Загрузить в эту папку">
+                <input type="file" multiple @change="handleUpload" style="display: none;" />
+                <i class="fas fa-upload"></i>
+              </label>
+              <button class="btn btn-icon" @click="openCreateFolder" title="Новая папка">
+                <i class="fas fa-folder-plus"></i>
+              </button>
+            </div>
+          </div>
+          <div class="ftree-content-body">
+            <div v-if="treeContentLoading" class="ftree-hint"><i class="fas fa-spinner fa-spin"></i></div>
+            <div v-else-if="!treeContentSorted.length" class="ftree-hint">Папка пуста</div>
+            <table v-else class="ftree-table">
+              <thead>
+                <tr>
+                  <th>Название</th>
+                  <th class="ftree-col-size">Размер</th>
+                  <th class="ftree-col-date">Изменён</th>
+                  <th class="ftree-col-actions"></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="item in treeContentSorted"
+                  :key="item.path"
+                  :class="{ 'is-folder': item.type === 'folder' }"
+                  @click="item.type === 'folder' ? selectTreeNode(item) : null"
+                  @dblclick="openItem(item)"
+                >
+                  <td class="ftree-td-name">
+                    <i class="fas" :class="[getItemIcon(item), item.type === 'folder' ? 'text-warning' : 'text-muted']"></i>
+                    <span :title="item.name">{{ item.name }}</span>
+                  </td>
+                  <td class="ftree-col-size">{{ item.type === 'file' ? formatBytes(item.size) : '—' }}</td>
+                  <td class="ftree-col-date">{{ formatDateTime(item.modified) }}</td>
+                  <td class="ftree-col-actions">
+                    <button @click.stop="downloadItem(item)" :title="item.type === 'folder' ? 'Скачать архив' : 'Скачать'">
+                      <i class="fas" :class="item.type === 'folder' ? 'fa-file-archive' : 'fa-download'"></i>
+                    </button>
+                    <button v-if="item.type === 'folder'" @click.stop="openPermissions(item)" title="Права доступа">
+                      <i class="fas fa-lock"></i>
+                    </button>
+                    <button @click.stop="openRename(item)" title="Переименовать">
+                      <i class="fas fa-pen"></i>
+                    </button>
+                    <button @click.stop="openMove(item)" title="Переместить">
+                      <i class="fas fa-arrows-alt"></i>
+                    </button>
+                    <button class="danger" @click.stop="deleteItem(item)" title="Удалить">
+                      <i class="fas fa-trash"></i>
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
       </div>
 
       <!-- Empty state -->
@@ -653,6 +769,9 @@ export default {
     }
 
     const refresh = () => {
+      if (viewMode.value === 'tree') {
+        return refreshTree()
+      }
       if (isSearchMode.value && searchQuery.value) {
         loadItems(currentPath.value, searchQuery.value)
       } else {
@@ -680,6 +799,138 @@ export default {
       isSearchMode.value = false
       searchQuery.value = ''
       loadItems(path)
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    // Tree view (третий вид) — двухпанельный explorer как в документации
+    // сделки: слева ленивое дерево папок, справа содержимое выбранной.
+    // ───────────────────────────────────────────────────────────────
+    const treeRootPath = ref('')
+    const treeRootLoading = ref(false)
+    const treeInitialized = ref(false)
+    const treeChildren = reactive({})           // path -> [folder nodes]
+    const treeExpanded = reactive(new Set())     // развёрнутые пути папок
+    const treeLoadingPaths = reactive(new Set()) // пути, у которых грузятся дети
+    const treeSelectedPath = ref('')
+    const treeSelectedName = ref('Каталог')
+    const treeContent = ref([])                 // items (папки+файлы) выбранной
+    const treeContentLoading = ref(false)
+
+    const treeSelectedLabel = computed(() => {
+      if (!treeSelectedPath.value || treeSelectedPath.value === treeRootPath.value) return 'Каталог'
+      return treeSelectedName.value
+        || (stripDiskPrefix(treeSelectedPath.value).split('/').filter(Boolean).pop() || 'Каталог')
+    })
+
+    const treeContentSorted = computed(() => {
+      const arr = (treeContent.value || []).filter((item) => {
+        const name = (item.name || '').toLowerCase()
+        return !['thumbs.db', 'desktop.ini', '.ds_store'].includes(name)
+      })
+      arr.sort((a, b) => {
+        if (a.type === 'folder' && b.type !== 'folder') return -1
+        if (a.type !== 'folder' && b.type === 'folder') return 1
+        return (a.name || '').localeCompare(b.name || '', 'ru')
+      })
+      return arr
+    })
+
+    // Плоский список строк из вложенного дерева — depth + collapse-состояние.
+    const treeRows = computed(() => {
+      const rows = []
+      const walk = (parentPath, depth) => {
+        const kids = treeChildren[parentPath] || []
+        for (const node of kids) {
+          const expanded = treeExpanded.has(node.path)
+          rows.push({ ...node, depth, expanded, loading: treeLoadingPaths.has(node.path) })
+          if (expanded) walk(node.path, depth + 1)
+        }
+      }
+      walk(treeRootPath.value, 0)
+      return rows
+    })
+
+    const loadTreeChildren = async (path) => {
+      treeLoadingPaths.add(path)
+      try {
+        const result = await filesApi.list({ path })
+        treeChildren[path] = (result.items || []).filter((i) => i.type === 'folder')
+      } catch (error) {
+        console.error('Error loading tree children:', error)
+        treeChildren[path] = []
+      } finally {
+        treeLoadingPaths.delete(path)
+      }
+    }
+
+    const loadTreeContent = async (path) => {
+      treeContentLoading.value = true
+      try {
+        const result = await filesApi.list({ path })
+        treeContent.value = result.items || []
+      } catch (error) {
+        console.error('Error loading tree content:', error)
+        treeContent.value = []
+      } finally {
+        treeContentLoading.value = false
+      }
+    }
+
+    const toggleTreeNode = async (node) => {
+      if (!node?.path) return
+      if (treeExpanded.has(node.path)) {
+        treeExpanded.delete(node.path)
+      } else {
+        treeExpanded.add(node.path)
+        if (!treeChildren[node.path]) await loadTreeChildren(node.path)
+      }
+    }
+
+    const selectTreeNode = async (node) => {
+      if (node?.path === undefined || node?.path === null) return
+      treeSelectedPath.value = node.path
+      treeSelectedName.value = node.name || 'Каталог'
+      // Действия тулбара (создать папку / загрузить) нацеливаем на выбранную.
+      currentPath.value = node.path
+      if (node.path !== treeRootPath.value && !treeExpanded.has(node.path)) {
+        treeExpanded.add(node.path)
+      }
+      await Promise.all([
+        treeChildren[node.path] ? Promise.resolve() : loadTreeChildren(node.path),
+        loadTreeContent(node.path),
+      ])
+    }
+
+    const initTree = async () => {
+      treeRootLoading.value = true
+      try {
+        const result = await filesApi.list({ path: '' })
+        const root = result.path || ''
+        treeRootPath.value = root
+        treeChildren[root] = (result.items || []).filter((i) => i.type === 'folder')
+        treeSelectedPath.value = root
+        treeSelectedName.value = 'Каталог'
+        currentPath.value = root
+        rootPath.value = result.root || rootPath.value
+        treeContent.value = result.items || []
+        treeInitialized.value = true
+      } catch (error) {
+        console.error('Error init tree:', error)
+        showToast('Ошибка загрузки дерева', 'error')
+      } finally {
+        treeRootLoading.value = false
+      }
+    }
+
+    const refreshTree = async () => {
+      if (!treeInitialized.value) return initTree()
+      const sel = treeSelectedPath.value || treeRootPath.value
+      await Promise.all([loadTreeChildren(sel), loadTreeContent(sel)])
+    }
+
+    const setViewMode = (mode) => {
+      viewMode.value = mode
+      if (mode === 'tree' && !treeInitialized.value) initTree()
     }
 
     const openItem = (item) => {
@@ -1281,7 +1532,11 @@ export default {
       openPermissions, closePermissions,
       openRename, closeRename, renameItem,
       openMove, closeMove, moveItem, deleteItem, goBack,
-      getItemIcon, getIconClass, getFileExt, formatBytes, formatDateTime
+      getItemIcon, getIconClass, getFileExt, formatBytes, formatDateTime,
+      // tree view
+      setViewMode, treeRows, treeRootPath, treeRootLoading,
+      treeSelectedPath, treeSelectedLabel, treeContentLoading, treeContentSorted,
+      toggleTreeNode, selectTreeNode
     }
   }
 }
@@ -2128,6 +2383,249 @@ export default {
   }
   100% {
     transform: translateX(130%);
+  }
+}
+
+/* ───────────── Tree View (третий вид) ───────────── */
+.files-tree-explorer {
+  display: flex;
+  height: 100%;
+  min-height: 360px;
+}
+
+.ftree-panel {
+  width: 300px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--md-sys-color-outline-variant);
+  min-height: 0;
+}
+
+.ftree-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--md-sys-color-on-surface-variant);
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+}
+
+.ftree-scroll {
+  flex: 1;
+  overflow: auto;
+  padding: 6px;
+  min-height: 0;
+}
+
+.ftree-row {
+  display: flex;
+  align-items: center;
+}
+
+.ftree-toggle {
+  width: 22px;
+  height: 28px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.7rem;
+  padding: 0;
+}
+
+.ftree-toggle:hover {
+  color: var(--md-sys-color-primary);
+}
+
+.ftree-node {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--md-sys-color-on-surface);
+  font-size: 0.88rem;
+}
+
+.ftree-node span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ftree-node:hover {
+  background: var(--md-sys-color-surface-variant);
+}
+
+.ftree-node.active {
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-primary);
+  font-weight: 600;
+}
+
+.ftree-node--root {
+  width: 100%;
+  margin-bottom: 4px;
+}
+
+.ftree-hint {
+  padding: 14px;
+  text-align: center;
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.85rem;
+}
+
+.ftree-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.ftree-content-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+}
+
+.ftree-content-path {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 0.92rem;
+  color: var(--md-sys-color-on-surface);
+  min-width: 0;
+}
+
+.ftree-content-path span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ftree-content-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.ftree-content-body {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+}
+
+.ftree-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.ftree-table th {
+  position: sticky;
+  top: 0;
+  background: var(--md-sys-color-surface);
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--md-sys-color-on-surface-variant);
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+  z-index: 1;
+}
+
+.ftree-table td {
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+  color: var(--md-sys-color-on-surface);
+  vertical-align: middle;
+}
+
+.ftree-table tr.is-folder {
+  cursor: pointer;
+}
+
+.ftree-table tbody tr:hover {
+  background: var(--md-sys-color-surface-variant);
+}
+
+.ftree-td-name {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.ftree-td-name span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 420px;
+}
+
+.ftree-col-size {
+  width: 110px;
+  white-space: nowrap;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.ftree-col-date {
+  width: 160px;
+  white-space: nowrap;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.ftree-col-actions {
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.ftree-col-actions button {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--md-sys-color-on-surface-variant);
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  font-size: 0.82rem;
+}
+
+.ftree-col-actions button:hover {
+  background: var(--md-sys-color-surface);
+  color: var(--md-sys-color-primary);
+}
+
+.ftree-col-actions button.danger:hover {
+  color: var(--md-sys-color-danger, #DC2626);
+}
+
+@media (max-width: 720px) {
+  .ftree-panel {
+    width: 220px;
+  }
+  .ftree-col-date {
+    display: none;
   }
 }
 
