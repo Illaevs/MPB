@@ -8,16 +8,23 @@ from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_db
 from app.core.auth_middleware import CurrentUser
 from app.core.config import settings
+from app.models.file_folder_permission import (
+    FileFolderPermission,
+    PRINCIPAL_TYPE_ROLE,
+    PRINCIPAL_TYPE_USER,
+)
 from app.services.permissions import get_section_permissions
 from app.services.storage_authz import authorize_storage_path
 from app.services.folder_acl import (
     Perm,
     delete_folder_path_prefix,
+    effective_perms,
     grant_creator_manage_perms,
     is_entity_path,
     normalize_path as ffp_normalize_path,
@@ -199,6 +206,109 @@ async def _gate_folder(
     return logical
 
 
+# ────────────────────────────────────────────────────────────────────
+# SCOPED-видимость каталога («Чтение своих» = только выданные папки)
+# ────────────────────────────────────────────────────────────────────
+#
+# Полный доступ (superuser / read_all) видит весь каталог как раньше.
+# scoped-пользователь (read_assigned, без read_all) видит и открывает
+# ТОЛЬКО папки с явной per-folder READ-выдачей (+ навигируемых предков
+# выданных папок). Расчёт — чисто в памяти по списку READ-правил юзера
+# (одна выборка на запрос), без обращения к effective_perms на каждый
+# элемент: быстро и fail-closed (любая неоднозначность → скрыть).
+
+
+async def _has_full_catalog_access(
+    db: AsyncSession, request: Request, user
+) -> bool:
+    """True для тех, кто видит ВЕСЬ каталог: суперюзер или read_all на
+    секции files_catalog. Для них scoped-фильтрация не применяется."""
+    if getattr(request.state, "is_superuser", False):
+        return True
+    read_all, _ = await get_section_permissions(db, user.role_id, "files_catalog")
+    return bool(read_all)
+
+
+async def _granted_read_rules(db: AsyncSession, user) -> List[tuple]:
+    """(логический_путь, inherit_to_subfolders) по всем READ-выдачам
+    пользователя — лично и через его роль. Одна выборка на запрос."""
+    clauses = [
+        and_(
+            FileFolderPermission.principal_type == PRINCIPAL_TYPE_USER,
+            FileFolderPermission.principal_id == str(user.id),
+        )
+    ]
+    role_id = getattr(user, "role_id", None)
+    if role_id:
+        clauses.append(
+            and_(
+                FileFolderPermission.principal_type == PRINCIPAL_TYPE_ROLE,
+                FileFolderPermission.principal_id == str(role_id),
+            )
+        )
+    stmt = select(
+        FileFolderPermission.folder_path,
+        FileFolderPermission.inherit_to_subfolders,
+    ).where(or_(*clauses), FileFolderPermission.can_read.is_(True))
+    rows = (await db.execute(stmt)).all()
+    return [(ffp_normalize_path(p), bool(inh)) for (p, inh) in rows]
+
+
+def _scoped_readable(logical: str, rules: List[tuple]) -> bool:
+    """READ на конкретной папке: точное совпадение с выданной папкой ИЛИ
+    предок-выдача с inherit_to_subfolders. Эквивалент effective_perms для
+    scoped (fallback = {}), но в памяти."""
+    base = ffp_normalize_path(logical)
+    for gp, inherit in rules:
+        if gp == base:
+            return True
+        if inherit and base.startswith(gp) and base != gp:
+            return True
+    return False
+
+
+def _scoped_grant_under(logical: str, rules: List[tuple]) -> bool:
+    """Есть ли READ-выдача СТРОГО внутри `logical` (глубже). Нужно, чтобы
+    показать папку-контейнер как навигируемую, даже без выдачи на неё."""
+    base = ffp_normalize_path(logical)
+    return any(gp != base and gp.startswith(base) for gp, _ in rules)
+
+
+def _scoped_navigable(logical: str, rules: List[tuple]) -> bool:
+    """Можно ли scoped-пользователю открыть (листить) папку: корень —
+    всегда (вход в каталог), иначе READ на ней ИЛИ выдача внутри."""
+    base = ffp_normalize_path(logical)
+    if base == "/":
+        return True
+    return _scoped_readable(base, rules) or _scoped_grant_under(base, rules)
+
+
+def _filter_scoped_items(
+    parent_logical: str, items: List[dict], rules: List[tuple]
+) -> List[dict]:
+    """Оставляет только READ-видимое для scoped-пользователя:
+      - папка видна, если навигируема (READ ИЛИ выдача внутри);
+      - файл виден, только если читаема его родительская папка.
+    Логический путь каждого элемента берём из item['path'] — работает и
+    для листинга (прямые дети), и для поиска (вложенные результаты)."""
+    out: List[dict] = []
+    for it in items:
+        item_logical = _to_logical_path(it.get("path") or "/")
+        if it.get("type") == "folder":
+            if _scoped_navigable(item_logical, rules):
+                out.append(it)
+        else:
+            # Файл виден по тем же правилам READ, что проверит гейт
+            # скачивания (authorize_storage_path → effective_perms по пути
+            # файла): точное правило на файл невозможно, поэтому работает
+            # только READ-выдача на родительскую папку с inherit. Так
+            # листинг и скачивание согласованы — не показываем файл,
+            # который потом нельзя открыть.
+            if _scoped_readable(item_logical, rules):
+                out.append(it)
+    return out
+
+
 @router.get("/files-catalog/list")
 async def list_catalog_items(
     request: Request,
@@ -213,8 +323,25 @@ async def list_catalog_items(
     await _check_access(db, user, request)
     path = _normalize_path(path)
     _ensure_within_root(path)
-    await authorize_storage_path(db, request, user, path)
-    await _gate_folder(db, request, user, path, Perm.READ)
+
+    logical = _to_logical_path(path)
+    full_access = await _has_full_catalog_access(db, request, user)
+
+    if full_access or is_entity_path(logical):
+        # Полный доступ / суперюзер / entity-папка (сделка-договор):
+        # прежнее строгое поведение — гейт на саму папку, без фильтрации
+        # детей. authorize_storage_path для entity-путей рулит доступом
+        # по сделке/договору.
+        await authorize_storage_path(db, request, user, path)
+        await _gate_folder(db, request, user, path, Perm.READ)
+        scoped_rules = None
+    else:
+        # SCOPED-пользователь (read_assigned без read_all): навигация
+        # разрешена, открыть папку можно если на неё есть READ или внутри
+        # есть выдача (корень — всегда). Детей ниже фильтруем по READ.
+        scoped_rules = await _granted_read_rules(db, user)
+        if not _scoped_navigable(logical, scoped_rules):
+            raise HTTPException(status_code=403, detail="Access denied")
 
     root = _normalize_path(None)
     root = _with_root_prefix(path, root)
@@ -223,6 +350,10 @@ async def list_catalog_items(
         items = await search_items(search, path=path, limit=limit)
     else:
         items = await list_items(path, limit=limit)
+
+    if scoped_rules is not None:
+        items = _filter_scoped_items(logical, items, scoped_rules)
+
     items.sort(key=lambda item: (0 if item.get("type") == "folder" else 1, item.get("name") or ""))
     return {"root": root, "path": path, "items": items}
 

@@ -50,6 +50,23 @@ _PREFIX_SECTIONS = {
 _DENIED = HTTPException(status_code=403, detail="Нет доступа к этому файлу")
 
 
+def _to_logical_catalog_path(storage_path: str) -> str:
+    """Storage-абсолютный путь → логический (под которым лежат FFP-правила).
+
+    Снимает STORAGE_LOCAL_ROOT-префикс и нормализует. Дублирует логику
+    files_catalog._to_logical_path / file_folder_permissions._to_logical_path —
+    все три ОБЯЗАНЫ нормализовать одинаково, иначе проверки смотрят в
+    разные ключи.
+    """
+    from app.services.folder_acl import normalize_path as _np
+
+    root = (settings.STORAGE_LOCAL_ROOT or "").replace("disk:", "").rstrip("/")
+    p = (storage_path or "").replace("disk:", "")
+    if root and p.startswith(root):
+        p = p[len(root):]
+    return _np(p or "/")
+
+
 async def _section_readable(
     db: AsyncSession, request: Request, user: User, sections: Iterable[str]
 ) -> bool:
@@ -101,5 +118,23 @@ async def authorize_storage_path(
                 return
             raise _DENIED
 
-    # 4. Unrecognised path shape -> fail closed.
+    # 4. Свободное дерево Files Catalog (не сделка / не договор / не
+    #    секция-префикс). Историческое поведение было fail-closed —
+    #    т.е. свободные папки видел ТОЛЬКО суперюзер, а per-folder ACL
+    #    обычным пользователям не работал, потому что этот гейт резал
+    #    раньше. Теперь делегируем авторизацию в folder_acl:
+    #      - READ есть из явного FFP-правила  → разрешаем;
+    #      - READ есть из section-fallback (read_all → весь каталог) → да;
+    #      - read_assigned (scoped) без выдачи → {} → 403 (fail-closed).
+    #    effective_perms для свободного (не entity) пути НЕ вызывает
+    #    authorize_storage_path обратно — рекурсии нет.
+    from app.services.folder_acl import (
+        Perm as _CatPerm,
+        effective_perms as _cat_effective_perms,
+    )
+
+    logical = _to_logical_catalog_path(decoded)
+    perms = await _cat_effective_perms(db, user, logical, request=request)
+    if _CatPerm.READ in perms:
+        return
     raise _DENIED

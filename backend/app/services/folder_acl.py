@@ -198,8 +198,14 @@ async def _section_fallback(
     )
     if read_all:
         return {Perm.READ, Perm.WRITE, Perm.DELETE}
-    if read_assigned:
-        return {Perm.READ}
+    # read_assigned («Чтение своих») для Файлов = SCOPED-режим: НЕТ
+    # доступа по умолчанию. Такой пользователь видит и открывает только
+    # папки с явной per-folder выдачей (FileFolderPermission). Раньше тут
+    # возвращалось {READ} (чтение всего каталога) — но это не позволяло
+    # изолировать пользователя на его папках. Теперь «свои» = только
+    # выданные: READ на конкретной папке приходит из FFP-правила, а не
+    # из этого fallback. Право входа в каталог (read_assigned) при этом
+    # сохраняется — см. _check_access в routers/files_catalog.py.
     return set()
 
 

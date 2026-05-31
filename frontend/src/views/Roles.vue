@@ -340,6 +340,12 @@ const OWNABLE_SECTIONS = new Set([
 ])
 const ASSIGNED_COLUMNS = new Set(['read_assigned', 'edit_assigned'])
 
+// Разделы, где «Чтение своих» = SCOPED-доступ (видеть только выданное
+// точечно), а не record-ownership. Для Файлов «свои» = папки с явной
+// per-folder выдачей (backend: folder_acl scoped + files_catalog filter).
+// «Редакт. своих» тут по-прежнему неприменимо — только чтение-скоуп.
+const SCOPED_READ_SECTIONS = new Set(['files_catalog'])
+
 const EMPTY_PERM = () => ({
   read_all: false, read_assigned: false,
   edit_all: false, edit_assigned: false
@@ -439,10 +445,16 @@ export default {
       }
     }
 
-    // «Свои» для не-ownable разделов не имеют смысла (per-record владельца
-    // нет) → колонки read_assigned/edit_assigned неактивны.
-    const isColumnDisabled = (section, column) =>
-      ASSIGNED_COLUMNS.has(column) && !OWNABLE_SECTIONS.has(section)
+    // «Свои» для не-ownable разделов обычно не имеют смысла (per-record
+    // владельца нет) → колонки read_assigned/edit_assigned неактивны.
+    // Исключение: SCOPED_READ_SECTIONS (Файлы) — там «Чтение своих»
+    // включаемо и означает доступ только к выданным папкам.
+    const isColumnDisabled = (section, column) => {
+      if (!ASSIGNED_COLUMNS.has(column)) return false
+      if (OWNABLE_SECTIONS.has(section)) return false
+      if (column === 'read_assigned' && SCOPED_READ_SECTIONS.has(section)) return false
+      return true
+    }
 
     const loadRoles = async () => {
       loadingRoles.value = true
@@ -543,8 +555,10 @@ export default {
       else if (column === 'read_all' && !value) next.edit_all = false
       else if (column === 'read_assigned' && !value) next.edit_assigned = false
       // Не-ownable раздел: «свои» ≡ «все» — не держим лишние флаги.
+      // Исключение — SCOPED_READ_SECTIONS (Файлы): там read_assigned
+      // (scoped-доступ к выданным папкам) сохраняем; edit_assigned — нет.
       if (!OWNABLE_SECTIONS.has(section)) {
-        next.read_assigned = false
+        if (!SCOPED_READ_SECTIONS.has(section)) next.read_assigned = false
         next.edit_assigned = false
       }
       permissions.value = {
