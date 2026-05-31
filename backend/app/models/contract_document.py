@@ -27,6 +27,14 @@ class ContractDocument(Base):
     edit_file_name = Column(String(255))
     edit_storage_path = Column(Text)
 
+    # Upload audit (per file kind): snapshot of who uploaded the file and when.
+    # *_uploaded_by stores the display name captured at upload time (not a FK),
+    # so renaming/removing a user does not lose the historical attribution.
+    pdf_uploaded_by = Column(String(255))
+    pdf_uploaded_at = Column(DateTime(timezone=True))
+    edit_uploaded_by = Column(String(255))
+    edit_uploaded_at = Column(DateTime(timezone=True))
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

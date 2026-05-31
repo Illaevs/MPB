@@ -5,12 +5,16 @@ import logging
 from typing import List, Optional, Dict
 import uuid
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from calendar import monthrange
 
 logger = logging.getLogger(__name__)
 
+import io
+import zipfile
+
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form, Response, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select, or_, cast, String, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import set_committed_value
@@ -63,6 +67,22 @@ ALLOWED_DOC_TYPES = {"contract", "addendum", "act", "invoice"}
 ALLOWED_DOC_STATUSES = {"draft", "signing", "signed", "canceled"}
 ALLOWED_FILE_KINDS = {"pdf", "edit"}
 ALLOWED_EXPENSE_FREQUENCIES = {"week", "month", "quarter", "year"}
+
+
+def _user_display_name(user) -> Optional[str]:
+    """Best-effort display name snapshot for upload audit.
+
+    Prefers full_name, falls back to username/email/id. Stored as a string
+    snapshot (not a FK) so the attribution survives user renames/deletes.
+    """
+    if user is None:
+        return None
+    for attr in ("full_name", "name", "username", "email"):
+        value = getattr(user, attr, None)
+        if value:
+            return str(value)
+    user_id = getattr(user, "id", None)
+    return str(user_id) if user_id else None
 
 
 def _parse_uuid(value: Optional[str]):
@@ -1140,12 +1160,18 @@ async def upload_contract_document(
             "status": status or "draft",
             "amount": _document_amount(amount) if doc_type in {"contract", "addendum", "act"} else None,
         }
+        uploaded_by = _user_display_name(user)
+        uploaded_at = datetime.now()
         if file_kind == "pdf":
             payload["pdf_file_name"] = file.filename
             payload["pdf_storage_path"] = storage_path
+            payload["pdf_uploaded_by"] = uploaded_by
+            payload["pdf_uploaded_at"] = uploaded_at
         else:
             payload["edit_file_name"] = file.filename
             payload["edit_storage_path"] = storage_path
+            payload["edit_uploaded_by"] = uploaded_by
+            payload["edit_uploaded_at"] = uploaded_at
 
         document = await ContractDocument.create(db, **payload)
     await _set_invoice_product_links(db, document, _parse_product_ids(product_ids))
@@ -1178,6 +1204,7 @@ async def upload_contract_document_file(
     file_kind: str = Form(...),
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
+    user=Depends(CurrentUser),
 ):
     if file_kind not in ALLOWED_FILE_KINDS:
         raise HTTPException(status_code=400, detail="Invalid file_kind")
@@ -1192,13 +1219,19 @@ async def upload_contract_document_file(
     storage_path = f"{base_path}/{document.doc_type}_{document.number_in_contract}_{file_kind}_{safe_name}"
     await upload_bytes_with_safe_extension(storage_path, content)
 
+    uploaded_by = _user_display_name(user)
+    uploaded_at = datetime.now()
     update_payload = {}
     if file_kind == "pdf":
         update_payload["pdf_file_name"] = file.filename
         update_payload["pdf_storage_path"] = storage_path
+        update_payload["pdf_uploaded_by"] = uploaded_by
+        update_payload["pdf_uploaded_at"] = uploaded_at
     else:
         update_payload["edit_file_name"] = file.filename
         update_payload["edit_storage_path"] = storage_path
+        update_payload["edit_uploaded_by"] = uploaded_by
+        update_payload["edit_uploaded_at"] = uploaded_at
 
     updated = await ContractDocument.update(db, document_id, **update_payload)
     if not updated:
@@ -1358,6 +1391,254 @@ async def download_contract_document(
         "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"
     }
     return Response(content=response.content, media_type=content_type, headers=headers)
+
+
+# ---- Type / status labels for the Excel export (human-readable RU) ----
+_CONTRACT_TYPE_LABELS = {
+    "expenses": "Расходы",
+    "services": "Услуги",
+    "labor": "Работы",
+    "general_contractor": "Генподряд",
+    "partial_contractor": "Подряд (частичный)",
+    "subcontractor": "Субподряд",
+    "supply_out": "Поставка (исходящая)",
+    "supply_in": "Поставка (входящая)",
+}
+_CONTRACT_STATUS_LABELS = {
+    "approval": "На согласовании",
+    "in_progress": "В работе",
+    "completed": "Завершён",
+}
+
+
+def _doc_last_upload(documents):
+    """Return (uploaded_by, uploaded_at) of the most recent file upload across
+    all documents of a contract, or (None, None) if no audit data is present."""
+    best_at = None
+    best_by = None
+    for doc in documents:
+        for at, by in (
+            (getattr(doc, "pdf_uploaded_at", None), getattr(doc, "pdf_uploaded_by", None)),
+            (getattr(doc, "edit_uploaded_at", None), getattr(doc, "edit_uploaded_by", None)),
+        ):
+            if at is None:
+                continue
+            if best_at is None or at > best_at:
+                best_at = at
+                best_by = by
+    return best_by, best_at
+
+
+@router.get("/export/xlsx")
+async def export_contracts_xlsx(
+    request: Request,
+    search: Optional[str] = Query(None),
+    contract_type: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    customer_id: Optional[str] = Query(None),
+    executor_id: Optional[str] = Query(None),
+    deal_id: Optional[str] = Query(None),
+    sort_by: Optional[str] = Query("contract_date"),
+    sort_dir: Optional[str] = Query("desc"),
+    db: AsyncSession = Depends(get_db),
+    user=Depends(CurrentUser),
+):
+    """Export the filtered contracts registry to an .xlsx file.
+
+    Accepts the same filter/sort query params as GET /contracts/ but without
+    pagination — all matched contracts are exported. Reuses Contract.search_all
+    so filtering/permission logic is not duplicated.
+    """
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Font
+        from openpyxl.utils import get_column_letter
+    except ImportError:
+        raise HTTPException(
+            status_code=500,
+            detail="Excel export is unavailable: openpyxl is not installed",
+        )
+
+    read_all, read_assigned = await get_section_permissions(db, user.role_id, "contracts")
+    allowed = None
+    if not read_all:
+        if not read_assigned:
+            items = []
+        else:
+            allowed = await allowed_deal_ids(db, request, user)
+            if allowed == []:
+                items = []
+            else:
+                items = None
+    else:
+        items = None
+
+    if items is None:
+        # Pull every matched contract (no pagination) reusing the registry query.
+        items, _total = await Contract.search_all(
+            db,
+            skip=0,
+            limit=10**9,
+            search=search,
+            contract_type=contract_type,
+            status=status,
+            customer_id=customer_id,
+            executor_id=executor_id,
+            deal_id=deal_id,
+            sort_by=sort_by,
+            sort_dir=sort_dir,
+            allowed_deal_ids=allowed,
+        )
+        await _apply_service_paid_amounts(db, items)
+
+    # Bulk-resolve related names (same fields the registry surfaces).
+    company_cache: Dict[str, Optional[str]] = {}
+    deal_cache: Dict[str, Optional[str]] = {}
+
+    async def _company_name(company_id) -> Optional[str]:
+        if not company_id:
+            return None
+        key = str(company_id)
+        if key not in company_cache:
+            company = await Company.get_by_id(db, key)
+            company_cache[key] = (
+                (company.short_name or company.name) if company else None
+            )
+        return company_cache[key]
+
+    async def _deal_title(d_id) -> Optional[str]:
+        if not d_id:
+            return None
+        key = str(d_id)
+        if key not in deal_cache:
+            deal = await Deal.get_by_id(db, key)
+            deal_cache[key] = deal.title if deal else None
+        return deal_cache[key]
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Договоры"
+
+    headers = [
+        "Номер договора",
+        "Дата",
+        "Статус",
+        "Тип",
+        "Сумма",
+        "Заказчик",
+        "Исполнитель",
+        "Сделка",
+        "Кол-во документов",
+        "Последняя загрузка — кто",
+        "Последняя загрузка — когда",
+    ]
+    ws.append(headers)
+    bold = Font(bold=True)
+    for col_idx in range(1, len(headers) + 1):
+        ws.cell(row=1, column=col_idx).font = bold
+
+    for contract in items:
+        documents = await ContractDocument.get_by_contract(db, str(contract.id))
+        last_by, last_at = _doc_last_upload(documents)
+        amount = float(contract.amount) if contract.amount is not None else None
+        ws.append([
+            contract.contract_number,
+            contract.contract_date.isoformat() if contract.contract_date else None,
+            _CONTRACT_STATUS_LABELS.get(contract.status, contract.status),
+            _CONTRACT_TYPE_LABELS.get(contract.contract_type, contract.contract_type),
+            amount,
+            await _company_name(contract.customer_id),
+            await _company_name(contract.executor_id),
+            await _deal_title(contract.deal_id),
+            len(documents),
+            last_by,
+            last_at.strftime("%Y-%m-%d %H:%M") if last_at else None,
+        ])
+
+    # Bold header already set; enable autofilter + sensible column widths.
+    last_col_letter = get_column_letter(len(headers))
+    ws.auto_filter.ref = f"A1:{last_col_letter}{ws.max_row}"
+    widths = [22, 12, 18, 22, 16, 32, 32, 32, 16, 26, 20]
+    for idx, width in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(idx)].width = width
+    ws.freeze_panes = "A2"
+
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    filename = f"contracts_registry_{today}.xlsx"
+    headers_out = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers=headers_out,
+    )
+
+
+@router.get("/{contract_id}/documents/zip")
+async def download_contract_documents_zip(
+    contract_id: str,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(CurrentUser),
+):
+    """Bundle all files (pdf + edit) of every document of a contract into a ZIP.
+
+    Folder structure inside the archive is grouped by doc_type; missing files
+    on disk are skipped. Returns 404 if no files exist at all.
+    """
+    contract = await Contract.get_by_id(db, contract_id)
+    if not contract:
+        raise HTTPException(status_code=404, detail="Contract not found")
+    if not storage_available():
+        raise HTTPException(status_code=500, detail="Storage is not configured")
+
+    documents = await ContractDocument.get_by_contract(db, contract_id)
+
+    buffer = io.BytesIO()
+    added = 0
+    used_names: set = set()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        for doc in documents:
+            for file_kind, path, file_name in (
+                ("pdf", doc.pdf_storage_path, doc.pdf_file_name),
+                ("edit", doc.edit_storage_path, doc.edit_file_name),
+            ):
+                if not path:
+                    continue
+                try:
+                    content = await read_file_bytes(path)
+                except FileNotFoundError:
+                    continue
+                except Exception:
+                    continue
+                base_name = file_name or f"{doc.doc_type}_{doc.number_in_contract}_{file_kind}"
+                arc_name = f"{doc.doc_type}/{doc.number_in_contract}_{clean_name(base_name)}"
+                # Avoid in-archive name collisions.
+                candidate = arc_name
+                suffix = 1
+                while candidate in used_names:
+                    if "." in arc_name.rsplit("/", 1)[-1]:
+                        stem, ext = arc_name.rsplit(".", 1)
+                        candidate = f"{stem}_{suffix}.{ext}"
+                    else:
+                        candidate = f"{arc_name}_{suffix}"
+                    suffix += 1
+                used_names.add(candidate)
+                zf.writestr(candidate, content)
+                added += 1
+
+    if added == 0:
+        raise HTTPException(status_code=404, detail="No document files found for this contract")
+
+    buffer.seek(0)
+    safe_number = clean_name(contract.contract_number) if contract.contract_number else str(contract.id)
+    download_name = f"contract_{safe_number}_documents.zip"
+    headers_out = {
+        "Content-Disposition": f"attachment; filename*=UTF-8''{quote(download_name)}"
+    }
+    return StreamingResponse(buffer, media_type="application/zip", headers=headers_out)
 
 
 @router.get("/{contract_id}/card", response_model=ContractCardResponse)

@@ -179,6 +179,11 @@
                 <i v-else class="fas fa-file-csv mr-2"></i>
                 Экспорт всех (с фильтрами)
               </button>
+              <button type="button" class="more-menu-item" @click="exportContractsXlsx" :disabled="exportingXlsx">
+                <i v-if="exportingXlsx" class="fas fa-spinner fa-spin mr-2"></i>
+                <i v-else class="fas fa-file-excel mr-2"></i>
+                Экспорт в Excel (с фильтрами)
+              </button>
               <div class="more-menu-divider"></div>
               <div class="more-menu-head">Колонки</div>
               <label
@@ -574,6 +579,7 @@ import { useToast } from '../composables/useToast'
 import { useConfirm } from '../composables/useConfirm'
 import { useUiPreferences } from '../composables/useUiPreferences'
 import { useCompaniesStore } from '../stores/companies'
+import { downloadFromApi } from '../utils/download'
 
 const CONTRACT_COLUMNS = [
   { key: 'contract_number', label: 'Номер' },
@@ -721,6 +727,7 @@ export default {
     const selectedIds = ref(new Set())
     const bulkBusy = ref(false)
     const exportingAll = ref(false)
+    const exportingXlsx = ref(false)
     const bulkStatusAction = ref('')
 
     // Form
@@ -958,6 +965,32 @@ export default {
         toast.error('Не удалось выгрузить полный список')
       } finally {
         exportingAll.value = false
+      }
+    }
+
+    // Серверный экспорт в Excel — те же фильтры/сортировка, что и у списка реестра.
+    const exportContractsXlsx = async () => {
+      moreMenuOpen.value = false
+      exportingXlsx.value = true
+      try {
+        const params = { sort_by: sortBy.value, sort_dir: sortDir.value }
+        const f = filters.value
+        if (f.search) params.search = f.search
+        if (f.contract_type) params.contract_type = f.contract_type
+        if (f.status) params.status = f.status
+        if (f.customer_id) params.customer_id = f.customer_id
+        if (f.executor_id) params.executor_id = f.executor_id
+        await downloadFromApi(
+          api.contracts.registryXlsxUrl(),
+          { params },
+          'contracts_registry.xlsx',
+          { module: 'contracts' }
+        )
+        toast.success('Excel-файл реестра сформирован')
+      } catch (e) {
+        toast.error(e?.message || 'Не удалось выгрузить Excel')
+      } finally {
+        exportingXlsx.value = false
       }
     }
 
@@ -1221,7 +1254,7 @@ export default {
       stats, filters, contractForm, formValidation, isServiceType, hasFormErrors,
       statusFilterOpen, typeFilterOpen, moreMenuOpen, openRowMenuId,
       inlineStatusOpenId, inlineStatusBusyId,
-      selectedIds, bulkBusy, exportingAll, bulkStatusAction,
+      selectedIds, bulkBusy, exportingAll, exportingXlsx, bulkStatusAction,
       // computed
       hasMoreFilters, activeMoreFiltersCount, hasActiveFilters, currentStatusCount,
       allOnPageSelected, someOnPageSelected,
@@ -1238,7 +1271,7 @@ export default {
       debouncedSearch, resetAndLoad,
       setQuickStatus, setContractType, clearAdvancedFilters, clearAllFilters,
       onPageSizeChange, onPagerPageSizeChange, goToPage, toggleSort,
-      exportContractsCsv,
+      exportContractsCsv, exportContractsXlsx,
       openCreateModal, openContract, editContract, saveContract, deleteContract, closeModal, validateForm,
       changeContractStatus,
       toggleSelected, toggleAllOnPage, clearSelection, toggleRowMenu,

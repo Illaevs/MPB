@@ -18,6 +18,10 @@ class ContractDocumentBase(BaseModel):
     pdf_storage_path: Optional[str] = None
     edit_file_name: Optional[str] = None
     edit_storage_path: Optional[str] = None
+    pdf_uploaded_by: Optional[str] = None
+    pdf_uploaded_at: Optional[datetime] = None
+    edit_uploaded_by: Optional[str] = None
+    edit_uploaded_at: Optional[datetime] = None
 
 
 class ContractDocumentCreate(BaseModel):

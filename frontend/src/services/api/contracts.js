@@ -61,6 +61,13 @@ export const downloadDocument = (docId, fileKind, options) =>
     ...options,
   })
 
+// ===== Exports / archives =====
+// URL-хелперы для скачивания через downloadFromApi (blob + прогресс + очередь).
+export const registryXlsxUrl = () => `${BASE}/export/xlsx`
+
+export const documentsZipUrl = (contractId) =>
+  `${BASE}/${contractId}/documents/zip`
+
 // ===== Expenses =====
 export const listExpenses = (contractId, options) =>
   get(`${BASE}/${contractId}/expenses`, undefined, options)
