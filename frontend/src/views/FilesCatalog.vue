@@ -249,8 +249,10 @@
                   @dblclick="openItem(item)"
                 >
                   <td class="ftree-td-name">
-                    <i class="fas" :class="[getItemIcon(item), item.type === 'folder' ? 'text-warning' : 'text-muted']"></i>
-                    <span :title="item.name">{{ item.name }}</span>
+                    <span class="ftree-name-inner">
+                      <i class="fas" :class="[getItemIcon(item), item.type === 'folder' ? 'text-warning' : 'text-muted']"></i>
+                      <span :title="item.name">{{ item.name }}</span>
+                    </span>
                   </td>
                   <td class="ftree-col-size">{{ item.type === 'file' ? formatBytes(item.size) : '—' }}</td>
                   <td class="ftree-col-date">{{ formatDateTime(item.modified) }}</td>
@@ -2569,13 +2571,17 @@ export default {
   background: var(--md-sys-color-surface-variant);
 }
 
-.ftree-td-name {
+/* НЕ делаем сам <td> флексом — это ломает table-cell модель и
+   border-collapse: горизонтальная линия-разделитель «переламывается»
+   на границе колонок. Флекс держим во внутреннем span. */
+.ftree-name-inner {
   display: flex;
   align-items: center;
   gap: 9px;
+  min-width: 0;
 }
 
-.ftree-td-name span {
+.ftree-name-inner > span {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
