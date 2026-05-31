@@ -1559,6 +1559,14 @@ export default {
   align-items: flex-start;
   gap: 16px;
   flex-wrap: wrap;
+  /* Карточка-surface как у тулбара/таблицы ниже. Раньше шапка была
+     прозрачной и «плавала» над обоями: в светлой теме заголовок
+     (on-background = тёмный) и кнопка «Назад» сливались с тёмными
+     обоями. Surface-подложка даёт корректный контраст в обеих темах. */
+  background: var(--md-sys-color-surface);
+  border: 1px solid var(--md-sys-color-outline);
+  border-radius: 12px;
+  padding: 14px 18px;
 }
 
 .files-header-left {
@@ -1584,7 +1592,7 @@ export default {
   font-size: 1.5rem;
   font-weight: 700;
   margin: 0;
-  color: var(--md-sys-color-on-background);
+  color: var(--md-sys-color-on-surface);
 }
 
 .files-title-row {
@@ -1600,7 +1608,7 @@ export default {
   gap: 8px;
   padding: 4px 8px;
   border-radius: 999px;
-  background: var(--md-sys-color-surface);
+  background: var(--md-sys-color-surface-variant);
   border: 1px solid var(--md-sys-color-outline-variant);
   font-size: 0.75rem;
   color: var(--md-sys-color-on-surface-variant);
@@ -1610,7 +1618,7 @@ export default {
   width: 120px;
   height: 6px;
   border-radius: 999px;
-  background: var(--md-sys-color-surface-variant);
+  background: var(--md-sys-color-surface);
   overflow: hidden;
 }
 
@@ -1647,7 +1655,7 @@ export default {
   align-items: center;
   gap: 6px;
   padding: 4px 12px;
-  background: var(--md-sys-color-surface);
+  background: var(--md-sys-color-surface-variant);
   border: 1px solid var(--md-sys-color-outline);
   border-radius: 16px;
   font-size: 0.8rem;
