@@ -41,7 +41,7 @@ from app.services.storage import clean_name, is_local_storage, upload_file_with_
 from app.services.upload_security import write_upload_to_tmp as secure_write_upload_to_tmp
 from app.services.sequence_lock import sequence_lock
 from app.utils.num2words_ru import num2text_rur
-from app.routers.contracts import ALLOWED_DOC_TYPES, ALLOWED_DOC_STATUSES, ALLOWED_FILE_KINDS
+from app.routers.contracts import ALLOWED_DOC_TYPES, ALLOWED_DOC_STATUSES, ALLOWED_FILE_KINDS, _user_display_name
 from app.routers.document_registry import _resolve_dispatch_path
 from app.routers.executor import _build_root_paths, _find_matching_deal
 
@@ -311,18 +311,27 @@ async def queue_contract_document_upload(
     base_path = f"{settings.STORAGE_LOCAL_ROOT.rstrip('/')}/contracts/{contract_id}/{doc_type}"
     target_path = f"{base_path}/{doc_type}_{number_in_contract}_{file_kind}_{safe_name}"
 
+    # Upload audit: snapshot the display name now (request has the user) so the
+    # worker can persist it later for the queued path without re-querying.
+    uploaded_by = _user_display_name(user)
+
     if is_local_storage():
         try:
             await asyncio.to_thread(upload_file_with_safe_extension_sync, target_path, temp_path)
         except Exception:
             raise HTTPException(status_code=500, detail="Upload failed")
+        uploaded_at = datetime.now()
         update_payload = {}
         if file_kind == "pdf":
             update_payload["pdf_file_name"] = file.filename
             update_payload["pdf_storage_path"] = target_path
+            update_payload["pdf_uploaded_by"] = uploaded_by
+            update_payload["pdf_uploaded_at"] = uploaded_at
         else:
             update_payload["edit_file_name"] = file.filename
             update_payload["edit_storage_path"] = target_path
+            update_payload["edit_uploaded_by"] = uploaded_by
+            update_payload["edit_uploaded_at"] = uploaded_at
         await ContractDocument.update(db, str(document.id), **update_payload)
         Path(temp_path).unlink(missing_ok=True)
 
@@ -342,6 +351,7 @@ async def queue_contract_document_upload(
                 "doc_type": doc_type,
                 "number_in_contract": number_in_contract,
                 "file_kind": file_kind,
+                "uploaded_by": uploaded_by,
             },
             updated_at=datetime.utcnow(),
         )
@@ -366,6 +376,7 @@ async def queue_contract_document_upload(
             "doc_type": doc_type,
             "number_in_contract": number_in_contract,
             "file_kind": file_kind,
+            "uploaded_by": uploaded_by,
         },
     )
     db.add(job)

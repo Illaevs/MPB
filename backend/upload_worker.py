@@ -91,13 +91,21 @@ async def _process_job(db, job: UploadJob) -> None:
             document_id = (job.meta or {}).get("document_id")
             file_kind = job.file_kind
             if document_id and file_kind:
+                # Upload audit: use the display-name snapshot captured at enqueue
+                # time (meta.uploaded_by); the file lands now, so stamp time now.
+                uploaded_by = (job.meta or {}).get("uploaded_by")
+                uploaded_at = datetime.now()
                 update_payload = {}
                 if file_kind == "pdf":
                     update_payload["pdf_file_name"] = job.file_name
                     update_payload["pdf_storage_path"] = target_path
+                    update_payload["pdf_uploaded_by"] = uploaded_by
+                    update_payload["pdf_uploaded_at"] = uploaded_at
                 else:
                     update_payload["edit_file_name"] = job.file_name
                     update_payload["edit_storage_path"] = target_path
+                    update_payload["edit_uploaded_by"] = uploaded_by
+                    update_payload["edit_uploaded_at"] = uploaded_at
                 await ContractDocument.update(db, document_id, **update_payload)
         elif job.module == "document_registry":
             channel_id = (job.meta or {}).get("channel_id")

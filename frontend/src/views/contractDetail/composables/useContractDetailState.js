@@ -4,6 +4,7 @@ import axios from 'axios'
 import { api } from '@/services/api'
 import { expenseCategories } from '@/utils/categories'
 import { downloadFromApi } from '@/utils/download'
+import { formatDateTime as formatServerDateTime } from '@/utils/format'
 import { useUploadQueueStore } from '@/stores/uploadQueue'
 import { useCompaniesStore } from '@/stores/companies'
 import { useToast } from '@/composables/useToast'
@@ -32,6 +33,7 @@ export function useContractDetailState() {
 
   const loading = ref(false)
   const uploading = ref(false)
+  const downloadingZip = ref(false)
   const contract = ref(null)
   const dealTitle = ref('')
   const subcontractorTitle = ref('')
@@ -140,14 +142,18 @@ export function useContractDetailState() {
       files.push({
         key: `${doc.id}-pdf`,
         kind: 'pdf',
-        name: doc.pdf_file_name || 'PDF'
+        name: doc.pdf_file_name || 'PDF',
+        uploadedBy: doc.pdf_uploaded_by || null,
+        uploadedAt: doc.pdf_uploaded_at || null
       })
     }
     if (doc.edit_storage_path) {
       files.push({
         key: `${doc.id}-edit`,
         kind: 'edit',
-        name: doc.edit_file_name || 'Ред. формат'
+        name: doc.edit_file_name || 'Ред. формат',
+        uploadedBy: doc.edit_uploaded_by || null,
+        uploadedAt: doc.edit_uploaded_at || null
       })
     }
     return files
@@ -290,6 +296,10 @@ export function useContractDetailState() {
   const signedDocumentsCount = computed(() => {
     return documents.value.filter(doc => doc.status === 'signed').length
   })
+
+  const hasDocumentFiles = computed(() => (
+    documents.value.some(doc => doc.pdf_storage_path || doc.edit_storage_path)
+  ))
 
   const showUploadAmountField = computed(() => (
     !uploadForm.value.documentId &&
@@ -525,6 +535,9 @@ export function useContractDetailState() {
     if (!value) return '-'
     return new Date(value).toLocaleDateString('ru-RU')
   }
+
+  // Дата+время загрузки файла (учитывает серверную МСК-таймзону).
+  const formatUploadedAt = (value) => formatServerDateTime(value) || ''
 
   const paymentStatusLabel = (status) => {
     const labels = { unpaid: 'Не оплачено', partial: 'Частично', paid: 'Оплачено' }
@@ -773,6 +786,33 @@ export function useContractDetailState() {
     }
   }
 
+  const downloadDocumentsZip = async () => {
+    if (downloadingZip.value) return
+    if (!hasDocumentFiles.value) {
+      toast.warning('У договора нет загруженных файлов')
+      return
+    }
+    downloadingZip.value = true
+    try {
+      await downloadFromApi(
+        api.contracts.documentsZipUrl(contractId),
+        {},
+        'contract_documents.zip',
+        { module: 'contracts', entityId: contractId }
+      )
+    } catch (error) {
+      console.error('ZIP download failed:', error)
+      const status = error?.response?.status
+      if (status === 404) {
+        toast.warning('Файлы договора не найдены')
+      } else {
+        toast.error(error?.message || 'Не удалось скачать архив документов')
+      }
+    } finally {
+      downloadingZip.value = false
+    }
+  }
+
   const updateDocumentStatus = async (doc) => {
     try {
       await api.contracts.updateDocument(doc.id, { status: doc.status })
@@ -970,6 +1010,7 @@ export function useContractDetailState() {
     contractId,
     loading,
     uploading,
+    downloadingZip,
     contract,
     dealTitle,
     subcontractorTitle,
@@ -1018,6 +1059,7 @@ export function useContractDetailState() {
     paymentCompletionPercent,
     paidPercent, pendingPercent, unpaidPercent,
     contractHighlights,
+    hasDocumentFiles,
     closedStagesCount,
     stagesPlannedAmount,
     sortedDealProducts,
@@ -1032,6 +1074,7 @@ export function useContractDetailState() {
     contractStatusClass,
     formatAmount,
     formatDate,
+    formatUploadedAt,
     paymentStatusLabel,
     paymentStatusClass,
     contractTypeLabel,
@@ -1076,6 +1119,7 @@ export function useContractDetailState() {
     isDocumentExpanded,
     getDocumentFiles,
     downloadDocument,
+    downloadDocumentsZip,
     deleteDocumentFile,
     updateDocumentStatus,
     updateDocumentAmount,

@@ -69,6 +69,9 @@
     <div v-show="activeTab === 'documents'">
       <ContractDocumentsTab
         :filtered-documents-list="filteredDocumentsList"
+        :has-document-files="hasDocumentFiles"
+        :downloading-zip="downloadingZip"
+        :format-uploaded-at="formatUploadedAt"
         :document-amount-help-text="documentAmountHelpText"
         :document-type-badge-class="documentTypeBadgeClass"
         :document-type-label="documentTypeLabel"
@@ -86,6 +89,7 @@
         @open-invoice-products="openInvoiceProductsModal"
         @update-status="updateDocumentStatus"
         @download="({ doc, kind, name }) => downloadDocument(doc, kind, name)"
+        @download-zip="downloadDocumentsZip"
         @delete-file="({ doc, kind, name }) => deleteDocumentFile(doc, kind, name)"
         @open-upload="({ docType, doc, fileKind }) => openUploadModal(docType, doc, fileKind)"
         @delete-document="deleteDocument"

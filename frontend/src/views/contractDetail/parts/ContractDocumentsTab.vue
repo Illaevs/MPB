@@ -6,6 +6,16 @@
           <h3 class="card-title m-0">Документы</h3>
           <small>{{ filteredDocumentsList.length }} записей</small>
         </div>
+        <button
+          type="button"
+          class="btn btn-sm btn-outline-secondary contract-zip-btn"
+          :disabled="!hasDocumentFiles || downloadingZip"
+          :title="hasDocumentFiles ? 'Скачать все файлы договора одним архивом' : 'Нет загруженных файлов'"
+          @click="$emit('download-zip')"
+        >
+          <i class="fas" :class="downloadingZip ? 'fa-spinner fa-spin' : 'fa-file-zipper'"></i>
+          Скачать всё (ZIP)
+        </button>
       </div>
       <div v-if="!filteredDocumentsList.length" class="empty-state">
         <i class="fas fa-file-alt"></i>
@@ -98,20 +108,29 @@
                       :key="file.key"
                       class="contract-file-row"
                     >
-                      <button
-                        type="button"
-                        class="contract-file-link"
-                        :title="file.name"
-                        @click="$emit('download', { doc, kind: file.kind, name: file.name })"
-                      >
-                        <span class="contract-file-link__icon" :class="fileActionClass(file.name, file.kind)">
-                          <i class="fas" :class="fileIconClass(file.name, file.kind)"></i>
-                        </span>
-                        <span class="contract-file-link__name">
-                          <span class="contract-file-link__base">{{ fileNameParts(file.name).base }}</span>
-                          <span class="contract-file-link__ext">{{ fileNameParts(file.name).ext }}</span>
-                        </span>
-                      </button>
+                      <div class="contract-file-main">
+                        <button
+                          type="button"
+                          class="contract-file-link"
+                          :title="file.name"
+                          @click="$emit('download', { doc, kind: file.kind, name: file.name })"
+                        >
+                          <span class="contract-file-link__icon" :class="fileActionClass(file.name, file.kind)">
+                            <i class="fas" :class="fileIconClass(file.name, file.kind)"></i>
+                          </span>
+                          <span class="contract-file-link__name">
+                            <span class="contract-file-link__base">{{ fileNameParts(file.name).base }}</span>
+                            <span class="contract-file-link__ext">{{ fileNameParts(file.name).ext }}</span>
+                          </span>
+                        </button>
+                        <small
+                          v-if="file.uploadedBy || file.uploadedAt"
+                          class="contract-file-meta"
+                          :title="`Загрузил: ${file.uploadedBy || '—'}${file.uploadedAt ? ' · ' + formatUploadedAt(file.uploadedAt) : ''}`"
+                        >
+                          Загрузил: {{ file.uploadedBy || '—' }}<template v-if="file.uploadedAt"> · {{ formatUploadedAt(file.uploadedAt) }}</template>
+                        </small>
+                      </div>
                       <button
                         type="button"
                         class="btn btn-sm btn-icon text-danger contract-file-remove"
@@ -163,6 +182,9 @@ export default {
   name: 'ContractDocumentsTab',
   props: {
     filteredDocumentsList: { type: Array, required: true },
+    hasDocumentFiles: { type: Boolean, default: false },
+    downloadingZip: { type: Boolean, default: false },
+    formatUploadedAt: { type: Function, required: true },
     documentAmountHelpText: { type: String, required: true },
     documentTypeBadgeClass: { type: Function, required: true },
     documentTypeLabel: { type: Function, required: true },
@@ -178,7 +200,7 @@ export default {
     fileIconClass: { type: Function, required: true },
     fileNameParts: { type: Function, required: true },
   },
-  emits: ['open-invoice-products', 'update-status', 'download', 'delete-file', 'open-upload', 'delete-document']
+  emits: ['open-invoice-products', 'update-status', 'download', 'download-zip', 'delete-file', 'open-upload', 'delete-document']
 }
 </script>
 
@@ -257,6 +279,13 @@ export default {
   gap: 6px;
   min-width: 0;
 }
+.contract-file-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
 .contract-file-link {
   display: inline-flex;
   align-items: center;
@@ -268,6 +297,16 @@ export default {
   background: transparent;
   color: #334155;
   text-align: left;
+}
+.contract-file-meta {
+  display: block;
+  margin-left: 34px;
+  color: #94a3b8;
+  font-size: 0.74rem;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .contract-file-link:hover .contract-file-link__name { color: #0f172a; }
 .contract-file-link__icon {
@@ -381,8 +420,22 @@ export default {
 }
 .invoice-products-edit { white-space: nowrap; }
 
-.contract-documents-table .contract-flat-section__header { display: none; }
+.contract-documents-table .contract-flat-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
 .contract-documents-table { overflow: hidden; }
+
+.contract-zip-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+.contract-zip-btn:disabled { opacity: 0.55; cursor: not-allowed; }
 .contract-documents-table .contract-table-wrap {
   border-top: none;
   border-radius: 16px;
