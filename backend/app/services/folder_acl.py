@@ -232,11 +232,43 @@ async def _entity_path_perms(
         return set()
 
 
-def _is_superuser(user: User) -> bool:
-    """Признак суперпользователя — у нас несколько способов разметки;
-    унифицирую в одном месте, чтобы не тянуть запрос про роль повсюду.
+async def _is_superuser(
+    db: AsyncSession,
+    user: User,
+    request: Optional[Request] = None,
+) -> bool:
+    """Признак суперпользователя.
+
+    КРИТИЧНО: канонический критерий суперюзера в приложении — системная
+    роль (`auth_middleware._is_superuser_role` = `role.is_system`).
+    Middleware кладёт результат в `request.state.is_superuser`, и весь
+    остальной код смотрит туда. Модель `User` НЕ имеет колонки
+    `is_superuser`, поэтому старый `getattr(user, "is_superuser", False)`
+    всегда возвращал False — folder_acl не распознавал НИ ОДНОГО
+    суперюзера и валил 403 на MANAGE даже системному админу.
+
+    Порядок резолва:
+      1) HTTP-контекст: берём уже посчитанный middleware флаг из
+         `request.state.is_superuser` (без лишних запросов);
+      2) опциональная явная колонка на объекте user (на будущее, если
+         когда-нибудь появится);
+      3) фолбэк для не-HTTP контекста (cron/сервис без request):
+         резолвим роль и проверяем `is_system`.
     """
-    return bool(getattr(user, "is_superuser", False))
+    if request is not None:
+        flag = getattr(request.state, "is_superuser", None)
+        if flag is not None:
+            return bool(flag)
+    if getattr(user, "is_superuser", False):
+        return True
+    role_id = getattr(user, "role_id", None)
+    if role_id:
+        from app.models import Role
+
+        role = await Role.get_by_id(db, role_id)
+        if role and bool(getattr(role, "is_system", False)):
+            return True
+    return False
 
 
 async def _query_matching_rules(
@@ -315,7 +347,7 @@ async def effective_perms(
         return result
 
     # 2) Superuser → всё, всегда.
-    if _is_superuser(user):
+    if await _is_superuser(db, user, request=request):
         result = ALL_PERMS.copy()
         cache[norm] = result
         return result
@@ -386,7 +418,7 @@ async def grant_creator_manage_perms(
     norm = normalize_path(folder_path)
     if norm == "/" or is_entity_path(norm):
         return None
-    if _is_superuser(user):
+    if await _is_superuser(db, user):
         # У супера и так всё; не плодим формальных записей.
         return None
 
