@@ -29,6 +29,11 @@ class CompanyBase(BaseModel):
     full_name: Optional[str] = None
     kpp: Optional[str] = None
     contact_person: Optional[str] = None
+    # ЕИО / руководитель — структурно
+    director_last_name: Optional[str] = None
+    director_first_name: Optional[str] = None
+    director_middle_name: Optional[str] = None
+    director_position: Optional[str] = None
     phone: Optional[str] = None
     email: Optional[str] = None
     phones: Optional[List[str]] = []

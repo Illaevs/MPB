@@ -6,6 +6,7 @@ from app.core.config import settings
 from app.core.auth_middleware import CurrentUser
 from app.models import User
 from app.services.permissions import require_section_read
+from app.services.dadata_parse import parse_party
 
 
 router = APIRouter()
@@ -49,30 +50,19 @@ async def lookup_party(
 
     suggestion = suggestions[0]
     data = suggestion.get("data") or {}
-    name_data = data.get("name") or {}
-    short_name = name_data.get("short_with_opf") or name_data.get("short") or suggestion.get("value")
-    full_name = name_data.get("full_with_opf") or name_data.get("full") or suggestion.get("value")
+    parsed = parse_party(data)
 
-    ceo_name = None
-    management = data.get("management") or {}
-    if management.get("name"):
-        ceo_name = management.get("name")
-    else:
-        fio = data.get("fio") or {}
-        fio_parts = [fio.get("surname"), fio.get("name"), fio.get("patronymic")]
-        fio_value = " ".join([part for part in fio_parts if part])
-        if fio_value:
-            ceo_name = fio_value
-
-    address = None
-    address_data = data.get("address") or {}
-    if address_data.get("value"):
-        address = address_data.get("value")
-
+    # Fallback на suggestion.value, если DaData не дал короткое/полное имя.
     return {
-        "short_name": short_name,
-        "full_name": full_name,
-        "kpp": data.get("kpp"),
-        "ceo_name": ceo_name,
-        "address": address,
+        "short_name": parsed["short_name"] or suggestion.get("value"),
+        "full_name": parsed["full_name"] or suggestion.get("value"),
+        "kpp": parsed["kpp"],
+        "ceo_name": parsed["ceo_name"],
+        "director_last_name": parsed["director_last_name"],
+        "director_first_name": parsed["director_first_name"],
+        "director_middle_name": parsed["director_middle_name"],
+        "director_position": parsed["director_position"],
+        "is_individual": parsed["is_individual"],
+        "opf_short": parsed["opf_short"],
+        "address": parsed["address"],
     }

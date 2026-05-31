@@ -21,6 +21,7 @@ from app.schemas.company_document import CompanyDocumentResponse
 from app.services.storage import delete_path, get_download_href, storage_available, upload_file_with_safe_extension
 from app.services.upload_security import validate_upload_metadata, write_upload_to_tmp
 from app.services.permissions import allowed_deal_ids, get_section_permissions, require_section_write
+from app.services.dadata_parse import parse_party
 
 logger = logging.getLogger(__name__)
 
@@ -202,27 +203,18 @@ async def _lookup_party(inn: str, client: httpx.AsyncClient, token: str) -> dict
         return {}
     suggestion = suggestions[0]
     data = suggestion.get("data") or {}
-    name_data = data.get("name") or {}
-
-    ceo_name = None
-    management = data.get("management") or {}
-    if management.get("name"):
-        ceo_name = management["name"]
-    else:
-        fio = data.get("fio") or {}
-        parts = [fio.get("surname"), fio.get("name"), fio.get("patronymic")]
-        fio_value = " ".join([p for p in parts if p])
-        if fio_value:
-            ceo_name = fio_value
-
-    address_data = data.get("address") or {}
+    parsed = parse_party(data)
 
     return {
-        "short_name": name_data.get("short_with_opf") or name_data.get("short") or suggestion.get("value"),
-        "full_name": name_data.get("full_with_opf") or name_data.get("full") or suggestion.get("value"),
-        "kpp": data.get("kpp"),
-        "ceo_name": ceo_name,
-        "address": address_data.get("value"),
+        "short_name": parsed["short_name"] or suggestion.get("value"),
+        "full_name": parsed["full_name"] or suggestion.get("value"),
+        "kpp": parsed["kpp"],
+        "ceo_name": parsed["ceo_name"],
+        "director_last_name": parsed["director_last_name"],
+        "director_first_name": parsed["director_first_name"],
+        "director_middle_name": parsed["director_middle_name"],
+        "director_position": parsed["director_position"],
+        "address": parsed["address"],
     }
 
 
@@ -313,6 +305,17 @@ async def refresh_all_companies(
                 if data.get("ceo_name") and data["ceo_name"] != company.contact_person:
                     company.contact_person = data["ceo_name"]
                     changed = True
+                # Структурный ЕИО (Фамилия/Имя/Отчество/должность).
+                for _field in (
+                    "director_last_name",
+                    "director_first_name",
+                    "director_middle_name",
+                    "director_position",
+                ):
+                    _val = data.get(_field)
+                    if _val and _val != getattr(company, _field, None):
+                        setattr(company, _field, _val)
+                        changed = True
                 if data.get("address") and data["address"] != company.address:
                     company.address = data["address"]
                     changed = True

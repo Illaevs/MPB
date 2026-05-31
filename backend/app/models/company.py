@@ -25,6 +25,16 @@ class Company(Base):
     full_name = Column(String(500))  # Полное наименование
     kpp = Column(String(20))
     contact_person = Column(String(255))
+
+    # ЕИО (единоличный исполнительный орган) / руководитель — структурно.
+    # Заполняется из DaData (management.name → split, либо fio для ИП).
+    # contact_person оставлен для обратной совместимости (legacy-колонка
+    # в списке + старые шаблоны документов) — туда пишем собранное ФИО.
+    director_last_name = Column(String(120))    # Фамилия
+    director_first_name = Column(String(120))   # Имя
+    director_middle_name = Column(String(120))  # Отчество
+    director_position = Column(String(160))     # Должность ЕИО («Генеральный директор», «ИП»)
+
     phone = Column(String(50))
     email = Column(String(255))
     phones = Column(JSON, default=list)

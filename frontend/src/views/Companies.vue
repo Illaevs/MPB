@@ -355,6 +355,20 @@
 
           <section class="company-section">
             <header class="company-section__header">
+              <i class="fas fa-user-tie"></i>
+              <h4>Руководитель (ЕИО)</h4>
+              <span v-if="innLookupBusy" class="company-section__hint"><i class="fas fa-spinner fa-spin"></i> загрузка из ЕГРЮЛ…</span>
+            </header>
+            <div class="company-form-grid">
+              <div class="company-field company-field--full"><UiInput v-model="companyForm.director_position" label="Должность" placeholder="Генеральный директор / ИП" /></div>
+              <div class="company-field"><UiInput v-model="companyForm.director_last_name" label="Фамилия" /></div>
+              <div class="company-field"><UiInput v-model="companyForm.director_first_name" label="Имя" /></div>
+              <div class="company-field"><UiInput v-model="companyForm.director_middle_name" label="Отчество" /></div>
+            </div>
+          </section>
+
+          <section class="company-section">
+            <header class="company-section__header">
               <i class="fas fa-phone"></i>
               <h4>Связь и адрес</h4>
             </header>
@@ -708,6 +722,11 @@ const blankCompanyForm = () => ({
   kpp: '',
   type: 'customer',
   contact_person: '',
+  // ЕИО / руководитель — структурно (заполняется из DaData по ИНН)
+  director_position: '',
+  director_last_name: '',
+  director_first_name: '',
+  director_middle_name: '',
   phones: [],
   emails: [],
   contacts: [],
@@ -1275,6 +1294,10 @@ export default {
           kpp: data.kpp || null,
           type: 'customer',
           contact_person: data.ceo_name || null,
+          director_position: data.director_position || null,
+          director_last_name: data.director_last_name || null,
+          director_first_name: data.director_first_name || null,
+          director_middle_name: data.director_middle_name || null,
           address: data.address || null,
           phones: [],
           emails: [],
@@ -1427,6 +1450,11 @@ export default {
         companyForm.value.kpp = companyForm.value.kpp || data.kpp || ''
         companyForm.value.name = companyForm.value.name || data.short_name || data.full_name || ''
         companyForm.value.contact_person = companyForm.value.contact_person || data.ceo_name || ''
+        // ЕИО структурно (#2/#3) — не затираем уже введённое вручную.
+        companyForm.value.director_position = companyForm.value.director_position || data.director_position || ''
+        companyForm.value.director_last_name = companyForm.value.director_last_name || data.director_last_name || ''
+        companyForm.value.director_first_name = companyForm.value.director_first_name || data.director_first_name || ''
+        companyForm.value.director_middle_name = companyForm.value.director_middle_name || data.director_middle_name || ''
         companyForm.value.address = companyForm.value.address || data.address || ''
         toast.success('Данные загружены из ЕГРЮЛ')
       } catch (e) {
